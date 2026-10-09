@@ -1,14 +1,23 @@
 /** A seeded random source returning floats in [0, 1). */
 export type Rng = () => number;
 
+/** The position of a random source, kept as plain data so game state can hold it. */
+export interface RngState {
+  s: number;
+}
+
 /**
  * Mulberry32: small, fast and good enough for game rolls. The only randomness
  * source in the game, so a run (and its offline catch-up) replays from a seed.
  */
 export function createRng(seed: number): Rng {
-  let s = seed >>> 0;
+  return rngFrom({ s: seed >>> 0 });
+}
+
+/** A random source that reads and advances `state` in place, so it can resume later. */
+export function rngFrom(state: RngState): Rng {
   return () => {
-    s = (s + 0x6d2b79f5) >>> 0;
+    const s = (state.s = (state.s + 0x6d2b79f5) >>> 0);
     let t = Math.imul(s ^ (s >>> 15), 1 | s);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
