@@ -1,6 +1,8 @@
 // The cultivator: Paths, stats and levelling (docs/design.md §3). Every number
 // here is a starting point for balancing.
 
+import { equipmentBonuses, type Equipment } from './loot.ts';
+
 export type StatId = 'body' | 'agility' | 'spirit';
 export type Stats = Record<StatId, number>;
 export type PathId = 'sword' | 'body' | 'talisman';
@@ -48,6 +50,9 @@ export const BASE_STAT = 5;
 export const STARTING_PRIMARY_BONUS = 3;
 export const STAT_POINTS_PER_LEVEL = 3;
 export const MAX_CRIT_CHANCE = 0.5;
+/** Caps that keep stacked item bonuses from making the cultivator unkillable or the sim event-bound. */
+export const MAX_LIFESTEAL = 0.5;
+export const MIN_ATTACK_INTERVAL = 0.25;
 
 export interface Cultivator {
   path: PathId;
@@ -55,6 +60,7 @@ export interface Cultivator {
   /** XP towards the next level. */
   xp: number;
   stats: Stats;
+  equipment: Equipment;
   hp: number;
   /** Sim time of the next attack, in seconds. */
   nextAttackAt: number;
@@ -70,16 +76,32 @@ export interface Derived {
   /** Seconds between attacks. */
   attackInterval: number;
   critChance: number;
+  /** Damage multiplier on a crit. */
+  critMultiplier: number;
+  /** Share of damage dealt that heals the cultivator. */
+  lifesteal: number;
+  // Carried for the systems that will spend them (qi, Spirit Stones); combat ignores them.
+  qiRegen: number;
+  stoneFind: number;
+  /** Raises the chance that a kill drops an item. */
+  treasureFind: number;
 }
 
-export function derive(c: Pick<Cultivator, 'path' | 'stats'>): Derived {
+export function derive(c: Pick<Cultivator, 'path' | 'stats' | 'equipment'>): Derived {
   const { body, agility } = c.stats;
+  const path = PATHS[c.path];
+  const b = equipmentBonuses(c.equipment);
   return {
-    maxHp: 40 + 12 * body,
-    defence: body,
-    damage: 4 + 1.5 * c.stats[PATHS[c.path].primary],
-    attackInterval: 1 / (1 + 0.02 * agility),
-    critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.005 * agility),
+    maxHp: Math.round((40 + 12 * body + b.maxHp) * (1 + b.maxHpPct)),
+    defence: body + b.defence,
+    damage: (4 + 1.5 * c.stats[path.primary] + b.damage) * (1 + b.damagePct),
+    attackInterval: Math.max(MIN_ATTACK_INTERVAL, 1 / (1 + 0.02 * agility + b.attackSpeed)),
+    critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.005 * agility + b.critChance),
+    critMultiplier: path.critMultiplier + b.critDamage,
+    lifesteal: Math.min(MAX_LIFESTEAL, path.lifesteal + b.lifesteal),
+    qiRegen: b.qiRegen,
+    stoneFind: b.stoneFind,
+    treasureFind: b.treasureFind,
   };
 }
 
@@ -91,7 +113,16 @@ export function xpToNext(level: number): number {
 export function newCultivator(path: PathId): Cultivator {
   const stats: Stats = { body: BASE_STAT, agility: BASE_STAT, spirit: BASE_STAT };
   stats[PATHS[path].primary] += STARTING_PRIMARY_BONUS;
-  const c: Cultivator = { path, level: 1, xp: 0, stats, hp: 0, nextAttackAt: 0, attackCount: 0 };
+  const c: Cultivator = {
+    path,
+    level: 1,
+    xp: 0,
+    stats,
+    equipment: {},
+    hp: 0,
+    nextAttackAt: 0,
+    attackCount: 0,
+  };
   c.hp = derive(c).maxHp;
   return c;
 }
