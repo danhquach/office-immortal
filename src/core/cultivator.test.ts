@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { affixValue, type AffixId, type Item } from './loot.ts';
+import { affixValue, EQUIP_SLOTS, type AffixId, type EquipSlotId, type Item } from './loot.ts';
 import {
   BASE_STAT,
   derive,
@@ -56,7 +56,7 @@ describe('derive', () => {
 
   function withAffix(id: AffixId, level: number): Item {
     return {
-      slot: 'pendant',
+      slot: 'accessory',
       name: 'Lanyard Pendant',
       level,
       grade: 'spirit',
@@ -81,9 +81,9 @@ describe('derive', () => {
     const c = newCultivator('body');
     const blank = withAffix(id, 10);
     blank.affixes = [];
-    c.equipment.pendant = blank;
+    c.equipment.accessory1 = blank;
     const before = derive(c);
-    c.equipment.pendant = withAffix(id, 10);
+    c.equipment.accessory1 = withAffix(id, 10);
     const after = derive(c);
     const value = affixValue({ id, roll: 1 }, 10);
     expect(value).toBeGreaterThan(0);
@@ -95,16 +95,16 @@ describe('derive', () => {
   it('speeds attacks with the attack speed affix', () => {
     const c = newCultivator('body');
     const before = derive(c).attackInterval;
-    c.equipment.pendant = withAffix('attackSpeed', 10);
+    c.equipment.accessory1 = withAffix('attackSpeed', 10);
     const bonus = affixValue({ id: 'attackSpeed', roll: 1 }, 10);
     expect(1 / derive(c).attackInterval - 1 / before).toBeCloseTo(bonus, 9);
   });
 
   it('caps lifesteal and attack speed however much gear stacks', () => {
     const c = newCultivator('body');
-    for (const slot of ['weapon', 'robe', 'talisman', 'pendant', 'gourd'] as const) {
-      c.equipment[slot] = {
-        slot,
+    for (const [at, { takes }] of Object.entries(EQUIP_SLOTS)) {
+      c.equipment[at as EquipSlotId] = {
+        slot: takes,
         name: 'x',
         level: 1000,
         grade: 'immortal',
