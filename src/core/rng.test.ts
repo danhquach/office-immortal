@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chance, createRng, int, pick } from './rng.ts';
+import { chance, createRng, int, pick, rngFrom } from './rng.ts';
 
 describe('createRng', () => {
   it('replays the same sequence from the same seed', () => {
@@ -105,5 +105,16 @@ describe('chance', () => {
     let hits = 0;
     for (let i = 0; i < 10_000; i++) if (chance(rng, 0.6)) hits++;
     expect(hits / 10_000).toBeCloseTo(0.6, 1);
+  });
+});
+
+describe('rngFrom', () => {
+  it('matches createRng and resumes from saved state', () => {
+    const state = { s: 99 };
+    const a = rngFrom(state);
+    const b = createRng(99);
+    expect([a(), a()]).toEqual([b(), b()]);
+    const resumed = rngFrom({ ...state });
+    expect(resumed()).toBe(b());
   });
 });
