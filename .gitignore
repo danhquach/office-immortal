@@ -1,0 +1,24 @@
+# Dependencies / build
+node_modules/
+dist/
+.vite/
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Secrets — never committed
+.env
+.env.*
+!.env.example
+
+# Local agent files (record absolute paths / local username)
+.claude/agent-memory/
+.claude/worktrees/
+.claude/launch.json
+.claude/settings.local.json
+
+# OS / editor
+.DS_Store
+*.swp
