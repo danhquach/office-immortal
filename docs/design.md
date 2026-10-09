@@ -126,8 +126,8 @@ treasure find, a higher offline cap, more starting stat points.
   melted.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
-- **Pop-out window:** where supported (Document Picture-in-Picture), the strip
-  can pop out into a small always-on-top window.
+- **Pop-out window:** where supported (Document Picture-in-Picture), the Mini
+  view (§14) pops out into a small always-on-top window.
 - **Notification:** optional browser notification on an Immortal-grade drop.
 
 ## 11. Save
@@ -150,3 +150,69 @@ save starts a new run instead of crashing.
 6. Realms and Tribulation bosses.
 7. Early Retirement (prestige).
 8. Tab HUD, pop-out window, notifications.
+
+## 14. Art direction
+
+**Hybrid:** the game is dressed as office software, and the only illustrated
+part is a pixel-art combat strip shown like a live chart inside it. The joke is
+the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
+
+### Office shell (CSS only, no art)
+
+- A generic spreadsheet / dashboard look: a title bar with a file name
+  (`Q3_Cultivation_Report`), KPI tiles, tables, tabs and a status bar.
+- **Generic, never a copy.** No real software names, logos, icons, ribbon
+  layouts or colour schemes that identify a real product. It should read as
+  "office software", not as any one product.
+- Stats are KPI tiles (Realm, Job title, Floor, Qi to next breakthrough),
+  loot is table rows, the log is a "Cultivation Log" panel.
+- Light and dark themes; text 4.5:1 or more on its background.
+
+### Combat strip (pixel art)
+
+- Crisp pixel art scaled by whole numbers (`image-rendering: pixelated`), on a
+  limited palette.
+- **Sprites:** cultivator 32×32 per frame, regular demons 32×32, elites and
+  Tribulation bosses 48×48 or 64×64. Frames: idle 4, attack 4, hit 2, death 4.
+- **Backgrounds:** one wide tiling layer per tower zone (Basement Archives,
+  open-plan floors, Executive Suite, Heavenly Boardroom), with office props in
+  pixel form: cubicles, water cooler, KPI whiteboard, city windows at night.
+- Damage numbers, crit text and qi effects are drawn in code, not baked into
+  sprites.
+- The sim decides every outcome; the strip only plays it back.
+
+### Grade colours
+
+| Grade | Colour |
+|---|---|
+| Mortal | Grey |
+| Spirit | Blue |
+| Earth | Green |
+| Heaven | Gold |
+| Immortal | Crimson |
+
+Each has a light- and a dark-theme value that passes 4.5:1 on its background.
+Grade is also written as text, never shown by colour alone.
+
+### Views
+
+| View | When | Shows |
+|---|---|---|
+| **Full** | Normal tab, 768 px wide or more | Title bar, KPI tiles, combat strip, loot table, Cultivation Log, side panels |
+| **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then KPI tiles, loot, log |
+| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars, one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
+
+- Full and Narrow are chosen by width; Mini is chosen by height or by being
+  the pop-out, and wins when both apply.
+- The Mini view has no inventory or menus. In the pop-out, a click on it
+  focuses the main tab; in a short main window, making the window taller
+  brings the other views back. Its aspect is about 3:1 (e.g. 480×160).
+- All three views render the same state; switching never pauses the sim.
+
+### Assets
+
+- Concept art is generated with an image model to explore direction; it is
+  reference only and never shipped.
+- Shipped sprites and backgrounds are made per-asset at their final pixel
+  size, then cleaned to the palette. No commercial characters, logos or brand
+  marks in any asset.
