@@ -1,28 +1,511 @@
+/* Colours: every text colour here passes 4.5:1 on every surface of its theme
+   (checked by src/ui/contrast.test.ts). Text vars: --ink, --muted, --up, --down, --grade-*.
+   Surfaces: --bg, --panel, --doll (slot names sit on the figure). The combat strip pairs --strip-ink with --strip-bg. */
 :root {
   color-scheme: light dark;
   --bg: #f3f1ec;
+  --panel: #ffffff;
   --ink: #23262b;
-  --muted: #646a73;
+  --muted: #5c626b;
   --line: #d6d3cc;
+  --accent: #1d5fa8;
+  --strip-bg: #1d2430;
+  --strip-ink: #e8ecf2;
+  --hp-you: #3fb56b;
+  --hp-foe: #e0533d;
+  --doll: #e6e2d9;
+  --up: #1d6b2f;
+  --down: #b3261e;
+  --grade-mortal: #5f6368;
+  --grade-spirit: #1a5fb4;
+  --grade-earth: #22702a;
+  --grade-heaven: #865c00;
+  --grade-immortal: #b0122d;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #17191c;
+    --panel: #212429;
     --ink: #e6e4df;
-    --muted: #9aa0a8;
+    --muted: #a3a9b1;
     --line: #34383d;
+    --accent: #7fb0ff;
+    --strip-bg: #0e1117;
+    --strip-ink: #e8ecf2;
+    --doll: #2c3138;
+    --up: #6fd38a;
+    --down: #ff8a80;
+    --grade-mortal: #a9aeb5;
+    --grade-spirit: #7aaeff;
+    --grade-earth: #6ccb6f;
+    --grade-heaven: #e8bb2a;
+    --grade-immortal: #ff7389;
   }
 }
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
   font:
-    16px/1.5 system-ui,
+    15px/1.45 system-ui,
     sans-serif;
 }
 main {
-  max-width: 48rem;
+  max-width: 72rem;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 0 1rem 1rem;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Office shell */
+.titlebar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+.titlebar .file {
+  font-family: ui-monospace, monospace;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+.panel > h2 {
+  margin-bottom: 0.5rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.8rem;
+}
+.muted {
+  color: var(--muted);
+}
+
+/* First-run Path choice */
+.choose {
+  max-width: 40rem;
+  margin: 2rem auto;
+}
+.choose p {
+  margin: 0.25rem 0 1rem;
+}
+.paths {
+  display: grid;
+  gap: 0.75rem;
+}
+.paths button {
+  text-align: left;
+  padding: 0.75rem;
+}
+.paths strong {
+  display: block;
+}
+
+/* Layout: Full is a grid; Narrow (under 768 px) stacks it, strip first. */
+.game {
+  display: grid;
+  gap: 0.75rem;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+}
+.kpi .label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.kpi .value {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.columns {
+  display: grid;
+  grid-template-columns: minmax(15rem, 1fr) auto minmax(15rem, 1fr);
+  grid-template-areas: 'char bag side';
+  gap: 0.75rem;
+  align-items: start;
+}
+.columns > .character {
+  grid-area: char;
+}
+.columns > .inventory {
+  grid-area: bag;
+}
+.columns > .side {
+  grid-area: side;
+}
+/* Too narrow for three columns: details move under the grid. */
+@media (max-width: 1099px) {
+  .columns {
+    grid-template-columns: minmax(15rem, 1fr) auto;
+    grid-template-areas:
+      'char bag'
+      'char side';
+  }
+}
+@media (max-width: 767px) {
+  .kpis {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .columns {
+    grid-template-columns: 1fr;
+    grid-template-areas: 'bag' 'side' 'char';
+  }
+  /* Fewer, bigger cells: easy to tap and the labels never overlap. */
+  .inventory .bag {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Combat strip */
+.strip {
+  background: var(--strip-bg);
+  color: var(--strip-ink);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+.strip .where {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-family: ui-monospace, monospace;
+}
+.fighters {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  gap: 0.75rem;
+}
+.vs {
+  align-self: center;
+}
+.fighter {
+  min-width: 0;
+  display: grid;
+  /* A sprite row as tall as the biggest (boss) sprite, so the page below never
+     shifts when the enemy changes size. */
+  grid-template-rows: auto 64px auto auto;
+  align-items: end;
+}
+.fighter .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sprite {
+  width: 32px;
+  height: 32px;
+  margin: 0.25rem 0;
+  image-rendering: pixelated;
+  border-radius: 2px;
+}
+.you .sprite {
+  background: var(--hp-you);
+}
+.foe {
+  text-align: right;
+}
+.foe .sprite {
+  margin-left: auto;
+  background: var(--hp-foe);
+}
+.foe[data-kind='elite'] .sprite {
+  width: 48px;
+  height: 48px;
+}
+.foe[data-kind='boss'] .sprite {
+  width: 64px;
+  height: 64px;
+}
+.bar {
+  height: 8px;
+  background: #ffffff26;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.bar > span {
+  display: block;
+  height: 100%;
+}
+.you .bar > span {
+  background: var(--hp-you);
+}
+.foe .bar > span {
+  background: var(--hp-foe);
+  margin-left: auto;
+}
+/* Stats and items */
+.stats {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 1rem;
+  margin: 0 0 0.75rem;
+}
+.stats dt {
+  color: var(--muted);
+}
+.stats dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* Item cells: the bag grid and the equipment slots. The grade shows three
+   ways: border colour, grade initial and (in the accessible name) the word. */
+.bag {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 46px));
+  gap: 4px;
+  user-select: none;
+}
+.cell {
+  position: relative;
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  background: var(--bg);
+  font-size: 0.7rem;
+  line-height: 1;
+  touch-action: manipulation;
+}
+.cell.empty,
+.cell.empty:hover {
+  color: var(--line);
+  border-color: currentColor;
+  border-width: 1px;
+  cursor: default;
+}
+.cell[aria-pressed='true'] {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+/* Keyboard focus wins over the selection ring, so the cursor is always visible. */
+.cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.cell .grade {
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  font-weight: 700;
+}
+.cell .code {
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--ink);
+}
+.cell .q {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  color: var(--muted);
+}
+/* Tabs inside a panel (office-software style). */
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.75rem;
+}
+.tab {
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  margin-bottom: -1px;
+  background: transparent;
+  color: var(--muted);
+}
+.tab[aria-selected='true'] {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* Paper doll: the figure is 100 x 125 units, the same aspect as the box, so
+   each slot is placed in % where it is worn. The wearer's right hand is on
+   the viewer's left. */
+.doll {
+  position: relative;
+  width: 100%;
+  max-width: 19rem;
+  aspect-ratio: 100 / 125;
+  margin: 0 auto 0.75rem;
+  border-radius: 4px;
+}
+.figure {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: var(--doll);
+}
+.slot {
+  position: absolute;
+  width: 18%;
+  display: grid;
+  gap: 2px;
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+.slot-head {
+  left: 50%;
+  top: 11%;
+}
+.slot-accessory1 {
+  left: 13%;
+  top: 12%;
+}
+.slot-accessory2 {
+  left: 87%;
+  top: 12%;
+}
+.slot-chest {
+  left: 50%;
+  top: 36%;
+}
+.slot-weapon {
+  left: 13%;
+  top: 44%;
+}
+.slot-sideArm {
+  left: 87%;
+  top: 44%;
+}
+.slot-attachment {
+  /* Hangs off the hip, beside the leg. */
+  left: 74%;
+  top: 64%;
+}
+.slot-pants {
+  left: 50%;
+  top: 82%;
+}
+.slot-charm1 {
+  left: 13%;
+  top: 86%;
+}
+.slot-charm2 {
+  left: 87%;
+  top: 88%;
+}
+.slot .cell {
+  width: 100%;
+  background: var(--panel);
+}
+.slot .cell.empty {
+  color: var(--muted);
+  border-style: dashed;
+}
+.slot-name {
+  /* Wider than the cell when it needs to be, centred under it. */
+  justify-self: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.character.drop-ok .doll {
+  outline: 2px dashed var(--accent);
+}
+.cell.target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 2px;
+}
+
+/* Drag: a copy of the cell follows the pointer. */
+.ghost {
+  position: fixed;
+  width: 44px;
+  z-index: 10;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  opacity: 0.9;
+}
+body.dragging,
+body.dragging * {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* Item details */
+.details .title {
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+.details h3 {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.details .lines,
+.details .compare {
+  list-style: none;
+  margin: 0.25rem 0 0.5rem;
+  padding: 0;
+}
+.up {
+  color: var(--up);
+}
+.down {
+  color: var(--down);
+}
+.hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+}
+button.primary {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.grade-mortal {
+  color: var(--grade-mortal);
+}
+.grade-spirit {
+  color: var(--grade-spirit);
+}
+.grade-earth {
+  color: var(--grade-earth);
+}
+.grade-heaven {
+  color: var(--grade-heaven);
+}
+.grade-immortal {
+  color: var(--grade-immortal);
+}
+.drops {
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }

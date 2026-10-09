@@ -14,7 +14,7 @@ import {
   type PathId,
 } from './cultivator.ts';
 import { makeFloor, type Enemy } from './floors.ts';
-import { rollDrop, type Item } from './loot.ts';
+import { defaultSlot, rollDrop, slotsFor, type EquipSlotId, type Item } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
 /** Defence that halves incoming damage. */
@@ -83,19 +83,23 @@ export function tick(state: GameState, dt: number): GameState {
 }
 
 /**
- * Equips the bag item at `index`, returning the new state; `state` is left
- * untouched. Whatever was in that slot goes back into the bag.
+ * Equips the bag item at `index` into position `to` (by default its first free
+ * position, else its first), returning the new state; `state` is left
+ * untouched. Whatever was in that position goes back into the bag.
  */
-export function equip(state: GameState, index: number): GameState {
-  if (!Number.isInteger(index) || !state.inventory[index]) {
-    throw new RangeError(`equip: no item at ${index}`);
+export function equip(state: GameState, index: number, to?: EquipSlotId): GameState {
+  const item = Number.isInteger(index) ? state.inventory[index] : undefined;
+  if (!item) throw new RangeError(`equip: no item at ${index}`);
+  if (to !== undefined && !slotsFor(item.slot).includes(to)) {
+    throw new RangeError(`equip: ${item.slot} does not fit ${to}`);
   }
   const s = structuredClone(state);
-  const item = s.inventory[index] as Item;
   const c = s.cultivator;
-  const old = c.equipment[item.slot];
-  s.inventory.splice(index, 1, ...(old ? [old] : []));
-  c.equipment[item.slot] = item;
+  const at = to ?? defaultSlot(c.equipment, item);
+  const old = c.equipment[at];
+  // The clone's copy of the item, so the new state shares nothing with the old.
+  const [mine] = s.inventory.splice(index, 1, ...(old ? [old] : [])) as [Item];
+  c.equipment[at] = mine;
   // Max HP may have dropped with the old item; never sit above it.
   c.hp = Math.min(c.hp, derive(c).maxHp);
   return s;

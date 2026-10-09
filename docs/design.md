@@ -78,7 +78,10 @@ The realm name is primary; the job title is shown beside it.
 
 Every drop is generated from a seeded roll.
 
-- **Slots:** Weapon, Robe, Talisman, Pendant, Pill Gourd.
+- **Slots:** Head, Chest, Pants, Attachment (worn at the hip, e.g. a pill
+  gourd), Weapon, Side arm, two Accessories and two Charms: eight item types
+  over ten positions. An item fills its first free position; a player can
+  choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
 - **Base stat:** each item type rolls in a range (e.g. a Jade Stapler weapon
   rolls 8–14 damage at item level 10).
@@ -165,7 +168,14 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.
 - Stats are KPI tiles (Realm, Job title, Floor, Qi to next breakthrough),
-  loot is table rows, the log is a "Cultivation Log" panel.
+  the log is a "Cultivation Log" panel.
+- **Inventory is a grid**, as loot games do it: a fixed grid of bag cells
+  (empty ones shown), each item cell marked by grade colour and grade initial.
+  Selecting a cell shows a details panel: rolls, quality, and gains / losses
+  against the equipped item. Equip by dragging the item onto the character
+  panel (onto one of a pair to choose it; anywhere else picks its default
+  position), by double-click, or with the panel's Equip button (touch
+  and keyboard use the button).
 - Light and dark themes; text 4.5:1 or more on its background.
 
 ### Combat strip (pixel art)

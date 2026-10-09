@@ -3,7 +3,9 @@ import {
   AFFIXES,
   affixValue,
   baseValue,
+  defaultSlot,
   DROP_CHANCE,
+  EQUIP_SLOTS,
   equipmentBonuses,
   GRADES,
   quality,
@@ -11,10 +13,12 @@ import {
   rollDrop,
   rollItem,
   SLOTS,
+  slotsFor,
   UNIQUES,
   type AffixId,
   type GradeId,
   type Item,
+  type SlotId,
 } from './loot.ts';
 import { createRng, type Rng } from './rng.ts';
 
@@ -126,7 +130,7 @@ describe('rollItem', () => {
 
   it('gives 0% quality when the base and every affix roll a minimum', () => {
     const item: Item = {
-      slot: 'robe',
+      slot: 'chest',
       name: 'Silk Cardigan',
       level: 10,
       grade: 'spirit',
@@ -174,15 +178,32 @@ describe('rollItem', () => {
   });
 });
 
+describe('equipment positions', () => {
+  it('gives every item type at least one position, and pairs to accessories and charms', () => {
+    for (const type of Object.keys(SLOTS) as SlotId[]) {
+      expect(slotsFor(type).length).toBe(type === 'accessory' || type === 'charm' ? 2 : 1);
+    }
+    expect(Object.keys(EQUIP_SLOTS)).toHaveLength(10);
+  });
+
+  it('defaults to the first free position, else the first', () => {
+    const charm = rollItem(constant(0), 1);
+    charm.slot = 'charm';
+    expect(defaultSlot({}, charm)).toBe('charm1');
+    expect(defaultSlot({ charm1: charm }, charm)).toBe('charm2');
+    expect(defaultSlot({ charm1: charm, charm2: charm }, charm)).toBe('charm1');
+  });
+});
+
 describe('ranges', () => {
   it('rolls a weapon 8–14 damage at item level 10', () => {
     expect(rangeAt(SLOTS.weapon.base, 10)).toEqual({ lo: 8, hi: 14 });
   });
 
   it('gives the expected ranges at sample levels', () => {
-    expect(rangeAt(SLOTS.robe.base, 20)).toEqual({ lo: 8, hi: 14 });
-    expect(rangeAt(SLOTS.pendant.base, 3)).toEqual({ lo: 12, hi: 21 });
-    expect(rangeAt(SLOTS.gourd.base, 21)).toEqual({ lo: 0.02, hi: 0.04 });
+    expect(rangeAt(SLOTS.chest.base, 20)).toEqual({ lo: 8, hi: 14 });
+    expect(rangeAt(SLOTS.accessory.base, 3)).toEqual({ lo: 12, hi: 21 });
+    expect(rangeAt(SLOTS.attachment.base, 21)).toEqual({ lo: 0.02, hi: 0.04 });
     expect(rangeAt(AFFIXES.critChance, 41)).toEqual({ lo: 0.015, hi: 0.045 });
     expect(rangeAt(AFFIXES.defence, 1)).toEqual({ lo: 0.2, hi: 0.5 });
   });
@@ -248,15 +269,15 @@ describe('equipmentBonuses', () => {
       affixes: [{ id: 'maxHp', roll: 0 }],
       unique: 'synergy',
     };
-    const talisman: Item = {
-      slot: 'talisman',
-      name: 'Laminated Seal',
+    const sideArm: Item = {
+      slot: 'sideArm',
+      name: 'Stapler Dagger',
       level: 10,
       grade: 'spirit',
       baseRoll: 0,
       affixes: [{ id: 'maxHp', roll: 1 }],
     };
-    const b = equipmentBonuses({ weapon, talisman });
+    const b = equipmentBonuses({ weapon, sideArm });
     expect(b.damage).toBe(14 + 5);
     expect(b.maxHp).toBe(20 + 50);
     expect(b.damagePct).toBe(0.25);

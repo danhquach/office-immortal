@@ -7,7 +7,21 @@
 
 import { chance, int, pick, type Rng } from './rng.ts';
 
-export type SlotId = 'weapon' | 'robe' | 'talisman' | 'pendant' | 'gourd';
+/** An item's type; it decides which equipment positions take the item. */
+export type SlotId =
+  'head' | 'chest' | 'pants' | 'attachment' | 'weapon' | 'sideArm' | 'accessory' | 'charm';
+/** A position on the cultivator. Accessories and charms have two each. */
+export type EquipSlotId =
+  | 'head'
+  | 'chest'
+  | 'pants'
+  | 'attachment'
+  | 'weapon'
+  | 'sideArm'
+  | 'accessory1'
+  | 'accessory2'
+  | 'charm1'
+  | 'charm2';
 export type GradeId = 'mortal' | 'spirit' | 'earth' | 'heaven' | 'immortal';
 export type AffixId =
   | 'critChance'
@@ -44,7 +58,7 @@ export interface Item {
   unique?: UniqueId;
 }
 
-export type Equipment = Partial<Record<SlotId, Item>>;
+export type Equipment = Partial<Record<EquipSlotId, Item>>;
 
 /**
  * How a range grows with item level. Flat stats grow in step with the level;
@@ -63,33 +77,73 @@ interface RangeDef {
 export const SLOTS: Readonly<
   Record<SlotId, { name: string; base: RangeDef; names: readonly string[] }>
 > = {
+  head: {
+    name: 'Head',
+    base: { stat: 'defence', scale: 'flat', lo: 0.2, hi: 0.4 },
+    names: ['Headset of Clarity', 'Thinking Cap', 'Jade Hair Crown'],
+  },
+  chest: {
+    name: 'Chest',
+    base: { stat: 'defence', scale: 'flat', lo: 0.4, hi: 0.7 },
+    names: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
+  },
+  pants: {
+    name: 'Pants',
+    base: { stat: 'maxHp', scale: 'flat', lo: 2, hi: 4 },
+    names: ['Slacks of Stillness', 'Pleated Dao Trousers', 'Khaki Leggings'],
+  },
+  attachment: {
+    name: 'Attachment',
+    base: { stat: 'lifesteal', scale: 'share', lo: 0.01, hi: 0.02 },
+    names: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
+  },
   // A Jade Stapler rolls 8–14 damage at item level 10.
   weapon: {
     name: 'Weapon',
     base: { stat: 'damage', scale: 'flat', lo: 0.8, hi: 1.4 },
     names: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
   },
-  robe: {
-    name: 'Robe',
-    base: { stat: 'defence', scale: 'flat', lo: 0.4, hi: 0.7 },
-    names: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
-  },
-  talisman: {
-    name: 'Talisman',
+  sideArm: {
+    name: 'Side arm',
     base: { stat: 'damage', scale: 'flat', lo: 0.5, hi: 0.9 },
-    names: ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm'],
+    names: ['Stapler Dagger', 'Laser-Pointer Wand', 'Hole-Punch Knuckle'],
   },
-  pendant: {
-    name: 'Pendant',
+  accessory: {
+    name: 'Accessory',
     base: { stat: 'maxHp', scale: 'flat', lo: 4, hi: 7 },
     names: ['Lanyard Pendant', 'Badge of the Dao', 'Key-Card Amulet'],
   },
-  gourd: {
-    name: 'Pill Gourd',
-    base: { stat: 'lifesteal', scale: 'share', lo: 0.01, hi: 0.02 },
-    names: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
+  charm: {
+    name: 'Charm',
+    base: { stat: 'critChance', scale: 'share', lo: 0.004, hi: 0.008 },
+    names: ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm'],
   },
 };
+
+/** Every equipment position and the item type it takes, in display order. */
+export const EQUIP_SLOTS: Readonly<Record<EquipSlotId, { name: string; takes: SlotId }>> = {
+  head: { name: 'Head', takes: 'head' },
+  chest: { name: 'Chest', takes: 'chest' },
+  pants: { name: 'Pants', takes: 'pants' },
+  attachment: { name: 'Attachment', takes: 'attachment' },
+  weapon: { name: 'Weapon', takes: 'weapon' },
+  sideArm: { name: 'Side arm', takes: 'sideArm' },
+  accessory1: { name: 'Accessory 1', takes: 'accessory' },
+  accessory2: { name: 'Accessory 2', takes: 'accessory' },
+  charm1: { name: 'Charm 1', takes: 'charm' },
+  charm2: { name: 'Charm 2', takes: 'charm' },
+};
+
+/** The positions an item type fits, in the order they fill. */
+export function slotsFor(type: SlotId): EquipSlotId[] {
+  return (Object.keys(EQUIP_SLOTS) as EquipSlotId[]).filter((p) => EQUIP_SLOTS[p].takes === type);
+}
+
+/** Where equipping `item` goes when no position is chosen: the first free one, else the first. */
+export function defaultSlot(equipment: Equipment, item: Item): EquipSlotId {
+  const fits = slotsFor(item.slot);
+  return (fits.find((p) => !equipment[p]) ?? fits[0]) as EquipSlotId;
+}
 
 export const GRADES: Readonly<
   Record<GradeId, { name: string; weight: number; affixes: readonly [number, number] }>

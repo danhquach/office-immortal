@@ -173,9 +173,45 @@ describe('equip', () => {
     for (const i of [-1, 1, 0.5, Number.NaN]) expect(() => equip(start, i)).toThrow(RangeError);
   });
 
+  it('fills the free one of two positions first, then replaces the first', () => {
+    const ring = (level: number): Item => ({ ...weapon(level, 0), slot: 'accessory' });
+    let s = withBag(newGame(1, 'sword'), [ring(1), ring(2), ring(3)]);
+    s = equip(s, 0);
+    expect(s.cultivator.equipment.accessory1).toEqual(ring(1));
+    s = equip(s, 0);
+    expect(s.cultivator.equipment.accessory2).toEqual(ring(2));
+    s = equip(s, 0);
+    expect(s.cultivator.equipment.accessory1).toEqual(ring(3));
+    expect(s.cultivator.equipment.accessory2).toEqual(ring(2));
+    expect(s.inventory).toEqual([ring(1)]);
+  });
+
+  it('equips into a chosen position, swapping out what was there', () => {
+    const charm = (level: number): Item => ({ ...weapon(level, 0), slot: 'charm' });
+    let s = withBag(newGame(1, 'sword'), [charm(1), charm(2)]);
+    s = equip(s, 0, 'charm2');
+    expect(s.cultivator.equipment).toEqual({ charm2: charm(1) });
+    s = equip(s, 0, 'charm2');
+    expect(s.cultivator.equipment).toEqual({ charm2: charm(2) });
+    expect(s.inventory).toEqual([charm(1)]);
+  });
+
+  it('rejects a position the item does not fit', () => {
+    const start = withBag(newGame(1, 'sword'), [weapon(5, 0)]);
+    expect(() => equip(start, 0, 'charm1')).toThrow(RangeError);
+  });
+
+  it('shares no objects between the old and new state, on a swap too', () => {
+    const start = equip(withBag(newGame(1, 'sword'), [weapon(5, 0), weapon(9, 1)]), 0);
+    const s = equip(start, 0);
+    expect(s.cultivator.equipment.weapon).not.toBe(start.inventory[0]);
+    expect(s.inventory[0]).not.toBe(start.cultivator.equipment.weapon);
+    expect(s.inventory[0]).toEqual(start.cultivator.equipment.weapon);
+  });
+
   it('never leaves HP above a lower max HP', () => {
     const pendant: Item = {
-      slot: 'pendant',
+      slot: 'accessory',
       name: 'Lanyard Pendant',
       level: 50,
       grade: 'mortal',
@@ -184,7 +220,8 @@ describe('equip', () => {
     };
     let s = equip(withBag(newGame(1, 'body'), [pendant]), 0);
     s.cultivator.hp = derive(s.cultivator).maxHp;
-    s = equip({ ...s, inventory: [{ ...pendant, level: 1 }] }, 0);
+    // Into the same position, so the weaker item replaces the stronger one.
+    s = equip({ ...s, inventory: [{ ...pendant, level: 1 }] }, 0, 'accessory1');
     expect(s.cultivator.hp).toBe(derive(s.cultivator).maxHp);
   });
 
