@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { PATHS, type PathId } from './cultivator.ts';
-import { mitigate, newGame, tick, type GameState } from './sim.ts';
+import { derive, PATHS, type PathId } from './cultivator.ts';
+import type { Item } from './loot.ts';
+import { equip, INVENTORY_SIZE, mitigate, newGame, tick, type GameState } from './sim.ts';
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
@@ -109,5 +110,93 @@ describe('mitigate', () => {
 
   it('never deals less than 1', () => {
     expect(mitigate(1, 1e6)).toBe(1);
+  });
+});
+
+function weapon(level: number, baseRoll: number): Item {
+  return { slot: 'weapon', name: 'Jade Stapler', level, grade: 'mortal', baseRoll, affixes: [] };
+}
+
+function withBag(state: GameState, items: Item[]): GameState {
+  return { ...structuredClone(state), inventory: items };
+}
+
+describe('drops', () => {
+  it('picks up drops at the item level of the floor they fell on', () => {
+    // Steps short enough for one kill each, through deaths that drop a floor.
+    let s = newGame(21, 'sword');
+    let checked = 0;
+    let afterDeath = 0;
+    while (s.time < 3600 && s.inventory.length < INVENTORY_SIZE) {
+      const before = s;
+      s = tick(s, 0.05);
+      for (const item of s.inventory.slice(before.inventory.length)) {
+        expect(item.level).toBe(before.floor);
+        checked++;
+        if (before.floor < before.highestFloor) afterDeath++;
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+    expect(afterDeath).toBeGreaterThan(0);
+  });
+
+  it('stops picking up when the bag is full and counts what was lost', () => {
+    const full = withBag(
+      newGame(21, 'sword'),
+      Array.from({ length: INVENTORY_SIZE }, () => weapon(1, 0)),
+    );
+    const s = tick(full, 1800);
+    expect(s.inventory).toHaveLength(INVENTORY_SIZE);
+    expect(s.dropsLost).toBeGreaterThan(0);
+  });
+});
+
+describe('equip', () => {
+  it('moves the item into its slot and the old one back into the bag', () => {
+    const first = equip(withBag(newGame(1, 'sword'), [weapon(5, 0), weapon(9, 1)]), 0);
+    expect(first.cultivator.equipment.weapon).toEqual(weapon(5, 0));
+    expect(first.inventory).toEqual([weapon(9, 1)]);
+    const second = equip(first, 0);
+    expect(second.cultivator.equipment.weapon).toEqual(weapon(9, 1));
+    expect(second.inventory).toEqual([weapon(5, 0)]);
+  });
+
+  it('leaves the input state untouched', () => {
+    const start = withBag(newGame(1, 'sword'), [weapon(5, 0)]);
+    const copy = structuredClone(start);
+    equip(start, 0);
+    expect(start).toEqual(copy);
+  });
+
+  it('rejects an index with no item', () => {
+    const start = withBag(newGame(1, 'sword'), [weapon(5, 0)]);
+    for (const i of [-1, 1, 0.5, Number.NaN]) expect(() => equip(start, i)).toThrow(RangeError);
+  });
+
+  it('never leaves HP above a lower max HP', () => {
+    const pendant: Item = {
+      slot: 'pendant',
+      name: 'Lanyard Pendant',
+      level: 50,
+      grade: 'mortal',
+      baseRoll: 1,
+      affixes: [],
+    };
+    let s = equip(withBag(newGame(1, 'body'), [pendant]), 0);
+    s.cultivator.hp = derive(s.cultivator).maxHp;
+    s = equip({ ...s, inventory: [{ ...pendant, level: 1 }] }, 0);
+    expect(s.cultivator.hp).toBe(derive(s.cultivator).maxHp);
+  });
+
+  it.each(PATH_IDS)('makes %s measurably stronger with a better weapon', (path) => {
+    const start = newGame(13, path);
+    const bare = start.cultivator;
+    const armed = equip(withBag(start, [weapon(10, 1)]), 0);
+    expect(derive(armed.cultivator).damage).toBeGreaterThan(derive(bare).damage);
+    // Same seed, same fights: the armed run kills faster and climbs at least as high.
+    const a = tick(armed, 600);
+    const b = tick(start, 600);
+    expect(a.kills).toBeGreaterThan(b.kills);
+    expect(a.highestFloor).toBeGreaterThanOrEqual(b.highestFloor);
   });
 });

@@ -14,10 +14,13 @@ import {
   type PathId,
 } from './cultivator.ts';
 import { makeFloor, type Enemy } from './floors.ts';
+import { rollDrop, type Item } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
 /** Defence that halves incoming damage. */
 export const DEFENCE_HALVES_AT = 50;
+/** Items the bag holds; drops past this are lost until there is room. */
+export const INVENTORY_SIZE = 40;
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -30,6 +33,10 @@ export interface GameState {
   enemies: Enemy[];
   /** Sim time of the current enemy's next attack, in seconds. */
   enemyNextAttackAt: number;
+  /** Items picked up and not equipped. */
+  inventory: Item[];
+  /** Drops lost because the bag was full. */
+  dropsLost: number;
   kills: number;
   deaths: number;
 }
@@ -43,6 +50,8 @@ export function newGame(seed: number, path: PathId): GameState {
     highestFloor: 1,
     enemies: [],
     enemyNextAttackAt: 0,
+    inventory: [],
+    dropsLost: 0,
     kills: 0,
     deaths: 0,
   };
@@ -73,6 +82,25 @@ export function tick(state: GameState, dt: number): GameState {
   return s;
 }
 
+/**
+ * Equips the bag item at `index`, returning the new state; `state` is left
+ * untouched. Whatever was in that slot goes back into the bag.
+ */
+export function equip(state: GameState, index: number): GameState {
+  if (!Number.isInteger(index) || !state.inventory[index]) {
+    throw new RangeError(`equip: no item at ${index}`);
+  }
+  const s = structuredClone(state);
+  const item = s.inventory[index] as Item;
+  const c = s.cultivator;
+  const old = c.equipment[item.slot];
+  s.inventory.splice(index, 1, ...(old ? [old] : []));
+  c.equipment[item.slot] = item;
+  // Max HP may have dropped with the old item; never sit above it.
+  c.hp = Math.min(c.hp, derive(c).maxHp);
+  return s;
+}
+
 /** Damage after defence: never below 1, always a whole number. */
 export function mitigate(damage: number, defence: number): number {
   return Math.max(1, Math.round((damage * DEFENCE_HALVES_AT) / (DEFENCE_HALVES_AT + defence)));
@@ -92,15 +120,20 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   c.attackCount += 1;
   let damage = d.damage;
   if (path.burstEvery > 0 && c.attackCount % path.burstEvery === 0) damage *= path.burstMultiplier;
-  if (chance(rng, d.critChance)) damage *= path.critMultiplier;
+  if (chance(rng, d.critChance)) damage *= d.critMultiplier;
   const dealt = Math.min(enemy.hp, mitigate(damage, enemy.defence));
   enemy.hp -= dealt;
-  c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * path.lifesteal));
+  c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
   c.nextAttackAt = s.time + d.attackInterval;
   if (enemy.hp > 0) return;
 
   s.kills += 1;
   gainXp(c, enemy.xp);
+  const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind);
+  if (drop) {
+    if (s.inventory.length < INVENTORY_SIZE) s.inventory.push(drop);
+    else s.dropsLost += 1;
+  }
   s.enemies.shift();
   if (s.enemies.length > 0) {
     s.enemyNextAttackAt = s.time + currentEnemy(s).attackInterval;
