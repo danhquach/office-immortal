@@ -6,6 +6,8 @@ import {
   makeEnemy,
   makeFloor,
   WAVES_PER_FLOOR,
+  zoneOf,
+  ZONES,
 } from './floors.ts';
 import { createRng } from './rng.ts';
 
@@ -55,5 +57,31 @@ describe('makeEnemy', () => {
     expect(elite.maxHp).toBeGreaterThan(demon.maxHp);
     expect(boss.maxHp).toBeGreaterThan(elite.maxHp);
     expect(boss.xp).toBeGreaterThan(elite.xp);
+  });
+});
+
+describe('zoneOf', () => {
+  it('puts each floor in its zone, edges included', () => {
+    expect(zoneOf(1)).toBe('basement-archives');
+    expect(zoneOf(10)).toBe('basement-archives');
+    expect(zoneOf(11)).toBe('open-plan');
+    expect(zoneOf(40)).toBe('open-plan');
+    expect(zoneOf(41)).toBe('executive-suite');
+    expect(zoneOf(70)).toBe('executive-suite');
+    expect(zoneOf(71)).toBe('heavenly-boardroom');
+    expect(zoneOf(10_000)).toBe('heavenly-boardroom');
+  });
+
+  it('never fails on a floor out of range', () => {
+    expect(zoneOf(0)).toBe('basement-archives');
+    expect(zoneOf(-5)).toBe('basement-archives');
+    expect(zoneOf(Number.NaN)).toBe('basement-archives');
+  });
+
+  it('lists zones bottom up from floor 1', () => {
+    expect(ZONES[0]?.from).toBe(1);
+    for (let i = 1; i < ZONES.length; i++) {
+      expect(ZONES[i]!.from).toBeGreaterThan(ZONES[i - 1]!.from);
+    }
   });
 });

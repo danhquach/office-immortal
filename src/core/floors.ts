@@ -37,6 +37,23 @@ export const TRIBULATIONS = [
   'Heavenly Audit',
 ] as const;
 
+export type ZoneId = 'basement-archives' | 'open-plan' | 'executive-suite' | 'heavenly-boardroom';
+
+/** The tower's zones, bottom up, each from its first floor (docs/design.md §5). */
+export const ZONES: readonly { id: ZoneId; name: string; from: number }[] = [
+  { id: 'basement-archives', name: 'Basement Archives', from: 1 },
+  { id: 'open-plan', name: 'Open-plan floors', from: 11 },
+  { id: 'executive-suite', name: 'Executive Suite', from: 41 },
+  { id: 'heavenly-boardroom', name: 'Heavenly Boardroom', from: 71 },
+];
+
+/** The zone a floor is in; floors below 1 count as the first. */
+export function zoneOf(floor: number): ZoneId {
+  let zone: ZoneId = 'basement-archives';
+  for (const z of ZONES) if (floor >= z.from) zone = z.id;
+  return zone;
+}
+
 export const WAVES_PER_FLOOR = 3;
 export const DEMONS_PER_WAVE = 3;
 

@@ -11,7 +11,7 @@ import {
   type Derived,
   type PathId,
 } from '../core/cultivator.ts';
-import { DEMONS_PER_WAVE, WAVES_PER_FLOOR } from '../core/floors.ts';
+import { DEMONS_PER_WAVE, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
   AFFIXES,
   affixValue,
@@ -196,19 +196,78 @@ export function sellBelowLabel(p: {
   return `Sell ${items} (highest grade: ${GRADES[p.highest].name}) for ${p.stones} Spirit Stones?`;
 }
 
-/** The short code on an item's grid cell, standing in until item icons exist. */
-export const SLOT_CODES: Readonly<Record<SlotId, string>> = {
-  head: 'Hd',
-  chest: 'Cht',
-  pants: 'Pnt',
-  attachment: 'Att',
-  weapon: 'Wpn',
-  sideArm: 'Sde',
-  accessory: 'Acc',
-  charm: 'Chm',
+/** Item types in the icon atlas's column order (tools/art/manifest.json "icons"). */
+export const ICON_COLUMNS: readonly SlotId[] = [
+  'head',
+  'chest',
+  'pants',
+  'attachment',
+  'weapon',
+  'sideArm',
+  'accessory',
+  'charm',
+];
+
+/**
+ * An item's cell in the icon atlas: its type's column, and the row of its name's
+ * material (one row per name, in the order loot.ts lists them). An unknown
+ * name, from an old save, gets the first material.
+ */
+export function iconCell(item: Item): { col: number; row: number } {
+  const col = Math.max(0, ICON_COLUMNS.indexOf(item.slot));
+  const row = Math.max(0, SLOTS[item.slot]?.names.indexOf(item.name) ?? 0);
+  return { col, row };
+}
+
+/** A sprite sheet's frame size in px, by who is in it. */
+export const SPRITE_SIZE: Readonly<Record<EnemyKind | 'path', number>> = {
+  path: 128,
+  demon: 128,
+  elite: 160,
+  boss: 192,
+  tribulation: 192,
 };
 
-/** A grid cell's accessible name: everything its colour and codes show, in words. */
+const slug = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+/**
+ * The sprite sheet an enemy uses, e.g. "demon-inbox-hydra", "elite-inbox-hydra"
+ * or "boss-the-auditor". Elites are named "Elite <demon>" and share its art.
+ */
+export function enemySprite(kind: EnemyKind, name: string): string {
+  return `${kind}-${slug(kind === 'elite' ? name.replace(/^Elite /, '') : name)}`;
+}
+
+/** What the strip plays between two states; all of it was decided by the sim. */
+export interface StripEvents {
+  youAttack: boolean;
+  foeAttack: boolean;
+  youHit: boolean;
+  foeHit: boolean;
+  youDied: boolean;
+  /** The enemy that just died, for its death animation; the next one is already in front. */
+  foeDied: { kind: EnemyKind; name: string } | null;
+}
+
+export function stripEvents(prev: GameState, next: GameState): StripEvents {
+  const youDied = next.deaths > prev.deaths;
+  const killed = next.kills > prev.kills;
+  const before = prev.enemies[0];
+  const now = next.enemies[0];
+  // A kill or a death restarts the timers, so only a timer that moved on its own is an attack.
+  const youAttack = !youDied && next.cultivator.nextAttackAt !== prev.cultivator.nextAttackAt;
+  const foeAttack = !youDied && !killed && next.enemyNextAttackAt !== prev.enemyNextAttackAt;
+  return {
+    youAttack,
+    foeAttack,
+    youHit: !youDied && next.cultivator.hp < prev.cultivator.hp,
+    foeHit: !killed && !youDied && !!before && !!now && now.hp < before.hp,
+    youDied,
+    foeDied: killed && before ? { kind: before.kind, name: before.name } : null,
+  };
+}
+
+/** A grid cell's accessible name: everything its colour, initial and icon show, in words. */
 export function cellLabel(item: Item): string {
   return `${item.name}, ${itemTag(item)}`;
 }

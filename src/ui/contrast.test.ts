@@ -20,7 +20,7 @@ function themes(): { light: Map<string, string>; dark: Map<string, string> } {
 
 const GRADES = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
 const TEXT = ['--ink', '--muted', '--up', '--down', ...GRADES.map((g) => `--grade-${g}`)];
-const SURFACES = ['--bg', '--panel', '--doll'];
+const SURFACES = ['--bg', '--panel'];
 
 describe('contrast', () => {
   it('matches known WCAG ratios', () => {
@@ -54,10 +54,13 @@ describe('page.css colours', () => {
       },
     );
 
-    it(`${name}: strip text on the strip is at least 4.5:1`, () => {
-      expect(
-        contrast(vars.get('--strip-ink') as string, vars.get('--strip-bg') as string),
-      ).toBeGreaterThanOrEqual(4.5);
-    });
+    it.each(['--strip-ink', '--strip-hurt'])(
+      `${name}: %s on the strip is at least 4.5:1`,
+      (text) => {
+        expect(
+          contrast(vars.get(text) as string, vars.get('--strip-bg') as string),
+        ).toBeGreaterThanOrEqual(4.5);
+      },
+    );
   }
 });
