@@ -12,10 +12,14 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
+  realmLabel,
   sellBelowLabel,
   statRows,
   waveLabel,
+  xpLabel,
 } from './view.ts';
+import { makeTribulation } from '../core/floors.ts';
+import { xpToNext } from '../core/cultivator.ts';
 
 const stapler: Item = {
   slot: 'weapon',
@@ -126,7 +130,7 @@ describe('statRows', () => {
       statRows(newCultivator('sword')).map((r) => [r.label, r.value]),
     );
     expect(rows['Max HP']).toBe('100');
-    expect(rows['Crit chance']).toBe('9%');
+    expect(rows['Crit chance']).toBe('6.6%');
     expect(rows['Crit damage']).toBe('×2');
   });
 });
@@ -146,6 +150,45 @@ describe('waveLabel', () => {
       'Elite',
       'Boss',
     ]);
+  });
+
+  it('counts the waves the same with a Tribulation queued, then names it', () => {
+    const s = newGame(1, 'sword');
+    s.enemies.push(makeTribulation(1, 0));
+    const seen: string[] = [];
+    while (s.enemies.length > 0) {
+      seen.push(waveLabel(s));
+      s.enemies.shift();
+    }
+    expect(seen.slice(0, 3)).toEqual(Array<string>(3).fill('Wave 1 / 3'));
+    expect(seen.slice(-3)).toEqual(['Elite', 'Boss', 'Tribulation']);
+  });
+});
+
+describe('realmLabel', () => {
+  it('puts the job title beside the realm name', () => {
+    expect(realmLabel(1)).toBe('Qi Condensation · Intern');
+    expect(realmLabel(10)).toBe('Qi Condensation · Intern');
+    expect(realmLabel(11)).toBe('Foundation Establishment · Associate');
+    expect(realmLabel(60)).toBe('Immortal Ascension · CEO');
+  });
+
+  it('shows Immortal alone: it has no job title', () => {
+    expect(realmLabel(61)).toBe('Immortal');
+    expect(realmLabel(3000)).toBe('Immortal');
+  });
+});
+
+describe('xpLabel', () => {
+  it('shows XP to the next level, and flags a Tribulation due at a cap', () => {
+    const c = newCultivator('sword');
+    c.xp = 37;
+    expect(xpLabel(c)).toBe(`37 / ${xpToNext(1)}`);
+    c.level = 10;
+    c.xp = xpToNext(10) + 80;
+    expect(xpLabel(c)).toBe(`${xpToNext(10) + 80} / ${xpToNext(10)} · Tribulation due`);
+    c.xp = 5;
+    expect(xpLabel(c)).toBe(`5 / ${xpToNext(10)}`);
   });
 });
 

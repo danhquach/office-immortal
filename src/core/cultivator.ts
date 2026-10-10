@@ -42,7 +42,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     critMultiplier: 1.5,
     lifesteal: 0,
     burstEvery: 3,
-    burstMultiplier: 2.5,
+    burstMultiplier: 4,
   },
 };
 
@@ -89,22 +89,63 @@ export interface Derived {
   treasureFind: number;
 }
 
-export function derive(c: Pick<Cultivator, 'path' | 'stats' | 'equipment'>): Derived {
+export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipment'>): Derived {
   const { body, agility } = c.stats;
   const path = PATHS[c.path];
   const b = equipmentBonuses(c.equipment);
+  const realm = REALM_BONUS * realmOf(c.level);
   return {
-    maxHp: Math.round((40 + 12 * body + b.maxHp) * (1 + b.maxHpPct)),
+    maxHp: Math.round((40 + 12 * body + b.maxHp) * (1 + b.maxHpPct + realm)),
     defence: body + b.defence,
-    damage: (4 + 1.5 * c.stats[path.primary] + b.damage) * (1 + b.damagePct),
-    attackInterval: Math.max(MIN_ATTACK_INTERVAL, 1 / (1 + 0.02 * agility + b.attackSpeed)),
-    critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.005 * agility + b.critChance),
+    damage: (4 + 1.5 * c.stats[path.primary] + b.damage) * (1 + b.damagePct + realm),
+    attackInterval: Math.max(MIN_ATTACK_INTERVAL, 1 / (1 + 0.008 * agility + b.attackSpeed)),
+    critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.002 * agility + b.critChance),
     critMultiplier: path.critMultiplier + b.critDamage,
     lifesteal: Math.min(MAX_LIFESTEAL, path.lifesteal + b.lifesteal),
     qiRegen: b.qiRegen,
     stoneFind: b.stoneFind,
     treasureFind: b.treasureFind,
   };
+}
+
+// Realms (docs/design.md §4): every LEVELS_PER_REALM levels is a cap that only
+// a Tribulation win breaks through. Up to Immortal Ascension; Immortal is endless.
+
+export interface Realm {
+  readonly name: string;
+  /** The office cover; Immortal has none. */
+  readonly title: string | null;
+}
+
+export const REALMS: readonly Realm[] = [
+  { name: 'Qi Condensation', title: 'Intern' },
+  { name: 'Foundation Establishment', title: 'Associate' },
+  { name: 'Golden Core', title: 'Manager' },
+  { name: 'Nascent Soul', title: 'Director' },
+  { name: 'Spirit Severing', title: 'VP' },
+  { name: 'Immortal Ascension', title: 'CEO' },
+  { name: 'Immortal', title: null },
+];
+
+export const LEVELS_PER_REALM = 10;
+/** Max HP and damage each realm reached adds, as a share. */
+export const REALM_BONUS = 0.1;
+/** The last capped level; past it, Immortal levels without end. */
+export const LAST_CAP = LEVELS_PER_REALM * (REALMS.length - 1);
+
+/** Index into REALMS for a level: 1–10 is 0, 11–20 is 1, …, 61+ is Immortal. */
+export function realmOf(level: number): number {
+  return Math.min(REALMS.length - 1, Math.floor((level - 1) / LEVELS_PER_REALM));
+}
+
+/** True for 10, 20, … 60: the level can't be passed without a Tribulation win. */
+export function isRealmCap(level: number): boolean {
+  return level % LEVELS_PER_REALM === 0 && level <= LAST_CAP;
+}
+
+/** At a cap with the XP for the next level held: the Tribulation is due. */
+export function readyForTribulation(c: Pick<Cultivator, 'level' | 'xp'>): boolean {
+  return isRealmCap(c.level) && c.xp >= xpToNext(c.level);
 }
 
 /** XP needed to go from `level` to `level + 1`. */
@@ -131,16 +172,30 @@ export function newCultivator(path: PathId): Cultivator {
 }
 
 /**
- * Adds XP and applies every level-up it pays for. Each level's stat points go
+ * Adds XP and applies every level-up it pays for, stopping at a realm cap:
+ * XP past the cap is held until breakThrough(). Each level's stat points go
  * to the Path's primary stat; any max HP gained is also healed.
  */
 export function gainXp(c: Cultivator, xp: number): void {
-  c.xp += xp;
-  for (let need = xpToNext(c.level); c.xp >= need; need = xpToNext(c.level)) {
-    const before = derive(c).maxHp;
-    c.xp -= need;
-    c.level += 1;
-    c.stats[PATHS[c.path].primary] += STAT_POINTS_PER_LEVEL;
-    c.hp += derive(c).maxHp - before;
-  }
+  // Held XP never passes what a save can store as a whole number.
+  c.xp = Math.min(Number.MAX_SAFE_INTEGER, c.xp + xp);
+  while (!isRealmCap(c.level) && c.xp >= xpToNext(c.level)) levelUp(c);
+}
+
+/**
+ * The Tribulation was won: passes the cap into the next realm (whose bonus
+ * comes with the level), then spends the rest of the held XP.
+ */
+export function breakThrough(c: Cultivator): void {
+  if (!readyForTribulation(c)) throw new RangeError(`breakThrough: not ready at ${c.level}`);
+  levelUp(c);
+  gainXp(c, 0);
+}
+
+function levelUp(c: Cultivator): void {
+  const before = derive(c).maxHp;
+  c.xp -= xpToNext(c.level);
+  c.level += 1;
+  c.stats[PATHS[c.path].primary] += STAT_POINTS_PER_LEVEL;
+  c.hp += derive(c).maxHp - before;
 }

@@ -40,6 +40,8 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 | Body Refiner | Facilities | Tanky, lifesteal | Body |
 | Talisman Master | IT | Burst, area damage | Spirit |
 
+- **Balance:** no Path is much stronger than the others; a test keeps each
+  within 15% of the others on the floor reached.
 - **Stats:** Body (HP, defence), Agility (attack speed, crit), Spirit (skill
   damage, qi regen). Each level grants stat points, assigned automatically to
   the Path's primary stat by default; the player can reset and re-spend them.
@@ -61,14 +63,27 @@ in a Tribulation boss that must be beaten to advance.
 
 The realm name is primary; the job title is shown beside it.
 
+- **The cap:** at level 10, 20, … 60 the level stops; XP keeps coming and is
+  held. Once the next level's XP is held, the realm's Tribulation joins the end
+  of the current floor, so that floor can't be passed until it is won.
+- **Winning** breaks through: the level moves on (spending the held XP) and the
+  new realm adds +10% max HP and damage, once (added to gear's % bonuses,
+  not multiplied).
+- **Losing** to a Tribulation costs nothing: the floor is played again, with
+  the Tribulation at its end. Gear is what beats it; a cultivator who stays
+  stuck can start over through Early Retirement.
+- **Tribulations:** Probation Review, Annual Appraisal, Restructuring, Hostile
+  Takeover, Board Inquiry, Heavenly Audit. Each is 8× a demon's HP and 2.5×
+  its damage on the floor it is fought on.
+
 ## 5. Floors and combat
 
 - **The tower:** floors climb from Basement Archives through the open-plan
   floors to the Executive Suite and the Heavenly Boardroom.
 - **A floor** is waves of office demons → an elite → a floor boss. Clearing it
   unlocks the next floor.
-- **Losing** sends the cultivator back one floor to farm. A run never gets
-  stuck.
+- **Losing** sends the cultivator back one floor to farm (a lost
+  Tribulation replays the floor instead, §4).
 - **Combat is numbers.** Attack timers, damage, crit and HP resolve in the
   pure simulation; the strip animation only shows what happened.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer

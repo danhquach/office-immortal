@@ -25,7 +25,12 @@ export const BAG_ROW = 8;
 export const MAX_BAG_SIZE = INVENTORY_SIZE + 5 * BAG_ROW;
 
 /** Spirit Stones per kill on floor 1; each floor adds 10% of it. Spirit stone find raises it. */
-export const KILL_STONES: Readonly<Record<EnemyKind, number>> = { demon: 1, elite: 3, boss: 10 };
+export const KILL_STONES: Readonly<Record<EnemyKind, number>> = {
+  demon: 1,
+  elite: 3,
+  boss: 10,
+  tribulation: 25,
+};
 /** Spirit Stones for selling an item, per item level. */
 export const SELL_VALUE: Readonly<Record<GradeId, number>> = {
   mortal: 2,

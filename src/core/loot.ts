@@ -182,7 +182,7 @@ export const UNIQUES: Readonly<Record<UniqueId, { name: string; stat: BonusStat;
   };
 
 /** Chance that a kill drops an item; bosses have better odds. */
-export const DROP_CHANCE = { demon: 0.1, elite: 0.5, boss: 1 } as const;
+export const DROP_CHANCE = { demon: 0.1, elite: 0.5, boss: 1, tribulation: 1 } as const;
 
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
 const EQUIP_SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];

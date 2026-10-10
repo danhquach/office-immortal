@@ -6,10 +6,13 @@
 // tick(state, 1) calls (docs/design.md §10).
 
 import {
+  breakThrough,
   derive,
   gainXp,
   newCultivator,
   PATHS,
+  readyForTribulation,
+  realmOf,
   type Cultivator,
   type PathId,
 } from './cultivator.ts';
@@ -21,7 +24,7 @@ import {
   pickUp,
   type LootFilter,
 } from './economy.ts';
-import { makeFloor, type Enemy } from './floors.ts';
+import { makeFloor, makeTribulation, type Enemy } from './floors.ts';
 import { defaultSlot, rollDrop, slotsFor, type EquipSlotId, type Item } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
@@ -152,9 +155,11 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   s.kills += 1;
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
   gainXp(c, enemy.xp);
+  if (enemy.kind === 'tribulation') breakThrough(c);
   const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind);
   if (drop) pickUp(s, drop);
   s.enemies.shift();
+  queueTribulation(s);
   if (s.enemies.length > 0) {
     s.enemyNextAttackAt = s.time + currentEnemy(s).attackInterval;
     return;
@@ -171,16 +176,29 @@ function enemyAttacks(s: GameState, rng: Rng): void {
   s.enemyNextAttackAt = s.time + enemy.attackInterval;
   if (c.hp > 0) return;
 
-  // Lost: drop back a floor and climb again from there, so a run never gets stuck.
+  // Lost: drop back a floor and climb again from there, so a run never gets
+  // stuck. Losing to a Tribulation costs nothing: the floor is played again.
   s.deaths += 1;
-  s.floor = Math.max(1, s.floor - 1);
+  if (enemy.kind !== 'tribulation') s.floor = Math.max(1, s.floor - 1);
   startFloor(s, rng);
+}
+
+/**
+ * Once the cultivator is held at a realm cap, the realm's Tribulation joins the
+ * end of the floor, so the floor can't be cleared until it is won. Draws no
+ * randomness, so step size never changes what is fought.
+ */
+function queueTribulation(s: GameState): void {
+  const c = s.cultivator;
+  if (!readyForTribulation(c) || s.enemies.some((e) => e.kind === 'tribulation')) return;
+  s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
 }
 
 /** Fresh enemies and full HP; both sides start their attack timers from now. */
 function startFloor(s: GameState, rng: Rng): void {
   const c = s.cultivator;
   s.enemies = makeFloor(rng, s.floor);
+  queueTribulation(s);
   c.hp = derive(c).maxHp;
   c.attackCount = 0;
   c.nextAttackAt = s.time + derive(c).attackInterval;
