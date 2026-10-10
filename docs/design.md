@@ -432,6 +432,14 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   choice is a display preference, so Reset progress keeps it, and the page
   paints in it from the first frame. Text 4.5:1 or more on its background in
   both.
+- Languages: English and Vietnamese. A globe button beside Menu shows the
+  code (EN / VI) and opens the list; the default is the browser's language
+  when there is a pack for it, else English. Like the theme it is a display
+  preference (Reset progress keeps it), and a switch changes the page in
+  place, with no reload. Vietnamese uses the genre's Sino-Vietnamese terms
+  (Luyện Khí, Trúc Cơ, Kim Đan, Nguyên Anh…). Numbers keep one format in both.
+  The sim keeps its English names as ids; the UI translates them
+  (`src/ui/lang/`, one file per language).
 
 ### Combat strip (pixel art)
 
@@ -493,6 +501,7 @@ Grade is also written as text, never shown by colour alone.
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars, one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
 
+- The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
   which asks first and then deletes the save) and Help (how to play).
 - Full and Narrow are chosen by width; Mini is chosen by height or by being

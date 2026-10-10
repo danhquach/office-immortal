@@ -15,6 +15,7 @@ import {
   writeBagReverse,
   writeBagSort,
 } from './sort.ts';
+import { t } from './i18n.ts';
 
 /** An item with no affixes, so its quality is the base roll as a percent. */
 const item = (slot: Item['slot'], grade: Item['grade'], level: number, baseRoll: number): Item => ({
@@ -77,7 +78,7 @@ describe('bagOrder', () => {
   });
 
   it('names both directions of every sort', () => {
-    expect(BAG_SORT_DIRS.newest).toEqual(['Oldest first', 'Newest first']);
+    expect(BAG_SORT_DIRS.newest.map((k) => t(k))).toEqual(['Oldest first', 'Newest first']);
     for (const sort of BAG_SORTS) expect(BAG_SORT_DIRS[sort]).toHaveLength(2);
   });
 
@@ -105,7 +106,7 @@ describe('bagOrder', () => {
   });
 
   it('names every sort', () => {
-    expect(BAG_SORTS.map((s) => BAG_SORT_NAMES[s])).toEqual([
+    expect(BAG_SORTS.map((s) => t(BAG_SORT_NAMES[s]))).toEqual([
       'Grade',
       'Item type',
       'Item level',

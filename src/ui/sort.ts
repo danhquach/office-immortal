@@ -4,28 +4,29 @@
 
 import { GRADE_IDS, SLOT_IDS } from '../core/economy.ts';
 import { type Item, quality } from '../core/loot.ts';
+import type { MessageKey } from './i18n.ts';
 
 export const BAG_SORT_KEY = 'office-immortal.bagSort';
 export const BAG_REVERSE_KEY = 'office-immortal.bagSortReverse';
 export const BAG_SORTS = ['grade', 'type', 'level', 'quality', 'newest'] as const;
 export type BagSort = (typeof BAG_SORTS)[number];
 
-/** The sort control's options, in menu order. */
-export const BAG_SORT_NAMES: Readonly<Record<BagSort, string>> = {
-  grade: 'Grade',
-  type: 'Item type',
-  level: 'Item level',
-  quality: 'Quality %',
-  newest: 'Drop order',
+/** The sort control's options (message keys), in menu order. */
+export const BAG_SORT_NAMES: Readonly<Record<BagSort, MessageKey>> = {
+  grade: 'sort.grade',
+  type: 'sort.type',
+  level: 'sort.level',
+  quality: 'sort.quality',
+  newest: 'sort.newest',
 };
 
-/** The direction button's text for each sort: [normal, reversed]. */
-export const BAG_SORT_DIRS: Readonly<Record<BagSort, readonly [string, string]>> = {
-  grade: ['Highest first', 'Lowest first'],
-  type: ['Head first', 'Charm first'],
-  level: ['Highest first', 'Lowest first'],
-  quality: ['Highest first', 'Lowest first'],
-  newest: ['Oldest first', 'Newest first'],
+/** The direction button's text (message keys) for each sort: [normal, reversed]. */
+export const BAG_SORT_DIRS: Readonly<Record<BagSort, readonly [MessageKey, MessageKey]>> = {
+  grade: ['sort.highest', 'sort.lowest'],
+  type: ['sort.headFirst', 'sort.charmFirst'],
+  level: ['sort.highest', 'sort.lowest'],
+  quality: ['sort.highest', 'sort.lowest'],
+  newest: ['sort.oldest', 'sort.newestFirst'],
 };
 
 /** A sort from an untrusted value (storage, the select); anything else is Grade. */
