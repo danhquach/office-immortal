@@ -413,10 +413,13 @@
   "icons": [
     {
       "id": "head",
-      "seed": 5101,
-      "prompt": "edit of the weapon icon as style reference: a small ornate jade green Daoist hair crown, a rounded cap-shaped crown with a gold band and a gold hairpin through it",
-      "family": "green",
-      "materials": ["grey", "blue", "green"]
+      "sources": [
+        "items/head-mortal.jpg",
+        "items/head-spirit.jpg",
+        "items/head-earth.jpg",
+        "items/head-heaven.jpg",
+        "items/head-immortal.jpg"
+      ]
     },
     {
       "id": "chest",
@@ -441,10 +444,13 @@
     },
     {
       "id": "attachment",
-      "seed": 1544,
-      "prompt": "a brown calabash gourd bottle with a cork, steam rising",
-      "family": "brown",
-      "materials": ["brown", "grey", "green"]
+      "sources": [
+        "items/attachment-mortal.jpg",
+        "items/attachment-spirit.jpg",
+        "items/attachment-earth.jpg",
+        "items/attachment-heaven.jpg",
+        "items/attachment-immortal.jpg"
+      ]
     },
     {
       "id": "weapon",
@@ -478,24 +484,33 @@
     },
     {
       "id": "sideArm",
-      "seed": 1546,
-      "prompt": "a small red office stapler",
-      "family": "red",
-      "materials": ["red", "purple", "grey"]
+      "sources": [
+        "items/sideArm-mortal.jpg",
+        "items/sideArm-spirit.jpg",
+        "items/sideArm-earth.jpg",
+        "items/sideArm-heaven.jpg",
+        "items/sideArm-immortal.jpg"
+      ]
     },
     {
       "id": "accessory",
-      "seed": 1547,
-      "prompt": "a blue lanyard with a white key card pendant",
-      "family": "blue",
-      "materials": ["blue", "red", "gold"]
+      "sources": [
+        "items/accessory-mortal.jpg",
+        "items/accessory-spirit.jpg",
+        "items/accessory-earth.jpg",
+        "items/accessory-heaven.jpg",
+        "items/accessory-immortal.jpg"
+      ]
     },
     {
       "id": "charm",
-      "seed": 1548,
-      "prompt": "a yellow sticky note talisman with a red seal stamp",
-      "family": "gold",
-      "materials": ["gold", "blue", "green"]
+      "sources": [
+        "items/charm-mortal.jpg",
+        "items/charm-spirit.jpg",
+        "items/charm-earth.jpg",
+        "items/charm-heaven.jpg",
+        "items/charm-immortal.jpg"
+      ]
     }
   ],
   "backgrounds": [

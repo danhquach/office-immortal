@@ -27,6 +27,7 @@ const exists = (name: string) => artUrl(name) !== '';
 const manifest = JSON.parse(manifestText) as {
   icons: {
     id: SlotId;
+    family?: string;
     materials?: string[];
     files?: string[];
     sources?: string[];
@@ -113,9 +114,7 @@ describe('iconCell', () => {
     const cells = new Set<string>();
     for (const slot of ICON_COLUMNS) {
       const entry = manifest.icons.find((i) => i.id === slot);
-      expect(entry?.files ?? entry?.sources ?? entry?.renders ?? entry?.materials).toHaveLength(
-        SLOTS[slot].names.length,
-      );
+      expect(entry?.sources ?? entry?.renders).toHaveLength(SLOTS[slot].names.length);
       for (const name of SLOTS[slot].names) {
         const { col, row } = iconCell({ slot, name } as Item);
         cells.add(`${col},${row}`);
@@ -142,6 +141,28 @@ describe('iconCell', () => {
     expect(weapon?.files).toBeUndefined();
     expect(weapon?.source).toBeUndefined();
     expect(manifest.icons.some((i) => i.files)).toBe(false);
+  });
+
+  it('draws every other type from one source-style generation per grade, in grade order', () => {
+    const grades = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
+    for (const entry of manifest.icons) {
+      if (entry.id === 'weapon') continue;
+      expect(entry.sources, entry.id).toEqual(grades.map((g) => `items/${entry.id}-${g}.jpg`));
+      expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length);
+    }
+    // No recoloured pixel-pack icon is left in the atlas.
+    expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
+  });
+
+  it('puts each Hidden Weapon name in its grade row of the side arm column', () => {
+    const col = ICON_COLUMNS.indexOf('sideArm');
+    SLOTS.sideArm.names.forEach((name, row) =>
+      expect(iconCell({ slot: 'sideArm', name } as Item), name).toEqual({ col, row }),
+    );
+    expect(iconCell({ slot: 'sideArm', name: 'Phoenix Flame Darts' } as Item)).toEqual({
+      col,
+      row: 4,
+    });
   });
 
   it('lists the weapon renders in the row order of the weapon names', () => {

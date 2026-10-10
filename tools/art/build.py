@@ -33,16 +33,13 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               size), recolor, aura (glow colour), plus any sprite knob to override.
   background  id*, height*, seed, prompt, dim (brightness and saturation, default
               0.8), extra, trim_top (source rows dropped), blend (px of seam fade).
-  icon        id*, then one of: family* and materials* (one recolour of the
-              art-src/icon-<id>.jpg generation per item name), sources* (one
-              generation under art-src/ per item name, drawn smooth at full
-              cell size; pair: each is one boot, drawn as a matching pair) or
-              renders* (one transparent PNG under art-src/
-              per item name, e.g. from render-weapons.mjs: no cut-out, cropped
-              to its shape and drawn smooth at full cell size), plus seed,
-              prompt, source (provenance only).
-              Atlas cells are icon_size x icon_scale px; recoloured pixel
-              icons are scaled up whole, so they look as drawn.
+  icon        id*, then one of: sources* (one generation under art-src/ per
+              item name, drawn smooth at full cell size; pair: each is one
+              boot, drawn as a matching pair) or renders* (one transparent PNG
+              under art-src/ per item name, e.g. from render-weapons.mjs: no
+              cut-out, cropped to its shape and drawn smooth at full cell
+              size), plus seed, prompt, source (provenance only).
+              Atlas cells are icon_size x icon_scale px.
 """
 
 import json
@@ -444,35 +441,6 @@ def background(bg: dict) -> Image.Image:
     return shrink(tile.convert("RGBA"), width, height, palette_image(PALETTE + BG_GREYS + bg.get("extra", [])))
 
 
-# Colour families, dark to light, for material swaps: an icon's main family is
-# mapped shade by shade onto another, so a jade crown becomes a steel or gold one.
-FAMILIES = {
-    "green": ["1f4d3a", "2f8a5a", "5fd08a", "b8f5c8"],
-    "blue": ["1e2f5c", "2f5fb3", "5aa0f0", "a8d8ff"],
-    "red": ["6e1b25", "b82e3a", "f05a5a", "f1c7a1"],
-    "gold": ["8a5a35", "e88a2a", "f5c542", "fff1a8"],
-    "grey": ["4a4a55", "6e6e7a", "9a9aa6", "c8c8d0"],
-    "brown": ["4a2f1f", "6b3e26", "8a5a35", "a8693f"],
-    "purple": ["3b2d4a", "6a3fa0", "b07ae0", "b07ae0"],
-}
-
-
-def material(img: Image.Image, src: str, dst: str) -> Image.Image:
-    """Swaps colour family `src` for `dst`, shade for shade."""
-    return recolor(img, dict(zip(FAMILIES[src], FAMILIES[dst]))) if src != dst else img
-
-
-def icon(entry: dict, n: int) -> Image.Image:
-    """One item type's icon: cut out, fitted into n x n, outlined."""
-    cut = cut_out(Image.open(SRC / f"icon-{entry['id']}.jpg"), entry.get("keep", 0.15))
-    cut = cut.crop(cut.getbbox())
-    k = min((n - 2) / cut.width, (n - 2) / cut.height)
-    small = shrink(cut, max(1, round(cut.width * k)), max(1, round(cut.height * k)))
-    canvas = Image.new("RGBA", (n, n), (0, 0, 0, 0))
-    canvas.paste(small, ((n - small.width) // 2, (n - small.height) // 2))
-    return outline(canvas)
-
-
 def pair_of(boot: Image.Image) -> Image.Image:
     """A matching pair from one boot: a shaded copy behind, up and to the toe side."""
     w, h = boot.size
@@ -500,7 +468,7 @@ def smooth_icon(path: Path, n: int, pair: bool, transparent: bool = False) -> Im
 
 
 def icon_rows(e: dict) -> list:
-    return e.get("sources") or e.get("renders") or e.get("materials") or []
+    return e.get("sources") or e.get("renders") or []
 
 
 def icon_atlas(columns: list[str] | None = None) -> Image.Image:
@@ -517,22 +485,15 @@ def icon_atlas(columns: list[str] | None = None) -> Image.Image:
     rows = max(len(icon_rows(e)) for e in entries)
     out = Image.new("RGBA", (cell * len(entries), cell * rows), (0, 0, 0, 0))
 
-    def pixel(img: Image.Image) -> Image.Image:
-        return img.resize((cell, cell), Image.NEAREST)
-
     for c, e in enumerate(entries):
         if columns is not None and e["id"] not in columns:
             continue
         if "renders" in e:
             for r, f in enumerate(e["renders"]):
                 out.paste(smooth_icon(SRC / f, cell, False, transparent=True), (c * cell, r * cell))
-        elif "sources" in e:
+        else:
             for r, f in enumerate(e["sources"]):
                 out.paste(smooth_icon(SRC / f, cell, e.get("pair", False)), (c * cell, r * cell))
-        else:
-            base = icon(e, n)
-            for r, dst in enumerate(e["materials"]):
-                out.paste(pixel(material(base, e["family"], dst)), (c * cell, r * cell))
         # Every item name needs a visible icon: a blank cell means a bad source or cut-out.
         for r in range(len(icon_rows(e))):
             if out.crop((c * cell, r * cell, (c + 1) * cell, (r + 1) * cell)).getbbox() is None:
@@ -580,8 +541,7 @@ KNOBS = {
     "variant": {"id", "size", "base", "recolor", "aura", "seed", "prompt", "lift", "keep", "crop",
                 "flip", "extra", "shadow", "border", "margin"},
     "background": {"id", "height", "seed", "prompt", "dim", "extra", "trim_top", "blend"},
-    "icon": {"id", "family", "materials", "sources", "renders", "pair", "source", "seed",
-             "prompt"},
+    "icon": {"id", "sources", "renders", "pair", "source", "seed", "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -608,15 +568,8 @@ def check_manifest(builds=lambda kind, name: True) -> None:
         if kind == "variant" and "poses" not in by_id.get(e["base"], {}):
             errors.append(f"variant {name}: base {e['base']!r} is not a sprite with poses")
         if kind == "icon":
-            kinds = [k for k in ("sources", "renders") if k in e]
-            if "family" in e or "materials" in e:
-                kinds.append("family and materials")
-            if len(kinds) != 1:
-                errors.append(
-                    f"icon {name}: needs exactly one of sources, renders, or family and materials"
-                )
-            elif kinds == ["family and materials"] and not ("family" in e and "materials" in e):
-                errors.append(f"icon {name}: needs both family and materials")
+            if len([k for k in ("sources", "renders") if k in e]) != 1:
+                errors.append(f"icon {name}: needs exactly one of sources or renders")
             if "pair" in e and "sources" not in e:
                 errors.append(f"icon {name}: pair only applies to sources")
             for f in [*e.get("sources", []), *e.get("renders", [])] if builds(kind, name) else []:

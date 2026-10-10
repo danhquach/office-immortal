@@ -321,7 +321,7 @@ describe('rejects', () => {
     });
 
     it('rejects a real name from another slot', () => {
-      const other = item(raw()).slot === 'weapon' ? 'Thinking Cap' : 'Iron Flying Sword';
+      const other = item(raw()).slot === 'weapon' ? 'Hempen Scholar Cap' : 'Iron Flying Sword';
       expect(tampered((s) => void (item(s).name = other))).toBeNull();
     });
   });
@@ -493,6 +493,168 @@ describe('rejects', () => {
       ((save.state.inventory as J[])[0] as J).grade = grade;
       expect(decodeSave(JSON.stringify(save))).toBeNull();
       expect(({} as J).polluted).toBeUndefined();
+    });
+  });
+
+  describe('retired office names', () => {
+    // The names Head, Side arm (now Hidden Weapon), Attachment, Accessory and
+    // Charm rolled on any grade before they were named by grade.
+    const OFFICE: [string, string][] = [
+      ['head', 'Headset of Clarity'],
+      ['head', 'Thinking Cap'],
+      ['head', 'Jade Hair Crown'],
+      ['sideArm', 'Stapler Dagger'],
+      ['sideArm', 'Laser-Pointer Wand'],
+      ['sideArm', 'Hole-Punch Knuckle'],
+      ['attachment', 'Coffee Gourd'],
+      ['attachment', 'Thermos of Elixirs'],
+      ['attachment', 'Break-Room Calabash'],
+      ['accessory', 'Lanyard Pendant'],
+      ['accessory', 'Badge of the Dao'],
+      ['accessory', 'Key-Card Amulet'],
+      ['charm', 'Sticky-Note Talisman'],
+      ['charm', 'Laminated Seal'],
+      ['charm', 'Post-Meeting Charm'],
+    ];
+    /** The first name of each type and grade, as docs/design.md lists them. */
+    const FIRST: Record<string, Record<string, string>> = {
+      head: {
+        mortal: 'Hempen Scholar Cap',
+        spirit: 'Azure Cloud Circlet',
+        earth: 'Jade Lotus Crown',
+        heaven: 'Golden Sun Crown',
+        immortal: 'Phoenix Flame Crown',
+      },
+      sideArm: {
+        mortal: 'Iron Throwing Darts',
+        spirit: 'Azure Frost Darts',
+        earth: 'Jade Viper Darts',
+        heaven: 'Golden Crow Flying Knives',
+        immortal: 'Phoenix Flame Darts',
+      },
+      attachment: {
+        mortal: 'Clay Wine Gourd',
+        spirit: 'Azure Spirit Gourd',
+        earth: 'Jade Elixir Gourd',
+        heaven: 'Golden Nectar Gourd',
+        immortal: 'Phoenix Flame Gourd',
+      },
+      accessory: {
+        mortal: 'Bone Bead Pendant',
+        spirit: 'Azure Spirit Pendant',
+        earth: 'Jade Dragon Pendant',
+        heaven: 'Golden Sun Amulet',
+        immortal: 'Phoenix Flame Amulet',
+      },
+      charm: {
+        mortal: 'Paper Ward Talisman',
+        spirit: 'Azure Thunder Talisman',
+        earth: 'Jade Seal Talisman',
+        heaven: 'Golden Heaven Seal',
+        immortal: 'Phoenix Flame Talisman',
+      },
+    };
+    const GRADES = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
+    const AFFIX_COUNT: Record<string, number> = {
+      mortal: 0,
+      spirit: 1,
+      earth: 3,
+      heaven: 4,
+      immortal: 5,
+    };
+    const IDS = ['critChance', 'maxHp', 'defence', 'qiRegen', 'lifesteal'];
+
+    /** An item of `slot` and `grade` named `name` that is otherwise a legal drop. */
+    function gear(slot: string, grade: string, name: string): J {
+      const g: J = {
+        slot,
+        name,
+        level: 1,
+        grade,
+        baseRoll: 0.5,
+        affixes: IDS.slice(0, AFFIX_COUNT[grade]).map((id) => ({ id, roll: 0.5 })),
+      };
+      if (grade === 'immortal') g.unique = 'synergy';
+      return g;
+    }
+    const inBag = (g: J) => {
+      const save = raw();
+      (save.state.inventory as J[])[0] = g;
+      return save;
+    };
+    const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+    const CASES = OFFICE.flatMap(([slot, old]) =>
+      GRADES.map((g) => [slot, old, g, FIRST[slot]?.[g] as string] as const),
+    );
+
+    it.each(CASES)('renames a %s %s of %s grade in the bag to %s', (slot, old, grade, now) => {
+      const loaded = load(inBag(gear(slot, grade, old)));
+      expect(loaded?.state.inventory[0]).toEqual(gear(slot, grade, now));
+    });
+
+    it.each([
+      ['head', 'head'],
+      ['sideArm', 'sideArm'],
+      ['attachment', 'attachment'],
+      ['accessory2', 'accessory'],
+      ['charm1', 'charm'],
+    ])('renames an equipped office item in the %s position', (at, slot) => {
+      const old = OFFICE.find(([s]) => s === slot)?.[1] as string;
+      const save = raw();
+      (cult(save).equipment as J)[at] = gear(slot, 'earth', old);
+      const eq = load(save)?.state.cultivator.equipment as Record<string, Item>;
+      expect(eq[at]).toEqual(gear(slot, 'earth', FIRST[slot]?.earth as string));
+    });
+
+    it('loads a side arm item, an equipped side arm and a side arm filter unchanged', () => {
+      const save = inBag(gear('sideArm', 'mortal', 'Iron Throwing Darts'));
+      (cult(save).equipment as J).sideArm = gear('sideArm', 'spirit', 'Azure Frost Darts');
+      (save.state.filter as J).slots = ['weapon', 'sideArm'];
+      const st = load(save)?.state;
+      expect(st?.inventory[0]).toEqual(gear('sideArm', 'mortal', 'Iron Throwing Darts'));
+      expect(st?.cultivator.equipment.sideArm).toEqual(
+        gear('sideArm', 'spirit', 'Azure Frost Darts'),
+      );
+      expect(st?.filter.slots).toEqual(['weapon', 'sideArm']);
+      expect(st && decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+    });
+
+    it('renames them in a save from before Boots (v3)', () => {
+      const save = withPants(inBag(gear('charm', 'heaven', 'Laminated Seal')));
+      save.v = 3;
+      expect(load(save)?.state.inventory[0]?.name).toBe('Golden Heaven Seal');
+    });
+
+    it.each([
+      ['an office name on another type', 'head', 'mortal', 'Stapler Dagger'],
+      ['a new name on another type', 'charm', 'mortal', 'Iron Throwing Darts'],
+      ['a new name from another grade', 'sideArm', 'mortal', 'Phoenix Flame Darts'],
+      ['a new name from a lower grade', 'accessory', 'immortal', 'Bone Bead Pendant'],
+      ['a Cyrillic look-alike', 'sideArm', 'mortal', 'St\u0430pler Dagger'],
+      ['a Latin look-alike (I for l)', 'accessory', 'mortal', 'Ianyard Pendant'],
+      ['a zero-width space', 'charm', 'mortal', 'Sticky-Note\u200bTalisman'],
+      ['a zero-width joiner at the end', 'head', 'mortal', 'Thinking Cap\u200d'],
+      ['a bidi override', 'attachment', 'mortal', 'Coffee \u202eGourd'],
+      ['a bidi isolate', 'head', 'mortal', '\u2066Thinking Cap\u2069'],
+      ['other casing', 'attachment', 'mortal', 'coffee gourd'],
+      ['padding', 'charm', 'mortal', ' Laminated Seal'],
+      ['an oversized name', 'head', 'mortal', 'Thinking Cap'.repeat(12_000)],
+      ['markup', 'accessory', 'mortal', '<img src=x onerror=alert(1)>'],
+      ['a prototype key', 'sideArm', 'mortal', '__proto__'],
+      ['an object key', 'charm', 'mortal', 'constructor'],
+      ['a method name', 'head', 'mortal', 'hasOwnProperty'],
+      ['a grade key', 'attachment', 'mortal', 'mortal'],
+      ['the old label as a name', 'sideArm', 'mortal', 'Side arm'],
+    ])('rejects %s', (_, slot, grade, name) => {
+      expect(load(inBag(gear(slot, grade, name)))).toBeNull();
+    });
+
+    it.each([
+      ['a label as the type', 'Hidden Weapon'],
+      ['the old label as the type', 'Side arm'],
+      ['a look-alike type', 'sideArm\u200b'],
+    ])('rejects %s', (_, slot) => {
+      expect(load(inBag(gear(slot, 'mortal', 'Stapler Dagger')))).toBeNull();
     });
   });
 
