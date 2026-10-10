@@ -64,3 +64,16 @@ describe('page.css colours', () => {
     );
   }
 });
+
+describe('title stamp', () => {
+  const rule = /^\.stamp\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
+
+  it('is drawn in the Immortal grade colour, which passes contrast above', () => {
+    expect(rule).toMatch(/\bcolor:\s*var\(--grade-immortal\)/);
+    expect(rule).toMatch(/border:[^;]*var\(--grade-immortal\)/);
+  });
+
+  it('sets its capitals in CSS, so screen readers read words, not letters', () => {
+    expect(rule).toMatch(/text-transform:\s*uppercase/);
+  });
+});

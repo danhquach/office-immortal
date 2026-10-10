@@ -214,6 +214,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   (`Q3_Cultivation_Report`), a formula bar, faint cell lines behind the
   panels, KPI tiles, panels with header bars, tabs and a status bar. The
   combat strip sits in it like an embedded chart, with its own header bar.
+- **Title stamp:** the game's name sits in the title bar as a red rubber
+  stamp (like "CONFIDENTIAL"): capitals, double border, tilted, in the
+  Immortal grade colour. It is the one loud mark on the dull shell.
 - **Generic, never a copy.** No real software names, logos, icons, ribbon
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.

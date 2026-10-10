@@ -144,6 +144,21 @@ select {
 .titlebar button {
   padding: 0.1rem 0.6rem;
 }
+/* The game's name, stamped on the report like "CONFIDENTIAL". */
+.stamp {
+  margin: 0 0.4rem;
+  padding: 0 0.5rem;
+  border: 3px double var(--grade-immortal);
+  border-radius: 3px;
+  color: var(--grade-immortal);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: rotate(-3deg);
+}
 /* Formula bar: set dressing, hidden from screen readers. */
 .formula {
   display: flex;
@@ -194,6 +209,10 @@ select {
   display: flex;
   gap: 0.5rem;
   margin: 0 0 0 auto;
+}
+/* The file name's auto margin already pushes the stamp right; the tools sit beside it. */
+.titlebar .stamp + .tools {
+  margin-left: 0;
 }
 .panel {
   background: var(--panel);
