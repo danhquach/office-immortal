@@ -39,6 +39,8 @@ import {
   equippedArray,
   rollDrop,
   slotsFor,
+  soulCap,
+  soulDamage,
   type EquipSlotId,
   type GradeId,
   type Item,
@@ -68,6 +70,8 @@ export interface GameState {
   enemyNextAttackAt: number;
   /** Sim time of a Killing Array's next hit, in seconds; unused without one. */
   arrayNextAt: number;
+  /** Souls the equipped Soul Banner holds; 0 without one (docs/design.md §6). */
+  souls: number;
   /** Items picked up and not equipped. */
   inventory: Item[];
   /** Cells in the bag; Spirit Stones buy more. */
@@ -105,6 +109,7 @@ export function newGame(
     enemies: [],
     enemyNextAttackAt: 0,
     arrayNextAt: 0,
+    souls: 0,
     inventory: [],
     bagSize: INVENTORY_SIZE,
     stones: 0,
@@ -195,8 +200,9 @@ export function canEquip(c: Cultivator, item: Item): boolean {
 /**
  * Equips the bag item at `index` into position `to` (by default its first free
  * position, else its first), returning the new state; `state` is left
- * untouched. Whatever was in that position goes back into the bag. Throws if
- * the cultivator's realm is below the item's (requiredRealm).
+ * untouched. Whatever was in that position goes back into the bag, and a
+ * replaced Hidden Weapon takes its souls with it. Throws if the cultivator's
+ * realm is below the item's (requiredRealm).
  */
 export function equip(state: GameState, index: number, to?: EquipSlotId): GameState {
   const item = Number.isInteger(index) ? state.inventory[index] : undefined;
@@ -212,6 +218,8 @@ export function equip(state: GameState, index: number, to?: EquipSlotId): GameSt
   // The clone's copy of the item, so the new state shares nothing with the old.
   const [mine] = s.inventory.splice(index, 1, ...(old ? [old] : [])) as [Item];
   c.equipment[at] = mine;
+  // A banner's souls leave with it; the new one starts empty.
+  if (mine.slot === 'sideArm') s.souls = 0;
   // Max HP may have dropped with the old item; never sit above it.
   c.hp = Math.min(c.hp, derive(c).maxHp);
   return s;
@@ -260,6 +268,8 @@ function cultivatorAttacks(s: GameState, rng: Rng, offline: boolean): void {
   let damage = d.damage;
   if (path.burstEvery > 0 && c.attackCount % path.burstEvery === 0) damage *= path.burstMultiplier;
   if (chance(rng, d.critChance)) damage *= d.critMultiplier;
+  // A Soul Banner's souls: after crit and burst, so they never crit or burst.
+  damage += soulDamage(s.souls, c.stats.spirit);
   const dealt = Math.min(enemy.hp, mitigate(damage, enemy.defence));
   enemy.hp -= dealt;
   c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
@@ -288,6 +298,7 @@ function defeated(s: GameState, rng: Rng, offline: boolean): void {
   const d = derive(c);
   const enemy = currentEnemy(s);
   s.kills += 1;
+  s.souls = Math.min(soulCap(c.equipment), s.souls + 1);
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
   gainXp(c, Math.round(enemy.xp * xpMultiplier(s.passives)));
   if (enemy.kind === 'tribulation') breakThrough(c);

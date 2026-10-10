@@ -155,17 +155,54 @@ const HEAD_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
 };
 
 /**
- * Hidden weapon names by grade in two families, always listed Darts (throwing
- * darts and flying knives), Binding Rope. The family changes only the name and
- * icon.
+ * Hidden weapon names by grade in three families, always listed Darts (throwing
+ * darts and flying knives), Binding Rope, Soul Banner. A banner also gathers
+ * souls while worn (SOUL_CAPS); the others change only the name and icon.
  */
 const SIDE_ARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Iron Throwing Darts', 'Hempen Binding Cord'],
-  spirit: ['Azure Frost Darts', 'Azure Silk Sash'],
-  earth: ['Jade Viper Darts', 'Jade Dragon-Binding Chain'],
-  heaven: ['Golden Crow Flying Knives', 'Golden Heaven-Wrapping Sash'],
-  immortal: ['Phoenix Flame Darts', 'Phoenix Flame Binding Rope'],
+  mortal: ['Iron Throwing Darts', 'Hempen Binding Cord', 'Hempen Soul Banner'],
+  spirit: ['Azure Frost Darts', 'Azure Silk Sash', 'Azure Soul-Calling Banner'],
+  earth: ['Jade Viper Darts', 'Jade Dragon-Binding Chain', 'Jade Hundred Ghosts Banner'],
+  heaven: [
+    'Golden Crow Flying Knives',
+    'Golden Heaven-Wrapping Sash',
+    'Golden Soul-Gathering Banner',
+  ],
+  immortal: ['Phoenix Flame Darts', 'Phoenix Flame Binding Rope', 'Ten-Thousand Souls Banner'],
 };
+
+/** Every Soul Banner name, one per grade. */
+const BANNER_NAMES: ReadonlySet<string> = new Set(
+  Object.values(SIDE_ARM_NAMES).map((names) => names[2] as string),
+);
+
+/** True for a Soul Banner: a Hidden Weapon that gathers souls while worn. */
+export function isBanner(item: Pick<Item, 'slot' | 'name'>): boolean {
+  return item.slot === 'sideArm' && BANNER_NAMES.has(item.name);
+}
+
+/** The most souls a Soul Banner holds, by grade (docs/design.md §6). */
+export const SOUL_CAPS: Readonly<Record<GradeId, number>> = {
+  mortal: 10,
+  spirit: 15,
+  earth: 20,
+  heaven: 25,
+  immortal: 30,
+};
+
+/** Extra damage each soul adds to every attack, as a share of Spirit. */
+export const SOUL_DAMAGE = 0.01;
+
+/** The soul cap of the equipped Hidden Weapon if it is a Soul Banner; 0 otherwise. */
+export function soulCap(equipment: Equipment): number {
+  const item = equipment.sideArm;
+  return item && isBanner(item) && Object.hasOwn(SOUL_CAPS, item.grade) ? SOUL_CAPS[item.grade] : 0;
+}
+
+/** The extra damage `souls` add to an attack for a cultivator with `spirit`. */
+export function soulDamage(souls: number, spirit: number): number {
+  return souls * SOUL_DAMAGE * spirit;
+}
 
 /**
  * Attachment names by grade in two families, always listed Gourd, Formation
@@ -278,8 +315,8 @@ export const PATH_FAVOURS: Readonly<Record<PathId, readonly AffixId[]>> = {
 const FAMILY_PATHS: Partial<Record<SlotId, readonly PathId[]>> = {
   // Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal, Vajra Pestle.
   weapon: ['sword', 'talisman', 'sword', 'talisman', 'body', 'body'],
-  // Darts, Binding Rope.
-  sideArm: ['sword', 'body'],
+  // Darts, Binding Rope, Soul Banner.
+  sideArm: ['sword', 'body', 'talisman'],
   // Pendant, Bell, Mirror.
   accessory: ['body', 'talisman', 'sword'],
 };

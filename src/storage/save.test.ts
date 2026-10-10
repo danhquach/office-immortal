@@ -63,8 +63,15 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 
+/** The save as versions before 6 wrote it: no souls. */
+function beforeBanners(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.souls;
+  return save;
+}
+
 /** The save as versions before 5 wrote it: no Killing Array timer. */
 function beforeDiscs(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  beforeBanners(save);
   delete save.state.arrayNextAt;
   return save;
 }
@@ -1139,6 +1146,134 @@ describe('rejects', () => {
       save.v = 4;
       expect(load(save)).toBeNull();
       expect(load(beforeDiscs(save))?.state.arrayNextAt).toBe(STATE.time + ARRAY_TICK);
+    });
+  });
+
+  describe('Soul Banners', () => {
+    const banner = (name = 'Hempen Soul Banner', grade = 'mortal'): Item => ({
+      slot: 'sideArm',
+      name,
+      level: 1,
+      grade: grade as Item['grade'],
+      baseRoll: 0.5,
+      affixes: [],
+    });
+    /** The played save with a Mortal banner (cap 10) worn and `souls` held. */
+    function wearing(souls: unknown, item: Item | null = banner()): ReturnType<typeof raw> {
+      const s = structuredClone(STATE);
+      if (item) s.cultivator.equipment.sideArm = item;
+      else delete s.cultivator.equipment.sideArm;
+      const save = JSON.parse(encodeSave(s, SAVED_AT)) as ReturnType<typeof raw>;
+      save.state.souls = souls;
+      return save;
+    }
+    const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+
+    it.each([0, 7, 10])('round-trips a worn banner holding %i souls', (souls) => {
+      const st = load(wearing(souls))?.state;
+      expect(st?.souls).toBe(souls);
+      expect(st?.cultivator.equipment.sideArm).toEqual(banner());
+      expect(st && decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+    });
+
+    it.each(['Hempen Soul Banner', 'Ten-Thousand Souls Banner'])('loads %s in the bag', (name) => {
+      const save = raw();
+      const grade = name.startsWith('Hempen') ? 'mortal' : 'immortal';
+      (save.state.inventory as J[])[0] = {
+        ...banner(name, grade),
+        ...(grade === 'immortal'
+          ? {
+              affixes: ['critChance', 'critDamage', 'attackSpeed', 'lifesteal', 'maxHp'].map(
+                (id) => ({ id, roll: 0 }),
+              ),
+              unique: 'synergy',
+            }
+          : {}),
+      };
+      expect(load(save)?.state.inventory[0]).toMatchObject({ slot: 'sideArm', name });
+    });
+
+    it.each([
+      ['negative souls', -1],
+      ['souls over the cap', 11],
+      ['fractional souls', 2.5],
+      ['souls as text', '5'],
+      ['souls as null', null],
+      ['souls as an object', { n: 5 }],
+      ['souls as a boolean', true],
+      ['souls as an array', [5]],
+    ])('rejects %s', (_, souls) => {
+      expect(load(wearing(souls))).toBeNull();
+    });
+
+    // JSON has no NaN or Infinity (stringify writes null), so they go in as raw text;
+    // 1e999 parses to Infinity.
+    it.each(['1e999', '-1e999', 'NaN', 'Infinity'])('rejects souls written as %s', (text) => {
+      const json = JSON.stringify(wearing(0)).replace('"souls":0', `"souls":${text}`);
+      expect(json).toContain(`"souls":${text}`);
+      expect(decodeSave(json)).toBeNull();
+    });
+
+    it('rejects souls over the cap of a higher grade banner', () => {
+      const immortal = {
+        ...banner('Ten-Thousand Souls Banner', 'immortal'),
+        affixes: (['critChance', 'critDamage', 'attackSpeed', 'lifesteal', 'maxHp'] as const).map(
+          (id) => ({ id, roll: 0 }),
+        ),
+        unique: 'synergy' as const,
+      };
+      expect(load(wearing(30, immortal))?.state.souls).toBe(30);
+      expect(load(wearing(31, immortal))).toBeNull();
+    });
+
+    it.each([
+      ['a zero-width space', 'Hempen Soul\u200b Banner'],
+      ['a bidi override', '\u202eHempen Soul Banner'],
+      ['a Cyrillic look-alike', 'Hempen Soul B\u0430nner'],
+    ])('rejects a banner name with %s', (_, name) => {
+      expect(load(wearing(0, banner(name)))).toBeNull();
+    });
+
+    it('rejects souls with no banner worn', () => {
+      expect(load(wearing(1, null))).toBeNull();
+      expect(load(wearing(0, null))?.state.souls).toBe(0);
+    });
+
+    it('rejects souls on Darts or a Binding Rope', () => {
+      for (const name of ['Iron Throwing Darts', 'Hempen Binding Cord']) {
+        expect(load(wearing(1, banner(name))), name).toBeNull();
+        expect(load(wearing(0, banner(name))), name).not.toBeNull();
+      }
+    });
+
+    it('rejects a banner name on another type or grade', () => {
+      const save = raw();
+      (save.state.inventory as J[])[0] = { ...banner(), slot: 'charm' };
+      expect(load(save)).toBeNull();
+      (save.state.inventory as J[])[0] = { ...banner(), name: 'Jade Hundred Ghosts Banner' };
+      expect(load(save)).toBeNull();
+    });
+
+    it('rejects a missing souls field in a v6 save', () => {
+      const save = raw();
+      delete save.state.souls;
+      expect(load(save)).toBeNull();
+    });
+
+    it('rejects a pollution key beside the souls', () => {
+      const text = JSON.stringify(wearing(3)).replace(
+        '"souls":',
+        '"__proto__":{"polluted":true},"souls":',
+      );
+      expect(decodeSave(text)).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
+    });
+
+    it('loads a v5 save with no souls, and rejects one that has them', () => {
+      const save = raw();
+      save.v = 5;
+      expect(load(save)).toBeNull();
+      expect(load(beforeBanners(save))?.state).toEqual({ ...STATE, souls: 0 });
     });
   });
 

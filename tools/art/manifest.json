@@ -497,14 +497,19 @@
       "sources": [
         "items/sideArm-mortal.jpg",
         "items/sideArm-rope-mortal.jpg",
+        "items/sideArm-banner-mortal.jpg",
         "items/sideArm-spirit.jpg",
         "items/sideArm-rope-spirit.jpg",
+        "items/sideArm-banner-spirit.jpg",
         "items/sideArm-earth.jpg",
         "items/sideArm-rope-earth.jpg",
+        "items/sideArm-banner-earth.jpg",
         "items/sideArm-heaven.jpg",
         "items/sideArm-rope-heaven.jpg",
+        "items/sideArm-banner-heaven.jpg",
         "items/sideArm-immortal.jpg",
-        "items/sideArm-rope-immortal.jpg"
+        "items/sideArm-rope-immortal.jpg",
+        "items/sideArm-banner-immortal.jpg"
       ]
     },
     {

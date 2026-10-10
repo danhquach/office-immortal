@@ -21,12 +21,15 @@ import {
   baseValue,
   CHARM_LINES,
   charmLine,
+  isBanner,
   itemAffixValue,
   itemPath,
   GRADES,
   OFFLINE_DROP_MULTIPLIER,
   quality,
   SLOTS,
+  SOUL_CAPS,
+  soulDamage,
   UNIQUES,
   type BonusStat,
   type EquipSlotId,
@@ -147,6 +150,18 @@ export function charmLineName(item: Item): string | null {
 export function favouredBy(item: Item, path: PathId): { text: string; match: boolean } | null {
   const lean = itemPath(item);
   return lean ? { text: `Favoured by: ${PATHS[lean].name}`, match: lean === path } : null;
+}
+
+/**
+ * A Soul Banner's souls for its details, e.g. "Souls: 7 / 20 (+6.7 damage per
+ * attack)": the equipped banner's from `state`, none for one in the bag. Null
+ * for any other item.
+ */
+export function soulsLine(item: Item, state: GameState): string | null {
+  if (!isBanner(item) || !Object.hasOwn(SOUL_CAPS, item.grade)) return null;
+  const souls = state.cultivator.equipment.sideArm === item ? state.souls : 0;
+  const damage = soulDamage(souls, state.cultivator.stats.spirit);
+  return `Souls: ${souls} / ${SOUL_CAPS[item.grade]} (+${num(damage, 1)} damage per attack)`;
 }
 
 /**

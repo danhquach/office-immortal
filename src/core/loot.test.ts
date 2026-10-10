@@ -21,6 +21,7 @@ import {
   favouredAffixes,
   itemPath,
   PATH_FAVOURS,
+  isBanner,
   isDisc,
   GRADES,
   namesFor,
@@ -31,6 +32,10 @@ import {
   rollItem,
   SLOTS,
   slotsFor,
+  SOUL_CAPS,
+  SOUL_DAMAGE,
+  soulCap,
+  soulDamage,
   UNIQUES,
   type AffixId,
   type CharmLineId,
@@ -215,7 +220,7 @@ describe('rollItem', () => {
       chest: 1,
       boots: 1,
       attachment: 2,
-      sideArm: 2,
+      sideArm: 3,
       accessory: 3,
       charm: 4,
     } as const;
@@ -247,6 +252,7 @@ describe('rollItem', () => {
     const sideArm = [
       / (Darts|Flying Knives)$/,
       /(Binding Cord|Silk Sash|Binding Chain|Wrapping Sash|Binding Rope)$/,
+      / Banner$/,
     ];
     for (const g of GRADE_IDS) {
       const a = namesFor('accessory', g);
@@ -268,14 +274,19 @@ describe('rollItem', () => {
       sideArm: [
         'Iron Throwing Darts',
         'Hempen Binding Cord',
+        'Hempen Soul Banner',
         'Azure Frost Darts',
         'Azure Silk Sash',
+        'Azure Soul-Calling Banner',
         'Jade Viper Darts',
         'Jade Dragon-Binding Chain',
+        'Jade Hundred Ghosts Banner',
         'Golden Crow Flying Knives',
         'Golden Heaven-Wrapping Sash',
+        'Golden Soul-Gathering Banner',
         'Phoenix Flame Darts',
         'Phoenix Flame Binding Rope',
+        'Ten-Thousand Souls Banner',
       ],
       attachment: [
         'Clay Wine Gourd',
@@ -657,6 +668,58 @@ describe('Formation Discs', () => {
   });
 });
 
+describe('Soul Banners', () => {
+  const hidden = MANY.filter((i) => i.slot === 'sideArm');
+  const banners = hidden.filter(isBanner);
+  const banner = (grade: GradeId): Item => ({
+    slot: 'sideArm',
+    name: namesFor('sideArm', grade)[2] as string,
+    level: 10,
+    grade,
+    baseRoll: 0.5,
+    affixes: [],
+  });
+
+  it('drops a banner for about a third of all Hidden Weapons', () => {
+    expect(banners.length / hidden.length).toBeGreaterThan(0.3);
+    expect(banners.length / hidden.length).toBeLessThan(0.37);
+  });
+
+  it('knows a banner only by a Hidden Weapon banner name', () => {
+    for (const g of GRADE_IDS) {
+      const [darts, rope, flag] = namesFor('sideArm', g) as string[];
+      expect(isBanner({ slot: 'sideArm', name: flag as string }), g).toBe(true);
+      expect(isBanner({ slot: 'sideArm', name: darts as string }), g).toBe(false);
+      expect(isBanner({ slot: 'sideArm', name: rope as string }), g).toBe(false);
+      expect(isBanner({ slot: 'charm', name: flag as string }), g).toBe(false);
+    }
+    expect(isBanner({ slot: 'sideArm', name: 'Hempen Soul Banner ' })).toBe(false);
+  });
+
+  it('matches the docs/design.md soul caps and damage per soul', () => {
+    expect(SOUL_CAPS).toEqual({ mortal: 10, spirit: 15, earth: 20, heaven: 25, immortal: 30 });
+    expect(SOUL_DAMAGE).toBe(0.01);
+    // A full Immortal banner adds 30% of Spirit to every attack.
+    expect(soulDamage(30, 100)).toBeCloseTo(30, 9);
+    expect(soulDamage(0, 100)).toBe(0);
+  });
+
+  it('gives the cap of the worn banner, and 0 for anything else', () => {
+    for (const g of GRADE_IDS) expect(soulCap({ sideArm: banner(g) }), g).toBe(SOUL_CAPS[g]);
+    const darts = { ...banner('heaven'), name: namesFor('sideArm', 'heaven')[0] as string };
+    expect(soulCap({ sideArm: darts })).toBe(0);
+    expect(soulCap({})).toBe(0);
+  });
+
+  it('rolls the same base damage as any Hidden Weapon', () => {
+    const darts = { ...banner('earth'), name: namesFor('sideArm', 'earth')[0] as string };
+    expect(equipmentBonuses({ sideArm: banner('earth') })).toEqual(
+      equipmentBonuses({ sideArm: darts }),
+    );
+    expect(baseValue(banner('earth'))).toBeGreaterThan(0);
+  });
+});
+
 describe('Charm lines', () => {
   const LINE_IDS = Object.keys(CHARM_LINES) as CharmLineId[];
   const UTILITY: AffixId[] = ['qiRegen', 'stoneFind', 'treasureFind'];
@@ -853,7 +916,7 @@ describe('Path lean', () => {
   // Each family by type, in names order, and the Path it leans to (docs/design.md §6).
   const LEANS: Partial<Record<SlotId, readonly (PathId | null)[]>> = {
     weapon: ['sword', 'talisman', 'sword', 'talisman', 'body', 'body'],
-    sideArm: ['sword', 'body'],
+    sideArm: ['sword', 'body', 'talisman'],
     accessory: ['body', 'talisman', 'sword'],
   };
   const NEUTRAL: SlotId[] = ['head', 'chest', 'boots', 'attachment', 'charm'];

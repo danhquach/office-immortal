@@ -98,6 +98,7 @@ import {
   overtimeLines,
   passiveRow,
   PATH_BLURBS,
+  soulsLine,
   enemySprite,
   ICON_COLUMNS,
   ICON_ROWS,
@@ -499,6 +500,8 @@ function play(
   let gearVersion = 0;
   let drawnGear = '';
   let drawnDetails = '';
+  /** The selected Soul Banner's souls line; refilled every draw, as kills add souls. */
+  let soulsText: HTMLElement | null = null;
   /** A press on a bag item; it becomes a drag (with a ghost) once the mouse moves. */
   let drag: { index: number; x: number; y: number; ghost: HTMLElement | null } | null = null;
 
@@ -1218,6 +1221,8 @@ function play(
       drawnDetails = detailsKey;
       drawDetails();
     }
+    const item = selectedItem();
+    if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
     const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}`;
     if (key === drawnGear) return;
     drawnGear = key;
@@ -1242,6 +1247,7 @@ function play(
 
   function drawDetails(): void {
     const item = selectedItem();
+    soulsText = null;
     if (!item || !selected) {
       detailBody.replaceChildren(el('p', 'muted', 'Select an item to see its details.'));
       return;
@@ -1263,6 +1269,8 @@ function play(
     if (line) name.append(el('div', 'muted', line));
     const lean = favouredBy(item, state.cultivator.path);
     if (lean) name.append(el('div', lean.match ? 'up' : 'muted', lean.text));
+    const souls = soulsLine(item, state);
+    if (souls !== null) name.append((soulsText = el('div', 'muted', souls)));
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {

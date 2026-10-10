@@ -46,6 +46,7 @@ import {
   namesFor,
   renamed,
   SLOTS,
+  soulCap,
   UNIQUES,
   type Affix,
   type AffixId,
@@ -62,13 +63,13 @@ import { ARRAY_TICK, ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
- * where Boots are now; v4 came before Formation Discs.
+ * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -236,6 +237,8 @@ function readState(v: unknown, version: number): GameState {
   const before4 = version < 4;
   // Before v5 there were no arrays, so no Killing Array timer.
   const before5 = version < 5;
+  // Before v6 there were no Soul Banners, so no souls.
+  const before6 = version < 6;
   const slot: SlotName = before4 ? fromPants : (id) => id;
   const o = obj(v, [
     'time',
@@ -246,6 +249,7 @@ function readState(v: unknown, version: number): GameState {
     'enemies',
     'enemyNextAttackAt',
     ...(before5 ? [] : ['arrayNextAt']),
+    ...(before6 ? [] : ['souls']),
     'inventory',
     'kills',
     'deaths',
@@ -284,6 +288,8 @@ function readState(v: unknown, version: number): GameState {
     arrayNextAt: before5
       ? time + ARRAY_TICK
       : num(o.arrayNextAt, 0, time + ENEMY_ARRIVAL + ARRAY_TICK),
+    // Only an equipped banner holds souls, and never more than its cap.
+    souls: before6 ? 0 : int(o.souls, 0, soulCap(cultivator.equipment)),
     inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, slot)),
     bagSize,
     stones: v1 ? 0 : int(o.stones, 0, COUNT),
