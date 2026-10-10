@@ -86,6 +86,8 @@ import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
   arraySetUp,
+  BAG_PAGE,
+  bagPage,
   cellLabel,
   charmLineName,
   favouredBy,
@@ -96,6 +98,7 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
+  pageOf,
   passiveRow,
   PATH_BLURBS,
   soulsLine,
@@ -494,8 +497,10 @@ function play(
   const { signal } = scope;
   let state = initial;
   let selected: Selection = null;
-  /** The bag cell that holds the grid's one tab stop. */
+  /** The bag cell that holds the grid's one tab stop; always on the shown page. */
   let cursor = 0;
+  /** The inventory page shown; a run always starts on the first. */
+  let page = 0;
   /** Bumped by every equip, so gear redraws only when it changes. */
   let gearVersion = 0;
   let drawnGear = '';
@@ -792,7 +797,9 @@ function play(
   grid.setAttribute('role', 'group');
   grid.setAttribute('aria-label', 'Inventory slots. Arrow keys move, Enter shows details.');
   const bagCells: HTMLButtonElement[] = [];
-  /** Adds cells until the grid matches the bag; a bag upgrade adds a row. */
+  /** Invisible cells that pad a short last page, so every page is the same size. */
+  const fillers: HTMLElement[] = [];
+  /** Adds cells until the grid matches the bag; bought slots land on later pages. */
   function growBag(): void {
     for (let i = bagCells.length; i < state.bagSize; i++) {
       const b = cell();
@@ -807,14 +814,55 @@ function play(
       });
       b.addEventListener('pointerdown', (e) => startPress(e, i));
       bagCells.push(b);
-      grid.append(b);
+      grid.insertBefore(b, fillers[0] ?? null);
     }
   }
+  /** Shows only the cells on the current page, padded out to a full page. */
+  function drawPage(): void {
+    const { fillers: pad, pages } = bagPage(state.bagSize, page);
+    bagCells.forEach((b, i) => {
+      b.hidden = pageOf(i) !== page;
+    });
+    while (fillers.length < pad) {
+      const f = el('span', 'cell filler');
+      f.setAttribute('aria-hidden', 'true');
+      fillers.push(f);
+      grid.append(f);
+    }
+    fillers.forEach((f, i) => {
+      f.hidden = i >= pad;
+    });
+    pager.classList.toggle('single', pages === 1);
+    setText(pageText, `Page ${page + 1} of ${pages}`);
+    setButton(prevPage, 'Previous', page === 0);
+    setButton(nextPage, 'Next', page === pages - 1);
+  }
+  /** Turns to page `to`; a bag selection left on another page is cleared. */
+  function showPage(to: number): void {
+    page = to;
+    if (selected && 'bag' in selected && pageOf(selected.bag) !== page) selected = null;
+    setCursor(page * BAG_PAGE);
+    draw(null);
+  }
+  // Space for the pager is kept even with one page, so the first bought slots
+  // never make the panel taller.
+  const pager = el('div', 'pager');
+  pager.setAttribute('role', 'group');
+  pager.setAttribute('aria-label', 'Inventory pages');
+  const prevPage = button('Previous', '', () => showPage(page - 1));
+  // Announced on a turn, as the focused button's name does not change.
+  const pageText = el('span', 'muted');
+  pageText.setAttribute('aria-live', 'polite');
+  const nextPage = button('Next', '', () => showPage(page + 1));
+  pager.append(prevPage, pageText, nextPage);
   grid.addEventListener('keydown', (e) => {
     // The column count is set by the stylesheet (fewer on a narrow screen).
     const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-    const to = gridMove(cursor, e.key, state.bagSize, cols);
-    if (to === null) return;
+    // Arrows stay on the shown page; the pager turns it.
+    const { start, cells } = bagPage(state.bagSize, page);
+    const move = gridMove(cursor - start, e.key, cells, cols);
+    if (move === null) return;
+    const to = start + move;
     e.preventDefault();
     setCursor(to);
     bagCells[to]?.focus();
@@ -871,7 +919,7 @@ function play(
   const bagTools = el('div', 'tools');
   bagTools.append(bulkRow, confirmBox, bagBtn);
   const bagBody = el('div');
-  bagBody.append(grid, bagTools);
+  bagBody.append(grid, pager, bagTools);
 
   // Auto filter: a minimum grade, the item types kept, and what happens to the rest.
   const minGrade = choice(
@@ -1223,11 +1271,12 @@ function play(
     }
     const item = selectedItem();
     if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
-    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}`;
+    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}`;
     if (key === drawnGear) return;
     drawnGear = key;
 
     growBag();
+    drawPage();
     inventory.heading.textContent = `Inventory (${state.inventory.length} / ${state.bagSize})`;
     bagCells.forEach((b, i) => {
       fillCell(b, state.inventory[i], `Empty slot ${i + 1}`);

@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { newCultivator, type Cultivator } from '../core/cultivator.ts';
+import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
 import {
   arraySetUp,
+  BAG_PAGE,
+  bagPage,
+  bagPages,
   compareToEquipped,
   equipBlock,
   cellLabel,
@@ -17,6 +21,7 @@ import {
   charmLineName,
   favouredBy,
   overtimeLines,
+  pageOf,
   passiveRow,
   realmLabel,
   retireLabel,
@@ -599,6 +604,65 @@ describe('freshDrops', () => {
 describe('cellLabel', () => {
   it('names the item with its grade, slot, level and quality in words', () => {
     expect(cellLabel(stapler)).toBe('Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · 66%');
+  });
+});
+
+describe('inventory pages', () => {
+  it('holds the starting bag on one page', () => {
+    expect(BAG_PAGE).toBe(INVENTORY_SIZE);
+    expect(bagPages(INVENTORY_SIZE)).toBe(1);
+  });
+
+  it('puts bought slots on a second page, up to the largest bag', () => {
+    expect(bagPages(INVENTORY_SIZE + BAG_ROW)).toBe(2);
+    expect(bagPages(MAX_BAG_SIZE)).toBe(Math.ceil(MAX_BAG_SIZE / BAG_PAGE));
+    expect(bagPages(MAX_BAG_SIZE)).toBe(2);
+  });
+
+  it('never has fewer than one page', () => {
+    expect(bagPages(0)).toBe(1);
+  });
+
+  it('pads a short last page with fillers to a full page', () => {
+    expect(bagPage(INVENTORY_SIZE + BAG_ROW, 1)).toEqual({
+      start: BAG_PAGE,
+      cells: BAG_ROW,
+      fillers: BAG_PAGE - BAG_ROW,
+      pages: 2,
+    });
+  });
+
+  it('fills every full page with real cells only', () => {
+    expect(bagPage(INVENTORY_SIZE, 0)).toEqual({
+      start: 0,
+      cells: BAG_PAGE,
+      fillers: 0,
+      pages: 1,
+    });
+    expect(bagPage(MAX_BAG_SIZE, 0).fillers).toBe(0);
+    expect(bagPage(MAX_BAG_SIZE, 1)).toEqual({
+      start: BAG_PAGE,
+      cells: MAX_BAG_SIZE - BAG_PAGE,
+      fillers: 2 * BAG_PAGE - MAX_BAG_SIZE,
+      pages: 2,
+    });
+  });
+
+  it('shows the same footprint on every page whatever the bag size', () => {
+    for (let size = INVENTORY_SIZE; size <= MAX_BAG_SIZE; size += BAG_ROW) {
+      for (let page = 0; page < bagPages(size); page++) {
+        const p = bagPage(size, page);
+        expect(p.cells + p.fillers).toBe(BAG_PAGE);
+        expect(p.cells).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('finds the page of a cell', () => {
+    expect(pageOf(0)).toBe(0);
+    expect(pageOf(BAG_PAGE - 1)).toBe(0);
+    expect(pageOf(BAG_PAGE)).toBe(1);
+    expect(pageOf(MAX_BAG_SIZE - 1)).toBe(1);
   });
 });
 

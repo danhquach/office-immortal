@@ -1037,6 +1037,19 @@ button.primary {
 .field select {
   color: var(--ink);
 }
+.cell.filler {
+  visibility: hidden;
+}
+.pager {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+/* One page: the pager keeps its space so buying slots never grows the panel. */
+.pager.single {
+  visibility: hidden;
+}
 .tools {
   margin-top: 0.5rem;
   max-width: 24rem;

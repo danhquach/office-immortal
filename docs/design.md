@@ -321,7 +321,8 @@ Every drop is generated from a seeded roll.
 - **Path change** puts every stat point into the new Path's primary stat.
 - **Stat reset** takes back every point above the base to spend by hand;
   level-ups keep going to the primary stat.
-- **Inventory space** adds a row of 8 cells, each row dearer, up to 80.
+- **Inventory space** adds a row of 8 cells, each row dearer, up to 80 (on a
+  second inventory page).
 
 ## 9. Prestige: Early Retirement
 
@@ -407,6 +408,12 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   the log is a "Cultivation Log" panel.
 - **Inventory is a grid**, as loot games do it: a fixed grid of bag cells
   (empty ones shown), each item cell marked by grade colour and grade initial.
+  A page holds the starting 40 cells; bought cells go on page 2, reached with
+  the Previous / Next pager under the grid (hidden, space kept, while the bag
+  has one page), so buying slots never grows the panel. A short last page is
+  padded to full size. Arrow keys stay on the shown page; turning the page
+  clears a bag selection left on the other one. A new run (after Early
+  Retirement) opens on page 1.
   Selecting a cell shows a details panel: rolls, quality, and gains / losses
   against the equipped item. Equip by dragging the item onto the character
   panel (onto one of a pair to choose it; anywhere else picks its default
