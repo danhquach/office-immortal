@@ -242,7 +242,7 @@ export function sellBelowLabel(p: {
 export const ICON_COLUMNS: readonly SlotId[] = [
   'head',
   'chest',
-  'pants',
+  'boots',
   'attachment',
   'weapon',
   'sideArm',

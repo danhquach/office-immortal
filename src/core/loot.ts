@@ -9,12 +9,12 @@ import { chance, int, pick, type Rng } from './rng.ts';
 
 /** An item's type; it decides which equipment positions take the item. */
 export type SlotId =
-  'head' | 'chest' | 'pants' | 'attachment' | 'weapon' | 'sideArm' | 'accessory' | 'charm';
+  'head' | 'chest' | 'boots' | 'attachment' | 'weapon' | 'sideArm' | 'accessory' | 'charm';
 /** A position on the cultivator. Accessories and charms have two each. */
 export type EquipSlotId =
   | 'head'
   | 'chest'
-  | 'pants'
+  | 'boots'
   | 'attachment'
   | 'weapon'
   | 'sideArm'
@@ -83,6 +83,24 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Vermilion Bird Blade', 'Heart Flame Jian', 'Nine Suns Sabre'],
 };
 
+/** Robe names by grade: from a novice's hemp to an immortal's phoenix silk. */
+const CHEST_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Hempen Novice Robe'],
+  spirit: ['Azure Disciple Robe'],
+  earth: ['Jade Crane Robe'],
+  heaven: ['Golden Elder Robe'],
+  immortal: ['Phoenix Flame Robe'],
+};
+
+/** Boot names by grade, matching the robes. */
+const BOOTS_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Hempen Cloth Boots'],
+  spirit: ['Azure Cloud Boots'],
+  earth: ['Jade Step Boots'],
+  heaven: ['Golden Cloud Boots'],
+  immortal: ['Phoenix Flame Boots'],
+};
+
 /**
  * Item types. `names` lists every name the type can have, in icon-atlas row
  * order; a type with `byGrade` rolls its name from the item's grade instead.
@@ -106,12 +124,14 @@ export const SLOTS: Readonly<
   chest: {
     name: 'Chest',
     base: { stat: 'defence', scale: 'flat', lo: 0.4, hi: 0.7 },
-    names: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
+    names: Object.values(CHEST_NAMES).flat(),
+    byGrade: CHEST_NAMES,
   },
-  pants: {
-    name: 'Pants',
+  boots: {
+    name: 'Boots',
     base: { stat: 'maxHp', scale: 'flat', lo: 2, hi: 4 },
-    names: ['Slacks of Stillness', 'Pleated Dao Trousers', 'Khaki Leggings'],
+    names: Object.values(BOOTS_NAMES).flat(),
+    byGrade: BOOTS_NAMES,
   },
   attachment: {
     name: 'Attachment',
@@ -149,6 +169,9 @@ export function namesFor(slot: SlotId, grade: GradeId): readonly string[] {
 
 /** Names earlier versions rolled, per type; a loaded save renames them. */
 const RETIRED_NAMES: Partial<Record<SlotId, readonly string[]>> = {
+  chest: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
+  // Boots replaced Pants; a save's pants arrive here as boots.
+  boots: ['Slacks of Stillness', 'Pleated Dao Trousers', 'Khaki Leggings'],
   weapon: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
 };
 
@@ -161,7 +184,7 @@ export function renamed(slot: SlotId, grade: GradeId, name: unknown): unknown {
 export const EQUIP_SLOTS: Readonly<Record<EquipSlotId, { name: string; takes: SlotId }>> = {
   head: { name: 'Head', takes: 'head' },
   chest: { name: 'Chest', takes: 'chest' },
-  pants: { name: 'Pants', takes: 'pants' },
+  boots: { name: 'Boots', takes: 'boots' },
   attachment: { name: 'Attachment', takes: 'attachment' },
   weapon: { name: 'Weapon', takes: 'weapon' },
   sideArm: { name: 'Side arm', takes: 'sideArm' },

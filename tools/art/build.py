@@ -28,10 +28,14 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               size), recolor, aura (glow colour), plus any sprite knob to override.
   background  id*, height*, seed, prompt, dim (brightness and saturation, default
               0.8), extra, trim_top (source rows dropped), blend (px of seam fade).
-  icon        id*, then either family* and materials* (one recolour of the
-              art-src/icon-<id>.jpg generation per item name) or files* (one
+  icon        id*, then one of: family* and materials* (one recolour of the
+              art-src/icon-<id>.jpg generation per item name), files* (one
               ready-made icon_size PNG under art-src/ per item name, used as
-              drawn), plus seed, prompt, source (provenance only).
+              drawn) or sources* (one generation under art-src/ per item name,
+              drawn smooth at full cell size; pair: each is one boot, drawn as
+              a matching pair), plus seed, prompt, source (provenance only).
+              Atlas cells are icon_size x icon_scale px; pixel icons are
+              scaled up whole, so they look as drawn.
 """
 
 import json
@@ -457,21 +461,63 @@ def icon(entry: dict, n: int) -> Image.Image:
     return outline(canvas)
 
 
+def pair_of(boot: Image.Image) -> Image.Image:
+    """A matching pair from one boot: a shaded copy behind, up and to the toe side."""
+    w, h = boot.size
+    dx, dy = int(w * 0.30), int(h * 0.07)
+    back = ImageEnhance.Brightness(boot).enhance(0.8)
+    back.putalpha(boot.getchannel("A"))
+    out = Image.new("RGBA", (w + dx, h + dy), (0, 0, 0, 0))
+    out.alpha_composite(back, (dx, 0))
+    out.alpha_composite(boot, (0, dy))
+    return out
+
+
+def smooth_icon(path: Path, n: int, pair: bool) -> Image.Image:
+    """A generation cut out and fitted into n x n, smoothly: no palette, no pixel grid."""
+    cut = cut_out(Image.open(path))
+    cut = cut.crop(cut.getbbox())
+    if pair:
+        cut = pair_of(cut)
+    k = min((n - 2) / cut.width, (n - 2) / cut.height)
+    small = cut.resize((max(1, round(cut.width * k)), max(1, round(cut.height * k))), Image.LANCZOS)
+    canvas = Image.new("RGBA", (n, n), (0, 0, 0, 0))
+    canvas.paste(small, ((n - small.width) // 2, (n - small.height) // 2))
+    return canvas
+
+
+def icon_rows(e: dict) -> list:
+    return e.get("files") or e.get("sources") or e.get("materials") or []
+
+
 def icon_atlas() -> Image.Image:
-    """Every item type (columns, manifest order) in each of its materials (rows,
-    one per item name, in the order loot.ts lists the names)."""
+    """Every item type (columns, manifest order) in each of its names (rows, in
+    the order loot.ts lists the names), in cells of icon_size x icon_scale px."""
     n = MANIFEST["icon_size"]
+    k = MANIFEST["icon_scale"]
+    cell = n * k
     entries = MANIFEST["icons"]
-    rows = max(len(e.get("files", e.get("materials", []))) for e in entries)
-    out = Image.new("RGBA", (n * len(entries), n * rows), (0, 0, 0, 0))
+    rows = max(len(icon_rows(e)) for e in entries)
+    out = Image.new("RGBA", (cell * len(entries), cell * rows), (0, 0, 0, 0))
+
+    def pixel(img: Image.Image) -> Image.Image:
+        return img.resize((cell, cell), Image.NEAREST)
+
     for c, e in enumerate(entries):
-        if "files" in e:
+        if "sources" in e:
+            for r, f in enumerate(e["sources"]):
+                out.paste(smooth_icon(SRC / f, cell, e.get("pair", False)), (c * cell, r * cell))
+        elif "files" in e:
             for r, f in enumerate(e["files"]):
-                out.paste(Image.open(SRC / f).convert("RGBA"), (c * n, r * n))
-            continue
-        base = icon(e, n)
-        for r, dst in enumerate(e["materials"]):
-            out.paste(material(base, e["family"], dst), (c * n, r * n))
+                out.paste(pixel(Image.open(SRC / f).convert("RGBA")), (c * cell, r * cell))
+        else:
+            base = icon(e, n)
+            for r, dst in enumerate(e["materials"]):
+                out.paste(pixel(material(base, e["family"], dst)), (c * cell, r * cell))
+        # Every item name needs a visible icon: a blank cell means a bad source or cut-out.
+        for r in range(len(icon_rows(e))):
+            if out.crop((c * cell, r * cell, (c + 1) * cell, (r + 1) * cell)).getbbox() is None:
+                sys.exit(f"icon {e['id']}: row {r} came out empty")
     return out
 
 
@@ -494,7 +540,7 @@ KNOBS = {
     "variant": {"id", "size", "base", "recolor", "aura", "seed", "prompt", "lift", "keep", "crop",
                 "flip", "extra", "shadow", "border", "margin"},
     "background": {"id", "height", "seed", "prompt", "dim", "extra", "trim_top", "blend"},
-    "icon": {"id", "family", "materials", "files", "source", "seed", "prompt"},
+    "icon": {"id", "family", "materials", "files", "sources", "pair", "source", "seed", "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -520,10 +566,18 @@ def check_manifest() -> None:
         if kind == "variant" and "poses" not in by_id.get(e["base"], {}):
             errors.append(f"variant {name}: base {e['base']!r} is not a sprite with poses")
         if kind == "icon":
-            if "files" in e and ("family" in e or "materials" in e):
-                errors.append(f"icon {name}: files cannot be mixed with family or materials")
-            elif "files" not in e and not ("family" in e and "materials" in e):
-                errors.append(f"icon {name}: needs either files or both family and materials")
+            kinds = [k for k in ("files", "sources") if k in e]
+            if "family" in e or "materials" in e:
+                kinds.append("family and materials")
+            if len(kinds) != 1:
+                errors.append(f"icon {name}: needs exactly one of files, sources, or family and materials")
+            elif kinds == ["family and materials"] and not ("family" in e and "materials" in e):
+                errors.append(f"icon {name}: needs both family and materials")
+            if "pair" in e and "sources" not in e:
+                errors.append(f"icon {name}: pair only applies to sources")
+            for f in e.get("sources", []):
+                if not (SRC / f).exists():
+                    errors.append(f"icon {name}: source {f} missing")
             for f in e.get("files", []):
                 if not (SRC / f).exists():
                     errors.append(f"icon {name}: source {f} missing")

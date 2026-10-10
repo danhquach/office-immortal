@@ -104,23 +104,23 @@ The realm name is primary; the job title is shown beside it.
 
 Every drop is generated from a seeded roll.
 
-- **Slots:** Head, Chest, Pants, Attachment (worn at the hip, e.g. a pill
+- **Slots:** Head, Chest, Boots, Attachment (worn at the hip, e.g. a pill
   gourd), Weapon, Side arm, two Accessories and two Charms: eight item types
   over ten positions. An item fills its first free position; a player can
   choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
 - **Base stat:** each item type rolls in a range (e.g. an Iron Jian weapon
   rolls 8–14 damage at item level 10).
-- **Weapon names follow the grade,** so a better drop looks better (each name
-  has its own icon, coloured like its grade):
+- **Weapon, robe and boot names follow the grade,** so a better drop looks
+  better (each name has its own icon, coloured like its grade):
 
-| Grade | Weapon names |
-|---|---|
-| Mortal | Iron Jian, Bronze Longsword, Tempered Steel Blade |
-| Spirit | Azure Cloud Jian, Sky River Blade, Frost Lotus Sword |
-| Earth | Jade Serpent Blade, Verdant Pine Sword, Emerald Wind Jian |
-| Heaven | Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold Sabre |
-| Immortal | Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre |
+| Grade | Weapon names | Chest | Boots |
+|---|---|---|---|
+| Mortal | Iron Jian, Bronze Longsword, Tempered Steel Blade | Hempen Novice Robe | Hempen Cloth Boots |
+| Spirit | Azure Cloud Jian, Sky River Blade, Frost Lotus Sword | Azure Disciple Robe | Azure Cloud Boots |
+| Earth | Jade Serpent Blade, Verdant Pine Sword, Emerald Wind Jian | Jade Crane Robe | Jade Step Boots |
+| Heaven | Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold Sabre | Golden Elder Robe | Golden Cloud Boots |
+| Immortal | Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre | Phoenix Flame Robe | Phoenix Flame Boots |
 
 - **Grades (rarity) and affix count:**
 

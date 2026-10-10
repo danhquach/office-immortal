@@ -769,14 +769,14 @@ select {
   left: 3px;
   font-weight: 700;
 }
-/* The item's icon (32 px, whole pixels): the grade stays on the border and
-   in the initial, never shown by the icon alone. */
+/* The item's icon (32 px, from a 64 px atlas cell, so high-density screens
+   get the full detail): the grade stays on the border and in the initial,
+   never shown by the icon alone. */
 .icon {
   display: block;
   width: 32px;
   height: 32px;
   margin: auto;
-  image-rendering: pixelated;
   background-repeat: no-repeat;
 }
 .item-head {
@@ -871,7 +871,7 @@ select {
   left: 74%;
   top: 64%;
 }
-.slot-pants {
+.slot-boots {
   left: 50%;
   top: 82%;
 }
