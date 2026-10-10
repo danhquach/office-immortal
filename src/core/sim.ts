@@ -34,7 +34,14 @@ import {
   xpMultiplier,
   type Passives,
 } from './prestige.ts';
-import { defaultSlot, rollDrop, slotsFor, type EquipSlotId, type Item } from './loot.ts';
+import {
+  defaultSlot,
+  equippedArray,
+  rollDrop,
+  slotsFor,
+  type EquipSlotId,
+  type Item,
+} from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
 /** Defence that halves incoming damage. */
@@ -44,6 +51,8 @@ export const DEFENCE_HALVES_AT = 50;
  * neither side attacks meanwhile, so the fallen one's death plays out first.
  */
 export const ENEMY_ARRIVAL = 1.2;
+/** Seconds between the hits of a Killing Array. */
+export const ARRAY_TICK = 1;
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -56,6 +65,8 @@ export interface GameState {
   enemies: Enemy[];
   /** Sim time of the current enemy's next attack, in seconds. */
   enemyNextAttackAt: number;
+  /** Sim time of a Killing Array's next hit, in seconds; unused without one. */
+  arrayNextAt: number;
   /** Items picked up and not equipped. */
   inventory: Item[];
   /** Cells in the bag; Spirit Stones buy more. */
@@ -92,6 +103,7 @@ export function newGame(
     highestFloor: 1,
     enemies: [],
     enemyNextAttackAt: 0,
+    arrayNextAt: 0,
     inventory: [],
     bagSize: INVENTORY_SIZE,
     stones: 0,
@@ -117,16 +129,16 @@ export function tick(state: GameState, dt: number): GameState {
   const end = s.time + dt;
   for (;;) {
     const c = s.cultivator;
-    // Ties go to the cultivator, so event order never depends on step size.
-    if (c.nextAttackAt <= s.enemyNextAttackAt) {
-      if (c.nextAttackAt > end) break;
-      s.time = c.nextAttackAt;
-      cultivatorAttacks(s, rng);
-    } else {
-      if (s.enemyNextAttackAt > end) break;
-      s.time = s.enemyNextAttackAt;
-      enemyAttacks(s, rng);
-    }
+    // A disc equipped mid-fight hits at once, never in the past.
+    const arrayAt =
+      equippedArray(c.equipment)?.id === 'killing' ? Math.max(s.time, s.arrayNextAt) : Infinity;
+    // Ties go to the cultivator, then the array, so event order never depends on step size.
+    const next = Math.min(c.nextAttackAt, arrayAt, s.enemyNextAttackAt);
+    if (next > end) break;
+    s.time = next;
+    if (c.nextAttackAt === next) cultivatorAttacks(s, rng);
+    else if (arrayAt === next) arrayHits(s, rng);
+    else enemyAttacks(s, rng);
   }
   s.time = end;
   return s;
@@ -191,11 +203,9 @@ export function faceTribulation(state: GameState): GameState {
   const at = s.enemies.findIndex((e) => e.kind === 'tribulation');
   const [trial] = at < 0 ? [makeTribulation(s.floor, realmOf(c.level))] : s.enemies.splice(at, 1);
   s.enemies.unshift(trial as Enemy);
-  const d = derive(c);
-  c.hp = d.maxHp;
+  c.hp = derive(c).maxHp;
   c.attackCount = 0;
-  c.nextAttackAt = s.time + ENEMY_ARRIVAL + d.attackInterval;
-  s.enemyNextAttackAt = s.time + ENEMY_ARRIVAL + currentEnemy(s).attackInterval;
+  startFight(s, ENEMY_ARRIVAL);
   return s;
 }
 
@@ -223,8 +233,29 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   enemy.hp -= dealt;
   c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
   c.nextAttackAt = s.time + d.attackInterval;
-  if (enemy.hp > 0) return;
+  if (enemy.hp <= 0) defeated(s, rng);
+}
 
+/**
+ * A Killing Array's hit, once a second: a share of the cultivator's damage per
+ * second (not per hit, so fast and slow Paths gain alike), no crit, burst or
+ * lifesteal.
+ */
+function arrayHits(s: GameState, rng: Rng): void {
+  const enemy = currentEnemy(s);
+  const share = equippedArray(s.cultivator.equipment)?.value ?? 0;
+  const d = derive(s.cultivator);
+  const damage = (d.damage / d.attackInterval) * share * ARRAY_TICK;
+  enemy.hp -= Math.min(enemy.hp, mitigate(damage, enemy.defence));
+  s.arrayNextAt = s.time + ARRAY_TICK;
+  if (enemy.hp <= 0) defeated(s, rng);
+}
+
+/** The enemy in front fell: rewards, a drop, then the next enemy or the next floor. */
+function defeated(s: GameState, rng: Rng): void {
+  const c = s.cultivator;
+  const d = derive(c);
+  const enemy = currentEnemy(s);
   s.kills += 1;
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
   gainXp(c, Math.round(enemy.xp * xpMultiplier(s.passives)));
@@ -234,8 +265,8 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   s.enemies.shift();
   queueTribulation(s);
   if (s.enemies.length > 0) {
-    c.nextAttackAt = s.time + ENEMY_ARRIVAL + d.attackInterval;
-    s.enemyNextAttackAt = s.time + ENEMY_ARRIVAL + currentEnemy(s).attackInterval;
+    // At the attack speed from before any level-up this kill paid for.
+    startFight(s, ENEMY_ARRIVAL, d.attackInterval);
     return;
   }
   s.floor += 1;
@@ -246,8 +277,11 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
 function enemyAttacks(s: GameState, rng: Rng): void {
   const c = s.cultivator;
   const enemy = currentEnemy(s);
-  c.hp -= mitigate(enemy.damage, derive(c).defence);
   s.enemyNextAttackAt = s.time + enemy.attackInterval;
+  // Rolled only under an Illusion Array, so other runs draw the same numbers.
+  const array = equippedArray(c.equipment);
+  if (array?.id === 'illusion' && chance(rng, array.value)) return;
+  c.hp -= mitigate(enemy.damage, derive(c).defence);
   if (c.hp > 0) return;
 
   // Lost: drop back a floor and climb again from there, so a run never gets
@@ -268,13 +302,32 @@ function queueTribulation(s: GameState): void {
   s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
 }
 
-/** Fresh enemies and full HP; both sides start their attack timers `delay` seconds from now. */
+/** Fresh enemies and full HP, then the first fight. */
 function startFloor(s: GameState, rng: Rng, delay: number): void {
   const c = s.cultivator;
   s.enemies = makeFloor(rng, s.floor);
   queueTribulation(s);
   c.hp = derive(c).maxHp;
   c.attackCount = 0;
-  c.nextAttackAt = s.time + delay + derive(c).attackInterval;
-  s.enemyNextAttackAt = s.time + delay + currentEnemy(s).attackInterval;
+  startFight(s, delay);
+}
+
+/**
+ * A fight against the enemy in front starts `delay` seconds from now: both
+ * sides start their attack timers (the cultivator's `interval` after it), and
+ * an equipped disc sets up its array (docs/design.md §6). A Binding Array
+ * holds back the enemy's first attack.
+ */
+function startFight(
+  s: GameState,
+  delay: number,
+  interval = derive(s.cultivator).attackInterval,
+): void {
+  const c = s.cultivator;
+  const array = equippedArray(c.equipment);
+  const start = s.time + delay;
+  c.nextAttackAt = start + interval;
+  s.enemyNextAttackAt =
+    start + currentEnemy(s).attackInterval + (array?.id === 'binding' ? array.value : 0);
+  s.arrayNextAt = start + ARRAY_TICK;
 }

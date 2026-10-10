@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import {
   AFFIXES,
   affixValue,
+  ARRAY_IDS,
+  arrayValue,
+  ARRAYS,
   baseValue,
   defaultSlot,
   DROP_CHANCE,
   EQUIP_SLOTS,
   equipmentBonuses,
+  equippedArray,
+  isDisc,
   GRADES,
   namesFor,
   quality,
@@ -175,7 +180,7 @@ describe('rollItem', () => {
       head: 1,
       chest: 1,
       boots: 1,
-      attachment: 1,
+      attachment: 2,
       sideArm: 2,
       accessory: 3,
       charm: 1,
@@ -192,6 +197,14 @@ describe('rollItem', () => {
         expect(seen.length, `${slot} ${g}`).toBeGreaterThan(0);
         expect(new Set(seen), `${slot} ${g}`).toEqual(new Set(namesFor(slot, g)));
       }
+    }
+  });
+
+  it('gives each grade one Gourd and one Formation Disc, in that order', () => {
+    for (const g of GRADE_IDS) {
+      const [gourd, disc] = namesFor('attachment', g);
+      expect(gourd, g).toMatch(/ Gourd$/);
+      expect(disc, g).toMatch(/ (Formation|Bagua|Star) Disc$/);
     }
   });
 
@@ -232,10 +245,15 @@ describe('rollItem', () => {
       ],
       attachment: [
         'Clay Wine Gourd',
+        'Bronze Formation Disc',
         'Azure Spirit Gourd',
+        'Azure Bagua Disc',
         'Jade Elixir Gourd',
+        'Jade Formation Disc',
         'Golden Nectar Gourd',
+        'Golden Star Disc',
         'Phoenix Flame Gourd',
+        'Phoenix Flame Formation Disc',
       ],
       accessory: [
         'Bone Bead Pendant',
@@ -485,5 +503,71 @@ describe('equipmentBonuses', () => {
       const backward = equipmentBonuses(Object.fromEntries([...worn].reverse()));
       expect(backward).toEqual(forward);
     }
+  });
+});
+
+describe('Formation Discs', () => {
+  const attachments = MANY.filter((i) => i.slot === 'attachment');
+  const discs = attachments.filter(isDisc);
+
+  it('drops a disc for about half of all Attachments', () => {
+    expect(discs.length / attachments.length).toBeGreaterThan(0.47);
+    expect(discs.length / attachments.length).toBeLessThan(0.53);
+  });
+
+  it('gives every disc one array, each about a third of the time, and no other item one', () => {
+    for (const i of MANY) expect(i.array !== undefined, i.name).toBe(isDisc(i));
+    for (const id of ARRAY_IDS) {
+      const share = discs.filter((d) => d.array === id).length / discs.length;
+      expect(share, id).toBeGreaterThan(0.3);
+      expect(share, id).toBeLessThan(0.37);
+    }
+  });
+
+  it('keeps each array within its grade range, rising with grade', () => {
+    for (const d of discs) {
+      const [lo, hi] = ARRAYS[d.array as keyof typeof ARRAYS].byGrade[d.grade];
+      expect(arrayValue(d)).toBeGreaterThanOrEqual(lo);
+      expect(arrayValue(d)).toBeLessThanOrEqual(hi);
+    }
+    for (const id of ARRAY_IDS) {
+      // Each grade starts where the one below ends.
+      GRADE_IDS.slice(1).forEach((g, i) => {
+        const below = ARRAYS[id].byGrade[GRADE_IDS[i] as GradeId];
+        expect(ARRAYS[id].byGrade[g][0], `${id} ${g}`).toBeGreaterThanOrEqual(below[1]);
+      });
+    }
+  });
+
+  it('matches the docs/design.md table at both ends', () => {
+    const disc = (grade: GradeId, array: Item['array'], baseRoll: number): Item => ({
+      slot: 'attachment',
+      name: namesFor('attachment', grade)[1] as string,
+      level: 1,
+      grade,
+      baseRoll,
+      affixes: [],
+      array,
+    });
+    expect(arrayValue(disc('mortal', 'binding', 0))).toBe(0.5);
+    expect(arrayValue(disc('immortal', 'binding', 1))).toBe(3);
+    expect(arrayValue(disc('mortal', 'illusion', 0))).toBe(0.03);
+    expect(arrayValue(disc('immortal', 'illusion', 1))).toBe(0.18);
+    expect(arrayValue(disc('mortal', 'killing', 0))).toBe(0.05);
+    expect(arrayValue(disc('immortal', 'killing', 1))).toBe(0.3);
+    expect(arrayValue(disc('earth', 'killing', 0.5))).toBe(0.175);
+  });
+
+  it('adds no lifesteal: a disc carries its array instead', () => {
+    const disc = discs.find((d) => d.affixes.length === 0) as Item;
+    const gourd = attachments.find((d) => !isDisc(d) && d.affixes.length === 0) as Item;
+    expect(equipmentBonuses({ attachment: disc }).lifesteal).toBe(0);
+    expect(equipmentBonuses({ attachment: gourd }).lifesteal).toBeGreaterThan(0);
+    expect(equippedArray({ attachment: disc })).toEqual({
+      id: disc.array,
+      value: arrayValue(disc),
+    });
+    expect(equippedArray({ attachment: gourd })).toBeNull();
+    expect(equippedArray({})).toBeNull();
   });
 });

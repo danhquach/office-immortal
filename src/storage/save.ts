@@ -38,8 +38,11 @@ import {
 } from '../core/floors.ts';
 import {
   AFFIXES,
+  ARRAY_IDS,
   EQUIP_SLOTS,
   GRADES,
+  isDisc,
+  MAX_BINDING,
   namesFor,
   renamed,
   SLOTS,
@@ -54,18 +57,18 @@ import {
   type UniqueId,
 } from '../core/loot.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
-import { ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
+import { ARRAY_TICK, ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
- * where Boots are now.
+ * where Boots are now; v4 came before Formation Discs.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -231,6 +234,8 @@ function readState(v: unknown, version: number): GameState {
   const before3 = version < 3;
   // Before v4, the Boots type and position were called Pants.
   const before4 = version < 4;
+  // Before v5 there were no arrays, so no Killing Array timer.
+  const before5 = version < 5;
   const slot: SlotName = before4 ? fromPants : (id) => id;
   const o = obj(v, [
     'time',
@@ -240,6 +245,7 @@ function readState(v: unknown, version: number): GameState {
     'highestFloor',
     'enemies',
     'enemyNextAttackAt',
+    ...(before5 ? [] : ['arrayNextAt']),
     'inventory',
     'kills',
     'deaths',
@@ -273,7 +279,11 @@ function readState(v: unknown, version: number): GameState {
     floor,
     highestFloor,
     enemies: readEnemies(o.enemies, floor, cultivator),
-    enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL),
+    enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
+    // Left behind while no Killing Array is equipped, so it may be in the past.
+    arrayNextAt: before5
+      ? time + ARRAY_TICK
+      : num(o.arrayNextAt, 0, time + ENEMY_ARRIVAL + ARRAY_TICK),
     inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, slot)),
     bagSize,
     stones: v1 ? 0 : int(o.stones, 0, COUNT),
@@ -423,7 +433,7 @@ function readEnemies(v: unknown, floor: number, c: Cultivator): Enemy[] {
 }
 
 function readItem(v: unknown, highestFloor: number, slotName: SlotName): Item {
-  const o = obj(v, ['slot', 'name', 'level', 'grade', 'baseRoll', 'affixes'], ['unique']);
+  const o = obj(v, ['slot', 'name', 'level', 'grade', 'baseRoll', 'affixes'], ['unique', 'array']);
   const slot = oneOf(slotName(o.slot), SLOT_IDS);
   const grade = oneOf(o.grade, GRADE_IDS);
   const [min, max] = GRADES[grade].affixes;
@@ -445,5 +455,8 @@ function readItem(v: unknown, highestFloor: number, slotName: SlotName): Item {
   // Immortal items, and only they, carry one unique effect.
   if (grade === 'immortal') item.unique = oneOf(o.unique, UNIQUE_IDS);
   else if (Object.hasOwn(o, 'unique')) fail('unique on a lower grade');
+  // Formation Discs, and only they, carry one array.
+  if (isDisc(item)) item.array = oneOf(o.array, ARRAY_IDS);
+  else if (Object.hasOwn(o, 'array')) fail('array on an item that is not a disc');
   return item;
 }

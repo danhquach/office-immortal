@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { newCultivator, type Cultivator } from '../core/cultivator.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
-import { faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
+import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
 import {
+  arraySetUp,
   compareToEquipped,
   cellLabel,
   durationLabel,
@@ -400,6 +401,100 @@ describe('tribulationBanner', () => {
     expect(tribulationBanner(s, tick(s, 30))).toBeNull();
     const due = dueAt(10);
     expect(tribulationBanner(due, due)).toBeNull();
+  });
+});
+
+describe('Formation Discs', () => {
+  const disc = (array: Item['array'], baseRoll = 0.5): Item => ({
+    slot: 'attachment',
+    name: 'Jade Formation Disc',
+    level: 12,
+    grade: 'earth',
+    baseRoll,
+    affixes: [{ id: 'maxHp', roll: 1 }],
+    array,
+  });
+
+  it('shows the array and its effect in place of a base stat', () => {
+    expect(itemLines(disc('binding'))).toEqual([
+      "Binding Array: the enemy's first attack comes 1.75 s later",
+      '+60 Max HP',
+    ]);
+    expect(itemLines(disc('illusion'))[0]).toBe(
+      'Illusion Array: enemy attacks miss 9.5% of the time',
+    );
+    expect(itemLines(disc('killing', 1))[0]).toBe(
+      'Killing Array: the enemy takes 20% of your damage per second',
+    );
+  });
+
+  /** A run wearing `item`, played until its first kill. */
+  function toFirstKill(item: Item | null): [GameState, GameState] {
+    let s = newGame(5, 'sword');
+    if (item) {
+      s = { ...s, inventory: [item] };
+      s = equip(s, 0);
+    }
+    let prev = s;
+    while (s.kills === 0) {
+      prev = s;
+      s = tick(s, 0.5);
+    }
+    return [prev, s];
+  }
+
+  describe('against the equipped Attachment', () => {
+    const wearing = (item?: Item): Cultivator => {
+      const c = newCultivator('sword');
+      if (item) c.equipment.attachment = item;
+      return c;
+    };
+    const texts = (c: Cultivator, item: Item) =>
+      compareToEquipped(c, item, 'attachment').filter((l) => / Array/.test(l.text));
+
+    it('shows a stronger or weaker array of the same kind', () => {
+      expect(texts(wearing(disc('illusion', 0)), disc('illusion', 1))).toEqual([
+        { text: '+3% Illusion Array', better: true },
+      ]);
+      expect(texts(wearing(disc('binding', 1)), disc('binding', 0))).toEqual([
+        { text: '−0.5 s Binding Array', better: false },
+      ]);
+      expect(texts(wearing(disc('killing')), disc('killing'))).toEqual([]);
+    });
+
+    it('shows an array gained and one lost', () => {
+      expect(texts(wearing(disc('killing', 0)), disc('illusion', 0))).toEqual([
+        { text: '+Illusion Array (8%)', better: true },
+        { text: '−Killing Array (15%)', better: false },
+      ]);
+      expect(texts(wearing(), disc('binding', 0))).toEqual([
+        { text: '+Binding Array (1.5 s)', better: true },
+      ]);
+      const gourd: Item = { ...disc('binding'), name: 'Jade Elixir Gourd' };
+      delete gourd.array;
+      expect(texts(wearing(disc('binding', 0)), gourd)).toEqual([
+        { text: '−Binding Array (1.5 s)', better: false },
+      ]);
+    });
+  });
+
+  it('says the array is set up as each fight starts', () => {
+    const [prev, next] = toFirstKill(disc('killing'));
+    expect(arraySetUp(prev, next)).toBe('Killing Array set up');
+  });
+
+  it('says nothing mid-fight or without a disc', () => {
+    const [prev] = toFirstKill(disc('binding'));
+    expect(arraySetUp(prev, tick(prev, 0))).toBeNull();
+    const [p2, n2] = toFirstKill(null);
+    expect(arraySetUp(p2, n2)).toBeNull();
+  });
+
+  it('says it for a Tribulation faced early', () => {
+    let s = newGame(5, 'sword');
+    s = equip({ ...s, inventory: [disc('illusion')] }, 0);
+    s = { ...s, cultivator: { ...s.cultivator, level: 10, xp: xpToNext(10) } };
+    expect(arraySetUp(s, faceTribulation(s))).toBe('Illusion Array set up');
   });
 });
 

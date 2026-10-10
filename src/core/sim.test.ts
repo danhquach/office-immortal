@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cultivator.ts';
 import { TRIBULATIONS } from './floors.ts';
-import { slotsFor, type Item } from './loot.ts';
+import {
+  arrayValue,
+  equippedArray,
+  namesFor,
+  slotsFor,
+  type ArrayId,
+  type GradeId,
+  type Item,
+} from './loot.ts';
 import { INVENTORY_SIZE, sellPrice } from './economy.ts';
 import {
+  ARRAY_TICK,
   canFaceTribulation,
   ENEMY_ARRIVAL,
   equip,
@@ -499,12 +508,175 @@ describe('faceTribulation', () => {
   });
 });
 
+describe('Formation Disc arrays', () => {
+  function disc(array: ArrayId, grade: GradeId = 'immortal', baseRoll = 1): Item {
+    const name = namesFor('attachment', grade)[1] as string;
+    return { slot: 'attachment', name, level: 1, grade, baseRoll, affixes: [], array };
+  }
+
+  /** A new run with `item` worn; it takes effect from the next fight. */
+  function wearing(item: Item | null, seed = 3): GameState {
+    const s = newGame(seed, 'sword');
+    if (item) s.cultivator.equipment.attachment = item;
+    return s;
+  }
+
+  /** Plays to the first kill and stops on it, so the next fight has just been set up. */
+  function atFirstKill(s: GameState): GameState {
+    const x = structuredClone(s);
+    (x.enemies[0] as { hp: number }).hp = 1;
+    return tick(x, x.cultivator.nextAttackAt - x.time);
+  }
+
+  /** An endless fight: neither side can fall, and the cultivator never attacks. */
+  function standoff(s: GameState, cultivatorAttacks = false): GameState {
+    const x = structuredClone(s);
+    (x.enemies[0] as { hp: number }).hp = 1e12;
+    x.cultivator.hp = 1e12;
+    if (!cultivatorAttacks) x.cultivator.nextAttackAt = 1e15;
+    return x;
+  }
+
+  describe('Binding Array', () => {
+    it("holds back the enemy's first attack of every fight by its strength", () => {
+      const item = disc('binding', 'earth', 0.4);
+      const plain = atFirstKill(wearing(null));
+      const bound = atFirstKill(wearing(item));
+      expect(bound.kills).toBe(1);
+      expect(bound.enemyNextAttackAt - plain.enemyNextAttackAt).toBeCloseTo(arrayValue(item), 9);
+      expect(bound.enemyNextAttackAt).toBeCloseTo(
+        bound.time + ENEMY_ARRIVAL + (bound.enemies[0]?.attackInterval ?? 0) + 1.7,
+        9,
+      );
+      // The cultivator's own timing is unchanged.
+      expect(bound.cultivator.nextAttackAt).toBe(plain.cultivator.nextAttackAt);
+    });
+
+    it('delays only the first attack: the next comes one interval later', () => {
+      const s = atFirstKill(wearing(disc('binding')));
+      const first = s.enemyNextAttackAt;
+      // Just past it: the clock sum can land a hair short of the attack.
+      const after = tick(standoff(s), first - s.time + 0.01);
+      expect(after.enemyNextAttackAt).toBeCloseTo(first + (s.enemies[0]?.attackInterval ?? 0), 9);
+    });
+
+    it('sets up for a Tribulation faced early too', () => {
+      let s = wearing(disc('binding'));
+      s = until(s, canFaceTribulation, 7200);
+      const faced = faceTribulation(s);
+      const interval = faced.enemies[0]?.attackInterval ?? 0;
+      expect(faced.enemyNextAttackAt).toBeCloseTo(faced.time + ENEMY_ARRIVAL + interval + 3, 9);
+    });
+  });
+
+  describe('Illusion Array', () => {
+    /** Share of enemy attacks that did no damage over `seconds` of a standoff. */
+    function missShare(item: Item | null, seconds: number): number {
+      const s = standoff(atFirstKill(wearing(item)));
+      const enemy = s.enemies[0] as { damage: number; attackInterval: number };
+      const hit = mitigate(enemy.damage, derive(s.cultivator).defence);
+      const attacks =
+        Math.floor((s.time + seconds - s.enemyNextAttackAt) / enemy.attackInterval) + 1;
+      const end = tick(s, seconds);
+      const hits = (s.cultivator.hp - end.cultivator.hp) / hit;
+      return 1 - hits / attacks;
+    }
+
+    it('makes enemy attacks miss at about its strength', () => {
+      expect(missShare(null, 20_000)).toBe(0);
+      const share = missShare(disc('illusion'), 20_000);
+      expect(share).toBeGreaterThan(0.16);
+      expect(share).toBeLessThan(0.2);
+    });
+
+    it('rolls its misses from the seed', () => {
+      const s = standoff(atFirstKill(wearing(disc('illusion'))));
+      expect(tick(s, 600)).toEqual(tick(s, 600));
+      expect(tick(s, 600)).toEqual(run(s, 600, 1));
+    });
+  });
+
+  describe('Killing Array', () => {
+    it('hits once a second from the start of the fight for its share of damage', () => {
+      const item = disc('killing', 'earth', 0.5);
+      const s = standoff(atFirstKill(wearing(item)));
+      const enemy = s.enemies[0] as { hp: number; defence: number };
+      const d = derive(s.cultivator);
+      const per = mitigate((d.damage / d.attackInterval) * 0.175, enemy.defence);
+      // The fight starts after the pause; the first hit comes a second later.
+      const start = s.time + ENEMY_ARRIVAL;
+      const end = tick(s, ENEMY_ARRIVAL + 10.5);
+      expect(start + ARRAY_TICK).toBe(s.arrayNextAt);
+      expect(enemy.hp - (end.enemies[0] as { hp: number }).hp).toBe(10 * per);
+      expect(end.cultivator.hp).toBeLessThan(s.cultivator.hp);
+    });
+
+    it('does nothing without a Killing Array', () => {
+      const s = standoff(atFirstKill(wearing(disc('binding'))));
+      const end = tick(s, 100);
+      expect((end.enemies[0] as { hp: number }).hp).toBe(1e12);
+    });
+
+    it('counts a kill by the array as any other kill', () => {
+      const s = standoff(atFirstKill(wearing(disc('killing'))));
+      (s.enemies[0] as { hp: number }).hp = 1;
+      const end = tick(s, ENEMY_ARRIVAL + ARRAY_TICK);
+      expect(end.kills).toBe(s.kills + 1);
+      expect(end.enemies.length).toBe(s.enemies.length - 1);
+      expect(end.cultivator.xp + end.cultivator.level).toBeGreaterThan(
+        s.cultivator.xp + s.cultivator.level,
+      );
+    });
+
+    it('hits at once when equipped mid-fight, never in the past', () => {
+      let s = standoff(atFirstKill(wearing(null)));
+      s = tick(s, 30);
+      s.cultivator.equipment.attachment = disc('killing');
+      expect(s.arrayNextAt).toBeLessThan(s.time);
+      const end = tick(s, 0.5);
+      expect((end.enemies[0] as { hp: number }).hp).toBeLessThan(1e12);
+      expect(end.arrayNextAt).toBeCloseTo(s.time + ARRAY_TICK, 9);
+    });
+  });
+
+  it('gives the same result for one big step as many small ones after a mid-fight equip', () => {
+    // Partway into a fight, with no disc: the array timer has gone stale.
+    let s = tick(wearing(null, 9), 95.3);
+    while (s.arrayNextAt >= s.time) s = tick(s, 0.3);
+    s = { ...s, cultivator: { ...s.cultivator, equipment: { attachment: disc('killing') } } };
+    expect(s.arrayNextAt).toBeLessThan(s.time);
+    expect(run(s, 600, 0.5)).toEqual(tick(s, 600));
+    // And after a save: the stale timer survives JSON as it is.
+    expect(tick(JSON.parse(JSON.stringify(s)) as GameState, 600)).toEqual(tick(s, 600));
+  });
+
+  it.each<ArrayId>(['binding', 'illusion', 'killing'])(
+    'gives the same result for one big step as many small ones with a %s array',
+    (array) => {
+      const start = wearing(disc(array, 'heaven', 0.6), 9);
+      expect(run(start, 1800, 0.5)).toEqual(tick(start, 1800));
+    },
+  );
+});
+
 describe('Path balance', () => {
-  /** Rough fighting strength, to pick upgrades: damage per second times toughness. */
+  /**
+   * Rough fighting strength, to pick upgrades: damage per second times
+   * toughness, with a disc's array counted too: a Killing Array adds its share
+   * of damage every second, an Illusion Array cuts the hits taken, and a
+   * Binding Array skips about delay / 2 s of a fight's enemy attacks (fights
+   * run about ten seconds).
+   */
   function power(state: GameState): number {
     const d = derive(state.cultivator);
-    const dps = (d.damage / d.attackInterval) * (1 + d.critChance * (d.critMultiplier - 1));
-    return (dps * d.maxHp * (1 + d.defence / 50)) / (1 - d.lifesteal);
+    const array = equippedArray(state.cultivator.equipment);
+    const share = (id: string) => (array?.id === id ? array.value : 0);
+    const dps =
+      (d.damage / d.attackInterval) * (1 + d.critChance * (d.critMultiplier - 1)) +
+      (d.damage / d.attackInterval) * share('killing');
+    const toughness =
+      (d.maxHp * (1 + d.defence / 50) * (1 + share('binding') / 10)) / (1 - share('illusion'));
+    return (dps * toughness) / (1 - d.lifesteal);
   }
 
   /** A player who checks in every minute, equips every upgrade and empties the bag. */
@@ -527,12 +699,16 @@ describe('Path balance', () => {
     return s;
   }
 
+  // Enough seeds that luck doesn't decide it: a seed is a floor or two either
+  // way, and at 16 seeds one Path's unlucky run could cross the line alone.
+  const SEEDS = 64;
+
   it('keeps every Path within 15% of the others on the floor reached', () => {
     for (const minutes of [10, 60]) {
       const floors = PATH_IDS.map((path) => {
         let sum = 0;
-        for (const seed of [1, 2, 3, 4]) sum += play(seed, path, minutes).highestFloor;
-        return sum / 4;
+        for (let seed = 1; seed <= SEEDS; seed++) sum += play(seed, path, minutes).highestFloor;
+        return sum / SEEDS;
       });
       expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
     }

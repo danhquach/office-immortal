@@ -2,9 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { buyBagSpace, changePath, resetStats, setFilter, spendPoints } from '../core/economy.ts';
 import { makeTribulation, type Enemy } from '../core/floors.ts';
 import type { Item } from '../core/loot.ts';
-import { xpToNext } from '../core/cultivator.ts';
+import { derive, xpToNext } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
-import { ENEMY_ARRIVAL, equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
+import {
+  ARRAY_TICK,
+  ENEMY_ARRIVAL,
+  equip,
+  newGame,
+  retire,
+  tick,
+  type GameState,
+} from '../core/sim.ts';
 import {
   clearSave,
   decodeSave,
@@ -13,6 +21,7 @@ import {
   MAX_SAVE_CHARS,
   REJECTED_KEY,
   SAVE_KEY,
+  SAVE_VERSION,
   writeSave,
   type SaveStorage,
 } from './save.ts';
@@ -54,8 +63,15 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 
+/** The save as versions before 5 wrote it: no Killing Array timer. */
+function beforeDiscs(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.arrayNextAt;
+  return save;
+}
+
 /** The save as versions before 4 wrote it: Boots were called Pants. */
 function withPants(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  beforeDiscs(save);
   const st = save.state;
   for (const i of st.inventory as J[]) if (i.slot === 'boots') i.slot = 'pants';
   const eq = cult(save).equipment as J;
@@ -187,7 +203,7 @@ describe('rejects', () => {
   });
 
   it.each([
-    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 5)],
+    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = SAVE_VERSION + 1)],
     ['a version as text', (s: ReturnType<typeof raw>) => void ((s as J).v = '1')],
     ['a missing state', (s: ReturnType<typeof raw>) => void delete (s as J).state],
     ['an extra top-level key', (s: ReturnType<typeof raw>) => void ((s as J).admin = true)],
@@ -327,8 +343,11 @@ describe('rejects', () => {
   });
 
   describe('weapon names', () => {
-    const weapon = (s: ReturnType<typeof raw>, grade: string, name: string) =>
-      Object.assign(item(s), { slot: 'weapon', grade, name, affixes: [] });
+    const weapon = (s: ReturnType<typeof raw>, grade: string, name: string) => {
+      // The bag's first item may be a disc; a weapon carries no array.
+      delete item(s).array;
+      return Object.assign(item(s), { slot: 'weapon', grade, name, affixes: [] });
+    };
 
     it('rejects a weapon name from another grade', () => {
       expect(tampered((s) => void weapon(s, 'mortal', 'Heaven-Crushing Seal'))).toBeNull();
@@ -859,6 +878,140 @@ describe('rejects', () => {
     });
   });
 
+  describe('Formation Discs', () => {
+    /** A Mortal Attachment named `name`, with `extra` fields, first in the bag. */
+    function withAttachment(name: string, extra: J = {}): ReturnType<typeof raw> {
+      const save = raw();
+      (save.state.inventory as J[])[0] = {
+        slot: 'attachment',
+        name,
+        level: 1,
+        grade: 'mortal',
+        baseRoll: 0.5,
+        affixes: [],
+        ...extra,
+      };
+      return save;
+    }
+    const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+
+    it.each(['binding', 'illusion', 'killing'])('loads a disc with a %s array', (array) => {
+      const st = load(withAttachment('Bronze Formation Disc', { array }))?.state;
+      expect(st?.inventory[0]).toMatchObject({ name: 'Bronze Formation Disc', array });
+      expect(st && decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+    });
+
+    it('round-trips an equipped disc and the Killing Array timer', () => {
+      const s = structuredClone(STATE);
+      s.cultivator.equipment.attachment = {
+        slot: 'attachment',
+        name: 'Golden Star Disc',
+        level: 1,
+        grade: 'heaven',
+        baseRoll: 0.3,
+        affixes: [
+          { id: 'critChance', roll: 0.5 },
+          { id: 'maxHp', roll: 0.5 },
+          { id: 'defence', roll: 0.5 },
+          { id: 'qiRegen', roll: 0.5 },
+        ],
+        array: 'killing',
+      };
+      s.cultivator.hp = Math.min(s.cultivator.hp, derive(s.cultivator).maxHp);
+      expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+    });
+
+    it('loads a gourd with no array', () => {
+      expect(load(withAttachment('Clay Wine Gourd'))?.state.inventory[0]?.array).toBeUndefined();
+    });
+
+    it.each<[string, string, J]>([
+      ['a disc with no array', 'Bronze Formation Disc', {}],
+      ['an unknown array', 'Bronze Formation Disc', { array: 'fire' }],
+      ['an array in other case', 'Bronze Formation Disc', { array: 'Binding' }],
+      ['an array name as shown', 'Bronze Formation Disc', { array: 'Binding Array' }],
+      ['an array with a zero-width space', 'Bronze Formation Disc', { array: 'kill\u200bing' }],
+      ['an array with a bidi override', 'Bronze Formation Disc', { array: '\u202ekilling' }],
+      ['an array with a Cyrillic look-alike', 'Bronze Formation Disc', { array: 'k\u0456lling' }],
+      ['an array as a number', 'Bronze Formation Disc', { array: 1 }],
+      ['an array as a list', 'Bronze Formation Disc', { array: ['killing'] }],
+      ['an array as an object', 'Bronze Formation Disc', { array: { id: 'killing' } }],
+      ['an array as null', 'Bronze Formation Disc', { array: null }],
+      ['an oversized array', 'Bronze Formation Disc', { array: 'k'.repeat(100_000) }],
+      ['an inherited key as the array', 'Bronze Formation Disc', { array: '__proto__' }],
+      ['an array on a gourd', 'Clay Wine Gourd', { array: 'killing' }],
+      ['a disc name from another grade', 'Phoenix Flame Formation Disc', { array: 'killing' }],
+    ])('rejects %s', (_, name, extra) => {
+      expect(load(withAttachment(name, extra))).toBeNull();
+    });
+
+    it('rejects an array on any other type', () => {
+      const save = raw();
+      Object.assign((save.state.inventory as J[])[0] as J, {
+        slot: 'head',
+        name: 'Hempen Scholar Cap',
+        grade: 'mortal',
+        affixes: [],
+        array: 'binding',
+      });
+      delete ((save.state.inventory as J[])[0] as J).unique;
+      expect(load(save)).toBeNull();
+      delete ((save.state.inventory as J[])[0] as J).array;
+      expect(load(save)).not.toBeNull();
+    });
+
+    it('rejects a disc name as another type', () => {
+      const save = withAttachment('Bronze Formation Disc', { array: 'binding' });
+      ((save.state.inventory as J[])[0] as J).slot = 'charm';
+      expect(load(save)).toBeNull();
+    });
+
+    it('rejects a pollution key on a disc', () => {
+      const text = JSON.stringify(
+        withAttachment('Bronze Formation Disc', { array: 'binding' }),
+      ).replace('"array":', '"__proto__":{"polluted":true},"array":');
+      expect(decodeSave(text)).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
+    });
+
+    it.each([
+      ['a far-off array hit', (t: number) => t + 1e12],
+      [
+        'an array hit past the pause and one tick',
+        (t: number) => t + ENEMY_ARRIVAL + ARRAY_TICK + 0.01,
+      ],
+      ['a negative array time', () => -1],
+      ['an array time as text', () => '5'],
+    ])('rejects %s', (_, at) => {
+      const save = raw();
+      save.state.arrayNextAt = at(save.state.time as number);
+      expect(load(save)).toBeNull();
+    });
+
+    it('accepts an array time left in the past while no Killing Array is worn', () => {
+      const save = raw();
+      save.state.arrayNextAt = 0;
+      expect(load(save)?.state.arrayNextAt).toBe(0);
+    });
+
+    it('accepts an enemy attack held back by the longest Binding Array, and rejects one past it', () => {
+      const at = (extra: number) => {
+        const save = raw();
+        save.state.enemyNextAttackAt = (save.state.time as number) + 2 + ENEMY_ARRIVAL + 3 + extra;
+        return load(save);
+      };
+      expect(at(0)).not.toBeNull();
+      expect(at(0.01)).toBeNull();
+    });
+
+    it('rejects the array timer in a save from before discs (v4)', () => {
+      const save = raw();
+      save.v = 4;
+      expect(load(save)).toBeNull();
+      expect(load(beforeDiscs(save))?.state.arrayNextAt).toBe(STATE.time + ARRAY_TICK);
+    });
+  });
+
   describe('a version 3 save: Pants became Boots', () => {
     const gear = (slot: string, name: string, grade = 'mortal', affixes: J[] = []): J => ({
       slot,
@@ -998,6 +1151,7 @@ describe('rejects', () => {
         filter: newGame(1, 'sword').filter,
         dropsSold: 0,
         dropsSalvaged: 0,
+        arrayNextAt: STATE.time + ARRAY_TICK,
       });
     });
 
@@ -1062,7 +1216,13 @@ describe('Dao Insight and passives', () => {
     const save = raw();
     for (const k of ['insight', 'passives', 'retirements']) delete save.state[k];
     const loaded = decodeSave(JSON.stringify({ ...withPants(save), v: 2 }));
-    expect(loaded?.state).toEqual({ ...STATE, insight: 0, passives: noPassives(), retirements: 0 });
+    expect(loaded?.state).toEqual({
+      ...STATE,
+      insight: 0,
+      passives: noPassives(),
+      retirements: 0,
+      arrayNextAt: STATE.time + ARRAY_TICK,
+    });
   });
 
   it.each([1, 2])('rejects boots in a version %i save', (v) => {

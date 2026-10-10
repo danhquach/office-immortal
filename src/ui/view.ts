@@ -15,6 +15,9 @@ import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '
 import {
   AFFIXES,
   affixValue,
+  arrayValue,
+  ARRAYS,
+  equippedArray,
   baseValue,
   GRADES,
   quality,
@@ -22,6 +25,7 @@ import {
   UNIQUES,
   type BonusStat,
   type EquipSlotId,
+  type ArrayId,
   type GradeId,
   type Item,
   type SlotId,
@@ -79,9 +83,23 @@ export function formatBonus(stat: BonusStat, value: number): string {
   return `${signed(value, text)} ${BONUS_LABELS[stat]}`;
 }
 
-/** Every line of an item card after its title: base stat, affixes, unique effect. */
+/** What an array of strength `value` does, e.g. "Illusion Array: enemy attacks miss 4.2% of the time". */
+export function arrayLine(id: ArrayId, value: number): string {
+  const effect = {
+    binding: `the enemy's first attack comes ${num(value, 2)} s later`,
+    illusion: `enemy attacks miss ${num(value * 100, 1)}% of the time`,
+    killing: `the enemy takes ${num(value * 100, 1)}% of your damage per second`,
+  }[id];
+  return `${ARRAYS[id].name}: ${effect}`;
+}
+
+/** Every line of an item card after its title: base stat (a disc's array), affixes, unique effect. */
 export function itemLines(item: Item): string[] {
-  const lines = [formatBonus(SLOTS[item.slot].base.stat, baseValue(item))];
+  const lines = [
+    item.array
+      ? arrayLine(item.array, arrayValue(item))
+      : formatBonus(SLOTS[item.slot].base.stat, baseValue(item)),
+  ];
   for (const a of item.affixes)
     lines.push(formatBonus(AFFIXES[a.id].stat, affixValue(a, item.level)));
   if (item.unique) {
@@ -223,6 +241,33 @@ export function compareToEquipped(
     const text = fmt(Math.abs(change));
     if (text === fmt(0)) continue;
     lines.push({ text: `${signed(change, text)} ${r.label}`, better: change > 0 });
+  }
+  return [...lines, ...compareArrays(c.equipment[to], item)];
+}
+
+/** An array's strength in short, e.g. "1.75 s" or "9.5%". */
+function arrayAmount(id: ArrayId, value: number): string {
+  return id === 'binding' ? `${num(value, 2)} s` : `${num(value * 100, 1)}%`;
+}
+
+/** How the array changes when `next` replaces `now`: stronger or weaker, or one gained and one lost. */
+function compareArrays(now: Item | undefined, next: Item): { text: string; better: boolean }[] {
+  const was = now?.array ? { id: now.array, value: arrayValue(now) } : null;
+  const will = next.array ? { id: next.array, value: arrayValue(next) } : null;
+  if (was && will && was.id === will.id) {
+    const change = will.value - was.value;
+    const text = arrayAmount(will.id, Math.abs(change));
+    if (text === arrayAmount(will.id, 0)) return [];
+    return [{ text: `${signed(change, text)} ${ARRAYS[will.id].name}`, better: change > 0 }];
+  }
+  const lines: { text: string; better: boolean }[] = [];
+  if (will) {
+    const amount = arrayAmount(will.id, will.value);
+    lines.push({ text: `+${ARRAYS[will.id].name} (${amount})`, better: true });
+  }
+  if (was) {
+    const amount = arrayAmount(was.id, was.value);
+    lines.push({ text: `−${ARRAYS[was.id].name} (${amount})`, better: false });
   }
   return lines;
 }
@@ -380,6 +425,17 @@ export function stripEvents(prev: GameState, next: GameState): StripEvents {
     youDied,
     foeDied: killed && before ? { kind: before.kind, name: before.name } : null,
   };
+}
+
+/**
+ * The array set up as a fight starts between two states, e.g. "Killing Array
+ * set up"; null when no fight started or no disc is equipped.
+ */
+export function arraySetUp(prev: GameState, next: GameState): string | null {
+  const faced = next.enemies[0]?.kind === 'tribulation' && prev.enemies[0]?.kind !== 'tribulation';
+  if (next.kills === prev.kills && next.deaths === prev.deaths && !faced) return null;
+  const array = equippedArray(next.cultivator.equipment);
+  return array ? `${ARRAYS[array.id].name} set up` : null;
 }
 
 /** A grid cell's accessible name: everything its colour, initial and icon show, in words. */

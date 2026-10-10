@@ -34,6 +34,8 @@ export type AffixId =
   | 'stoneFind'
   | 'treasureFind';
 export type UniqueId = 'synergy' | 'parachute' | 'overtime';
+/** A Formation Disc's array, set up at the start of every fight (docs/design.md §6). */
+export type ArrayId = 'binding' | 'illusion' | 'killing';
 
 /** Everything an item can add to the cultivator. Shares are fractions: 0.05 is +5%. */
 export type BonusStat = AffixId | 'damage' | 'damagePct' | 'maxHpPct';
@@ -56,6 +58,8 @@ export interface Item {
   affixes: Affix[];
   /** Immortal grade only. */
   unique?: UniqueId;
+  /** Formation Discs only; its strength is the base roll. */
+  array?: ArrayId;
 }
 
 export type Equipment = Partial<Record<EquipSlotId, Item>>;
@@ -157,14 +161,28 @@ const SIDE_ARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Darts', 'Phoenix Flame Binding Rope'],
 };
 
-/** Gourd names by grade, worn at the hip. */
+/**
+ * Attachment names by grade in two families, always listed Gourd, Formation
+ * Disc. Unlike the other families, a disc plays differently: it carries an
+ * array instead of the gourd's lifesteal.
+ */
 const ATTACHMENT_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Clay Wine Gourd'],
-  spirit: ['Azure Spirit Gourd'],
-  earth: ['Jade Elixir Gourd'],
-  heaven: ['Golden Nectar Gourd'],
-  immortal: ['Phoenix Flame Gourd'],
+  mortal: ['Clay Wine Gourd', 'Bronze Formation Disc'],
+  spirit: ['Azure Spirit Gourd', 'Azure Bagua Disc'],
+  earth: ['Jade Elixir Gourd', 'Jade Formation Disc'],
+  heaven: ['Golden Nectar Gourd', 'Golden Star Disc'],
+  immortal: ['Phoenix Flame Gourd', 'Phoenix Flame Formation Disc'],
 };
+
+/** Every Formation Disc name, one per grade. */
+const DISC_NAMES: ReadonlySet<string> = new Set(
+  Object.values(ATTACHMENT_NAMES).map((names) => names[1] as string),
+);
+
+/** True for a Formation Disc: an Attachment that carries an array. */
+export function isDisc(item: Pick<Item, 'slot' | 'name'>): boolean {
+  return item.slot === 'attachment' && DISC_NAMES.has(item.name);
+}
 
 /**
  * Accessory names by grade in three families, always listed Pendant, Bell,
@@ -353,6 +371,75 @@ export const UNIQUES: Readonly<Record<UniqueId, { name: string; stat: BonusStat;
     overtime: { name: 'Unpaid Overtime', stat: 'attackSpeed', value: 0.25 },
   };
 
+/**
+ * The arrays a Formation Disc carries. A disc's strength is its base roll
+ * within the range of its grade: seconds the enemy's first attack waits
+ * (Binding), the chance an enemy attack misses (Illusion), or the share of the
+ * cultivator's damage dealt every second (Killing).
+ */
+export const ARRAYS: Readonly<
+  Record<
+    ArrayId,
+    {
+      name: string;
+      /** Value steps: 100 keeps whole hundredths (seconds), 1000 tenths of a percent. */
+      step: number;
+      byGrade: Readonly<Record<GradeId, readonly [number, number]>>;
+    }
+  >
+> = {
+  binding: {
+    name: 'Binding Array',
+    step: 100,
+    byGrade: {
+      mortal: [0.5, 1],
+      spirit: [1, 1.5],
+      earth: [1.5, 2],
+      heaven: [2, 2.5],
+      immortal: [2.5, 3],
+    },
+  },
+  illusion: {
+    name: 'Illusion Array',
+    step: 1000,
+    byGrade: {
+      mortal: [0.03, 0.05],
+      spirit: [0.05, 0.08],
+      earth: [0.08, 0.11],
+      heaven: [0.11, 0.14],
+      immortal: [0.14, 0.18],
+    },
+  },
+  killing: {
+    name: 'Killing Array',
+    step: 1000,
+    byGrade: {
+      mortal: [0.05, 0.1],
+      spirit: [0.1, 0.15],
+      earth: [0.15, 0.2],
+      heaven: [0.2, 0.25],
+      immortal: [0.25, 0.3],
+    },
+  },
+};
+
+/** The longest delay a Binding Array can put on an enemy's first attack, in seconds. */
+export const MAX_BINDING = Math.max(...Object.values(ARRAYS.binding.byGrade).map(([, hi]) => hi));
+
+/** A disc's array strength (its base roll within its grade's range); 0 for any other item. */
+export function arrayValue(item: Item): number {
+  if (!item.array) return 0;
+  const a = ARRAYS[item.array];
+  const [lo, hi] = a.byGrade[item.grade];
+  return Math.round((lo + item.baseRoll * (hi - lo)) * a.step) / a.step;
+}
+
+/** The array the equipped Attachment sets up, if it is a Formation Disc. */
+export function equippedArray(equipment: Equipment): { id: ArrayId; value: number } | null {
+  const item = equipment.attachment;
+  return item?.array ? { id: item.array, value: arrayValue(item) } : null;
+}
+
 /** Chance that a kill drops an item; bosses have better odds. */
 export const DROP_CHANCE = { demon: 0.04, elite: 0.25, boss: 0.5, tribulation: 1 } as const;
 
@@ -361,6 +448,7 @@ const EQUIP_SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
 const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
 const UNIQUE_IDS = Object.keys(UNIQUES) as UniqueId[];
+export const ARRAY_IDS = Object.keys(ARRAYS) as ArrayId[];
 const WEIGHT_TOTAL = GRADE_IDS.reduce((sum, g) => sum + GRADES[g].weight, 0);
 
 /** A roll in [0, 1] in steps of 1%, so both ends can be rolled. */
@@ -427,6 +515,8 @@ export function rollItem(rng: Rng, level: number): Item {
     baseRoll: roll(rng),
     affixes: [],
   };
+  // Drawn only for a disc, so every other drop rolls the same numbers as before.
+  if (isDisc(item)) item.array = pick(rng, ARRAY_IDS);
   // Draw affixes without replacement: one item never has the same affix twice.
   const pool = [...AFFIX_IDS];
   const [min, max] = GRADES[grade].affixes;
@@ -470,7 +560,8 @@ export function equipmentBonuses(equipment: Equipment): Bonuses {
   for (const at of EQUIP_SLOT_IDS) {
     const item = equipment[at];
     if (!item) continue;
-    b[SLOTS[item.slot].base.stat] += baseValue(item);
+    // A disc's base roll is its array's strength, not a stat (equippedArray).
+    if (!item.array) b[SLOTS[item.slot].base.stat] += baseValue(item);
     for (const a of item.affixes) b[AFFIXES[a.id].stat] += affixValue(a, item.level);
     if (item.unique) b[UNIQUES[item.unique].stat] += UNIQUES[item.unique].value;
   }
