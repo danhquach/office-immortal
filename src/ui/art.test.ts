@@ -148,7 +148,7 @@ describe('iconCell', () => {
     // Each family's file prefix, in the order loot.ts lists the families.
     const families: Record<string, string[]> = {
       accessory: ['accessory', 'accessory-bell', 'accessory-mirror'],
-      sideArm: ['sideArm', 'sideArm-rope'],
+      sideArm: ['sideArm', 'sideArm-rope', 'sideArm-banner'],
       attachment: ['attachment', 'attachment-disc'],
       charm: ['charm', 'charm-defend', 'charm-utility', 'charm-jade'],
     };
@@ -160,9 +160,9 @@ describe('iconCell', () => {
       );
       expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length * prefixes.length);
     }
-    // 30 weapons, 20 charms, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other three types.
+    // 30 weapons, 20 charms, 15 accessories, 15 hidden weapons, 10 attachments and 5 of each of the other three types.
     const icons = manifest.icons.reduce((n, i) => n + (i.sources ?? i.renders ?? []).length, 0);
-    expect(icons).toBe(30 + 20 + 15 + 10 + 10 + 5 * 3);
+    expect(icons).toBe(30 + 20 + 15 + 15 + 10 + 5 * 3);
     // No recoloured pixel-pack icon is left in the atlas.
     expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
   });
@@ -177,7 +177,9 @@ describe('iconCell', () => {
     expect(at('accessory', 'Phoenix Flame Mirror')).toEqual({ col: acc, row: 14 });
     expect(at('sideArm', 'Iron Throwing Darts')).toEqual({ col: side, row: 0 });
     expect(at('sideArm', 'Hempen Binding Cord')).toEqual({ col: side, row: 1 });
-    expect(at('sideArm', 'Phoenix Flame Binding Rope')).toEqual({ col: side, row: 9 });
+    expect(at('sideArm', 'Hempen Soul Banner')).toEqual({ col: side, row: 2 });
+    expect(at('sideArm', 'Phoenix Flame Binding Rope')).toEqual({ col: side, row: 13 });
+    expect(at('sideArm', 'Ten-Thousand Souls Banner')).toEqual({ col: side, row: 14 });
   });
 
   it('puts each Charm line name in its own row, old Charms on every fourth row', () => {
@@ -199,7 +201,7 @@ describe('iconCell', () => {
     );
     expect(iconCell({ slot: 'sideArm', name: 'Phoenix Flame Darts' } as Item)).toEqual({
       col,
-      row: 8,
+      row: 12,
     });
   });
 

@@ -97,6 +97,8 @@ The realm name is primary; the job title is shown beside it.
   pure simulation; the strip animation only shows what happened.
 - **Arrays:** an equipped Formation Disc sets up its array as each fight
   starts (§6); the strip shows it being set up.
+- **Souls:** an equipped Soul Banner gathers a soul per kill and adds them
+  to every attack as extra damage (§6).
 - **A pause between fights:** after a kill or a loss, neither side attacks
   for 1.2 s, so the fallen one's death plays out before the next fight.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer
@@ -107,7 +109,8 @@ The realm name is primary; the job title is shown beside it.
 Every drop is generated from a seeded roll.
 
 - **Slots:** Head, Chest, Boots, Attachment (worn at the hip: a pill gourd
-  or a formation disc), Weapon, Hidden Weapon (throwing darts and knives), two Accessories
+  or a formation disc), Weapon, Hidden Weapon (throwing darts and knives, a
+  binding rope or a soul banner), two Accessories
   and two Charms: eight item types over ten positions. An item fills its
   first free position; a player can choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
@@ -128,7 +131,7 @@ Every drop is generated from a seeded roll.
 
 - **Accessories and Hidden Weapons come in families** like weapons: each
   grade drops one of each family. Accessories are Pendants, Bells or Mirrors;
-  Hidden Weapons are Darts or Binding Ropes. Every Accessory rolls the same
+  Hidden Weapons are Darts, Binding Ropes or Soul Banners. Every Accessory rolls the same
   base stat, and so does every Hidden Weapon; the family sets the name, the
   icon and the Path its affixes lean toward (**Path lean**, below).
 
@@ -163,13 +166,30 @@ Every drop is generated from a seeded roll.
   fast and slow Paths gain alike (no crit, burst or lifesteal; reduced by the
   enemy's defence, at least 1). A kill by the array counts as any other kill.
 
-| Grade | Darts | Binding Rope |
-|---|---|---|
-| Mortal | Iron Throwing Darts | Hempen Binding Cord |
-| Spirit | Azure Frost Darts | Azure Silk Sash |
-| Earth | Jade Viper Darts | Jade Dragon-Binding Chain |
-| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash |
-| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope |
+| Grade | Darts | Binding Rope | Soul Banner | Soul cap |
+|---|---|---|---|---|
+| Mortal | Iron Throwing Darts | Hempen Binding Cord | Hempen Soul Banner | 10 |
+| Spirit | Azure Frost Darts | Azure Silk Sash | Azure Soul-Calling Banner | 15 |
+| Earth | Jade Viper Darts | Jade Dragon-Binding Chain | Jade Hundred Ghosts Banner | 20 |
+| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash | Golden Soul-Gathering Banner | 25 |
+| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope | Ten-Thousand Souls Banner | 30 |
+
+- **Hidden Weapon drop share:** each grade drops one of each family, so Darts,
+  Binding Ropes and Soul Banners are even odds (one in three). The Hidden
+  Weapon drop rate is unchanged.
+- **Soul Banners** are small flags that gather the souls of slain enemies. A
+  banner rolls the same base stat and affixes as any Hidden Weapon. While it
+  is worn, each enemy slain (Tribulations included, and kills by an array)
+  adds one soul, up to its grade's soul cap (above); the cap is set by the
+  grade, not the item level. Every attack the cultivator makes releases the
+  souls as extra damage: **1% of Spirit per soul**, added after crit and
+  burst (souls never crit or burst) and reduced by the enemy's defence with
+  the hit. Talisman Masters, whose primary stat is Spirit, gain the most.
+  A full Immortal banner adds 30% of Spirit to every attack.
+- **Souls clear** when the banner is unequipped or replaced and on Early
+  Retirement. They are kept through a lost fight, a new floor and a
+  Tribulation. A banner in the bag holds no souls. Details shows the soul
+  count and cap as text, e.g. "Souls: 7 / 20 (+6.7 damage per attack)".
 
 - **Charms come in four lines,** even odds, and none leans toward a Path: a
   player picks the one that fits how they play. A line favours three affixes:
@@ -232,7 +252,7 @@ Every drop is generated from a seeded roll.
 |---|---|---|---|---|
 | Sword Cultivator | Flying Sword, Peachwood Sword | Darts | Mirror | crit chance, crit damage, attack speed |
 | Body Refiner | Seal, Vajra Pestle | Binding Rope | Pendant | max HP, defence, lifesteal |
-| Talisman Master | Fan, Horsetail Whisk | (Soul Banner, #52) | Bell | qi regen, crit damage, attack speed |
+| Talisman Master | Fan, Horsetail Whisk | Soul Banner | Bell | qi regen, crit damage, attack speed |
 
 - **Treasure tier:** a weapon's details show its tier by grade: Mortal and
   Spirit are a **Magic Tool**, Earth and Heaven a **Spirit Treasure**, Immortal

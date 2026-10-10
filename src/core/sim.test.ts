@@ -6,6 +6,9 @@ import {
   equippedArray,
   namesFor,
   slotsFor,
+  SOUL_CAPS,
+  soulCap,
+  soulDamage,
   type ArrayId,
   type GradeId,
   type Item,
@@ -21,6 +24,7 @@ import {
   mitigate,
   newGame,
   requiredRealm,
+  retire,
   tick,
   type GameState,
   type TickOptions,
@@ -754,21 +758,134 @@ describe('Formation Disc arrays', () => {
   );
 });
 
+describe('Soul Banners', () => {
+  /** A Hidden Weapon of `family` (0 Darts, 1 Binding Rope, 2 Soul Banner). */
+  function hidden(family: number, grade: GradeId = 'mortal'): Item {
+    const name = namesFor('sideArm', grade)[family] as string;
+    return { slot: 'sideArm', name, level: 1, grade, baseRoll: 0.5, affixes: [] };
+  }
+
+  /** A new Talisman run with `item` worn as its Hidden Weapon. */
+  function wearing(item: Item | null, seed = 5): GameState {
+    const s = newGame(seed, 'talisman');
+    if (item) s.cultivator.equipment.sideArm = item;
+    return s;
+  }
+
+  it('starts every run with no souls', () => {
+    expect(newGame(1, 'talisman').souls).toBe(0);
+  });
+
+  it('gains one soul per kill while a banner is worn, up to its cap', () => {
+    let s = wearing(hidden(2, 'mortal'));
+    for (let n = 0; n < 200 && s.kills < SOUL_CAPS.mortal + 5; n++) {
+      const before = s;
+      s = tick(s, 1);
+      expect(s.souls, `after ${s.kills} kills`).toBe(Math.min(SOUL_CAPS.mortal, s.kills));
+      expect(s.souls).toBeGreaterThanOrEqual(before.souls);
+    }
+    expect(s.kills).toBeGreaterThan(SOUL_CAPS.mortal);
+    expect(s.souls).toBe(SOUL_CAPS.mortal);
+  });
+
+  it('holds more souls on a higher grade', () => {
+    const s = tick(wearing(hidden(2, 'immortal')), 1800);
+    expect(s.kills).toBeGreaterThan(SOUL_CAPS.immortal);
+    expect(s.souls).toBe(SOUL_CAPS.immortal);
+  });
+
+  it.each([
+    ['no Hidden Weapon', null],
+    ['Darts', 0],
+    ['a Binding Rope', 1],
+  ] as const)('gathers no souls with %s', (_, family) => {
+    const s = tick(wearing(family === null ? null : hidden(family)), 600);
+    expect(s.kills).toBeGreaterThan(0);
+    expect(s.souls).toBe(0);
+  });
+
+  it('adds 1% of Spirit per soul to every attack, after crit and burst', () => {
+    // An enemy with no defence that can't fall: the hit lands as dealt.
+    const base = wearing(hidden(2, 'heaven'));
+    base.cultivator.stats.spirit = 200;
+    const enemy = base.enemies[0] as { hp: number; defence: number };
+    enemy.hp = 1e12;
+    enemy.defence = 0;
+    const hit = (souls: number) => {
+      const s = structuredClone(base);
+      s.souls = souls;
+      const after = tick(s, s.cultivator.nextAttackAt - s.time);
+      return 1e12 - (after.enemies[0] as { hp: number }).hp;
+    };
+    // The same seed rolls the same crit, so only the souls differ.
+    // Each hit is rounded to a whole number, so the difference may be off by 1.
+    const extra = hit(25) - hit(0);
+    expect(soulDamage(25, 200)).toBe(50);
+    expect(Math.abs(extra - 50)).toBeLessThanOrEqual(1);
+    expect(hit(0)).toBeGreaterThan(0);
+  });
+
+  it('keeps its souls through a lost fight', () => {
+    let s = tick(wearing(hidden(2, 'earth')), 120);
+    expect(s.souls).toBeGreaterThan(0);
+    const souls = s.souls;
+    const deaths = s.deaths;
+    s = structuredClone(s);
+    s.cultivator.hp = 1;
+    s.cultivator.nextAttackAt = 1e15;
+    s = tick(s, s.enemyNextAttackAt - s.time);
+    expect(s.deaths).toBe(deaths + 1);
+    expect(s.souls).toBe(souls);
+  });
+
+  it('clears the souls when the banner is replaced by any Hidden Weapon', () => {
+    for (const family of [0, 1, 2]) {
+      const s = tick(wearing(hidden(2, 'earth')), 120);
+      expect(s.souls).toBeGreaterThan(0);
+      s.inventory = [hidden(family, 'spirit')];
+      expect(equip(s, 0).souls, `family ${family}`).toBe(0);
+      expect(equip(s, 0).inventory).toEqual([s.cultivator.equipment.sideArm]);
+    }
+  });
+
+  it('keeps the souls when another item type is equipped', () => {
+    const s = tick(wearing(hidden(2, 'earth')), 120);
+    expect(s.souls).toBeGreaterThan(0);
+    s.inventory = [{ ...hidden(0), slot: 'head', name: namesFor('head', 'mortal')[0] as string }];
+    expect(equip(s, 0).souls).toBe(s.souls);
+  });
+
+  it('clears the souls on Early Retirement', () => {
+    const s = tick(wearing(hidden(2, 'earth')), 120);
+    expect(s.souls).toBeGreaterThan(0);
+    s.highestFloor = 20;
+    expect(retire(s).souls).toBe(0);
+  });
+
+  it('gives the same result for one big step as many small ones with a banner', () => {
+    const start = wearing(hidden(2, 'heaven'), 9);
+    expect(run(start, 1800, 0.5)).toEqual(tick(start, 1800));
+  });
+});
+
 describe('Path balance', () => {
   /**
    * Rough fighting strength, to pick upgrades: damage per second times
    * toughness, with a disc's array counted too: a Killing Array adds its share
    * of damage every second, an Illusion Array cuts the hits taken, and a
    * Binding Array skips about delay / 2 s of a fight's enemy attacks (fights
-   * run about ten seconds).
+   * run about ten seconds). A Soul Banner counts as full: it fills within a
+   * floor or two.
    */
   function power(state: GameState): number {
-    const d = derive(state.cultivator);
-    const array = equippedArray(state.cultivator.equipment);
+    const c = state.cultivator;
+    const d = derive(c);
+    const array = equippedArray(c.equipment);
     const share = (id: string) => (array?.id === id ? array.value : 0);
     const dps =
       (d.damage / d.attackInterval) * (1 + d.critChance * (d.critMultiplier - 1)) +
-      (d.damage / d.attackInterval) * share('killing');
+      (d.damage / d.attackInterval) * share('killing') +
+      soulDamage(soulCap(c.equipment), c.stats.spirit) / d.attackInterval;
     const toughness =
       (d.maxHp * (1 + d.defence / 50) * (1 + share('binding') / 10)) / (1 - share('illusion'));
     return (dps * toughness) / (1 - d.lifesteal);

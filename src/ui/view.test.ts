@@ -24,6 +24,7 @@ import {
   respecView,
   STAT_GROUPS,
   sellBelowLabel,
+  soulsLine,
   statRows,
   tribulationBanner,
   tribulationCall,
@@ -708,6 +709,43 @@ describe('sellBelowLabel', () => {
   });
 });
 
+describe('soulsLine', () => {
+  const item = (name: string, grade: Item['grade'] = 'earth'): Item => ({
+    slot: 'sideArm',
+    name,
+    level: 10,
+    grade,
+    baseRoll: 0.5,
+    affixes: [],
+  });
+
+  it('shows the worn banner souls, its cap and the damage they add, as text', () => {
+    const s = newGame(1, 'talisman');
+    const banner = item('Jade Hundred Ghosts Banner');
+    s.cultivator.equipment.sideArm = banner;
+    s.cultivator.stats.spirit = 67;
+    s.souls = 7;
+    expect(soulsLine(banner, s)).toBe('Souls: 7 / 20 (+4.7 damage per attack)');
+    s.souls = 0;
+    expect(soulsLine(banner, s)).toBe('Souls: 0 / 20 (+0 damage per attack)');
+  });
+
+  it('shows no souls on a banner in the bag', () => {
+    const s = newGame(1, 'talisman');
+    s.cultivator.equipment.sideArm = item('Jade Hundred Ghosts Banner');
+    s.souls = 7;
+    const bag = item('Ten-Thousand Souls Banner', 'immortal');
+    expect(soulsLine(bag, s)).toMatch(/^Souls: 0 \/ 30 /);
+  });
+
+  it('has no line for any other item', () => {
+    const s = newGame(1, 'talisman');
+    expect(soulsLine(item('Jade Viper Darts'), s)).toBeNull();
+    expect(soulsLine(item('Jade Dragon-Binding Chain'), s)).toBeNull();
+    expect(soulsLine({ ...item('Jade Hundred Ghosts Banner'), slot: 'charm' }, s)).toBeNull();
+  });
+});
+
 describe('favouredBy', () => {
   const item = (slot: Item['slot'], name: string, grade: Item['grade'] = 'earth'): Item => ({
     slot,
@@ -727,6 +765,7 @@ describe('favouredBy', () => {
     ['weapon', 'Jade Demon-Subduing Vajra Pestle', 'Body Refiner'],
     ['sideArm', 'Jade Viper Darts', 'Sword Cultivator'],
     ['sideArm', 'Jade Dragon-Binding Chain', 'Body Refiner'],
+    ['sideArm', 'Jade Hundred Ghosts Banner', 'Talisman Master'],
     ['accessory', 'Jade Dragon Pendant', 'Body Refiner'],
     ['accessory', 'Jade Wind Chime', 'Talisman Master'],
     ['accessory', 'Jade Demon-Revealing Mirror', 'Sword Cultivator'],
