@@ -87,6 +87,7 @@ import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
   arraySetUp,
   cellLabel,
+  charmLineName,
   compareToEquipped,
   equipBlock,
   freshDrops,
@@ -1257,6 +1258,8 @@ function play(
     );
     const tier = treasureTier(item);
     if (tier) name.append(el('div', 'muted', tier));
+    const line = charmLineName(item);
+    if (line) name.append(el('div', 'muted', line));
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {

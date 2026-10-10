@@ -14,11 +14,13 @@ import {
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
   AFFIXES,
-  affixValue,
   arrayValue,
   ARRAYS,
   equippedArray,
   baseValue,
+  CHARM_LINES,
+  charmLine,
+  itemAffixValue,
   GRADES,
   OFFLINE_DROP_MULTIPLIER,
   quality,
@@ -102,7 +104,7 @@ export function itemLines(item: Item): string[] {
       : formatBonus(SLOTS[item.slot].base.stat, baseValue(item)),
   ];
   for (const a of item.affixes)
-    lines.push(formatBonus(AFFIXES[a.id].stat, affixValue(a, item.level)));
+    lines.push(formatBonus(AFFIXES[a.id].stat, itemAffixValue(item, a)));
   if (item.unique) {
     const u = UNIQUES[item.unique];
     lines.push(`${u.name}: ${formatBonus(u.stat, u.value)}`);
@@ -128,6 +130,12 @@ const TREASURE_TIERS: Readonly<Record<GradeId, string>> = {
 export function treasureTier(item: Item): string | null {
   if (item.slot !== 'weapon' || !Object.hasOwn(TREASURE_TIERS, item.grade)) return null;
   return TREASURE_TIERS[item.grade];
+}
+
+/** A Charm's line in its details, e.g. "Defend Talisman"; null for other types. */
+export function charmLineName(item: Item): string | null {
+  const line = charmLine(item);
+  return line ? CHARM_LINES[line].name : null;
 }
 
 /**

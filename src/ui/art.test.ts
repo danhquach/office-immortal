@@ -150,6 +150,7 @@ describe('iconCell', () => {
       accessory: ['accessory', 'accessory-bell', 'accessory-mirror'],
       sideArm: ['sideArm', 'sideArm-rope'],
       attachment: ['attachment', 'attachment-disc'],
+      charm: ['charm', 'charm-defend', 'charm-utility', 'charm-jade'],
     };
     for (const entry of manifest.icons) {
       if (entry.id === 'weapon') continue;
@@ -159,9 +160,9 @@ describe('iconCell', () => {
       );
       expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length * prefixes.length);
     }
-    // 25 weapons, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other four types.
+    // 25 weapons, 20 charms, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other three types.
     const icons = manifest.icons.reduce((n, i) => n + (i.sources ?? i.renders ?? []).length, 0);
-    expect(icons).toBe(25 + 15 + 10 + 10 + 5 * 4);
+    expect(icons).toBe(25 + 20 + 15 + 10 + 10 + 5 * 3);
     // No recoloured pixel-pack icon is left in the atlas.
     expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
   });
@@ -177,6 +178,18 @@ describe('iconCell', () => {
     expect(at('sideArm', 'Iron Throwing Darts')).toEqual({ col: side, row: 0 });
     expect(at('sideArm', 'Hempen Binding Cord')).toEqual({ col: side, row: 1 });
     expect(at('sideArm', 'Phoenix Flame Binding Rope')).toEqual({ col: side, row: 9 });
+  });
+
+  it('puts each Charm line name in its own row, old Charms on every fourth row', () => {
+    const col = ICON_COLUMNS.indexOf('charm');
+    const at = (name: string) => iconCell({ slot: 'charm', name } as Item);
+    expect(at('Paper Ward Talisman')).toEqual({ col, row: 0 });
+    expect(at('Paper Body-Guard Talisman')).toEqual({ col, row: 1 });
+    expect(at('Paper Fortune Talisman')).toEqual({ col, row: 2 });
+    expect(at('Cloudy Jade Slip')).toEqual({ col, row: 3 });
+    expect(at('Azure Thunder Talisman')).toEqual({ col, row: 4 });
+    expect(at('Phoenix Flame Talisman')).toEqual({ col, row: 16 });
+    expect(at('Phoenix Blood Jade')).toEqual({ col, row: 19 });
   });
 
   it('puts each Hidden Weapon name in its own row of the side arm column', () => {

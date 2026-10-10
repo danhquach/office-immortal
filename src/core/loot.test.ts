@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   AFFIXES,
+  affixScale,
   affixValue,
   ARRAY_IDS,
   arrayValue,
   ARRAYS,
   baseValue,
+  CHARM_LINES,
+  charmLine,
+  drawAffixes,
+  FAVOURED_WEIGHT,
+  itemAffixValue,
   defaultSlot,
   DROP_CHANCE,
   EQUIP_SLOTS,
@@ -24,6 +30,7 @@ import {
   slotsFor,
   UNIQUES,
   type AffixId,
+  type CharmLineId,
   type GradeId,
   type Item,
   type SlotId,
@@ -86,9 +93,11 @@ describe('rollItem', () => {
       within('baseRoll', item.baseRoll, 0, 1, i);
       within('base', baseValue(item), base.lo, base.hi, i);
       for (const a of item.affixes) {
-        const r = rangeAt(AFFIXES[a.id], item.level);
+        const def = AFFIXES[a.id];
+        const k = affixScale(item, a.id);
+        const r = rangeAt({ ...def, lo: def.lo * k, hi: def.hi * k }, item.level);
         within(`${a.id} roll`, a.roll, 0, 1, i);
-        within(a.id, affixValue(a, item.level), r.lo, r.hi, i);
+        within(a.id, itemAffixValue(item, a), r.lo, r.hi, i);
       }
       within('quality', quality(item), 0, 100, i);
     });
@@ -185,7 +194,7 @@ describe('rollItem', () => {
       attachment: 2,
       sideArm: 2,
       accessory: 3,
-      charm: 1,
+      charm: 4,
     } as const;
     // With weapons, that is every type.
     expect([...Object.keys(families), 'weapon'].sort()).toEqual(Object.keys(SLOTS).sort());
@@ -276,10 +285,25 @@ describe('rollItem', () => {
       ],
       charm: [
         'Paper Ward Talisman',
+        'Paper Body-Guard Talisman',
+        'Paper Fortune Talisman',
+        'Cloudy Jade Slip',
         'Azure Thunder Talisman',
+        'Azure Barrier Talisman',
+        'Azure Clear-Mind Talisman',
+        'Azure Spirit Jade Slip',
         'Jade Seal Talisman',
+        'Jade Vajra Talisman',
+        'Jade Wealth Talisman',
+        'Emerald Jade Token',
         'Golden Heaven Seal',
+        'Golden Bell Guard Talisman',
+        'Golden Treasure-Seeking Talisman',
+        'Golden Sun Jade Token',
         'Phoenix Flame Talisman',
+        'Phoenix Rebirth Talisman',
+        'Phoenix Heaven-Luck Talisman',
+        'Phoenix Blood Jade',
       ],
     };
     for (const [slot, names] of Object.entries(table)) {
@@ -607,5 +631,197 @@ describe('Formation Discs', () => {
     });
     expect(equippedArray({ attachment: gourd })).toBeNull();
     expect(equippedArray({})).toBeNull();
+  });
+});
+
+describe('Charm lines', () => {
+  const LINE_IDS = Object.keys(CHARM_LINES) as CharmLineId[];
+  const UTILITY: AffixId[] = ['qiRegen', 'stoneFind', 'treasureFind'];
+  const charms = MANY.filter((i) => i.slot === 'charm');
+  const charm = (grade: GradeId, line: number, affixes: Item['affixes'] = []): Item => ({
+    slot: 'charm',
+    name: namesFor('charm', grade)[line] as string,
+    level: 10,
+    grade,
+    baseRoll: 0.5,
+    affixes,
+  });
+
+  it('matches the docs/design.md lines: names, favoured affixes and utility range', () => {
+    expect(LINE_IDS).toEqual(['attack', 'defend', 'utility', 'jade']);
+    expect(Object.values(CHARM_LINES)).toEqual([
+      {
+        name: 'Attack Talisman',
+        favours: ['critChance', 'critDamage', 'attackSpeed'],
+        utility: 0.75,
+      },
+      { name: 'Defend Talisman', favours: ['maxHp', 'defence', 'lifesteal'], utility: 0.75 },
+      { name: 'Utility Talisman', favours: UTILITY, utility: 0.75 },
+      { name: 'Jade Slip', favours: UTILITY, utility: 1.5 },
+    ]);
+    expect(FAVOURED_WEIGHT).toBe(3);
+  });
+
+  it('gives every name of every grade its line, in line order', () => {
+    for (const g of GRADE_IDS) {
+      LINE_IDS.forEach((line, i) => expect(charmLine(charm(g, i)), `${g} ${line}`).toBe(line));
+      const [, , , jade] = namesFor('charm', g);
+      expect(jade, g).toMatch(/Jade/);
+      for (const name of namesFor('charm', g).slice(0, 3))
+        expect(name, g).toMatch(/Talisman|Seal$/);
+    }
+  });
+
+  it('has no line for other types, unknown names or a name on the wrong grade', () => {
+    expect(charmLine({ slot: 'accessory', name: 'Paper Ward Talisman', grade: 'mortal' })).toBe(
+      null,
+    );
+    expect(charmLine({ slot: 'charm', name: 'Paper Ward Talisman ', grade: 'mortal' })).toBe(null);
+    expect(charmLine({ slot: 'charm', name: 'Phoenix Blood Jade', grade: 'mortal' })).toBe(null);
+    expect(charmLine({ slot: 'charm', name: '__proto__', grade: 'mortal' })).toBe(null);
+    expect(
+      charmLine({ slot: 'charm', name: 'Paper Ward Talisman', grade: 'constructor' as GradeId }),
+    ).toBe(null);
+  });
+
+  it('rolls every line of every grade, each about a quarter of the Charms (seeded)', () => {
+    for (const g of GRADE_IDS) {
+      const of = charms.filter((c) => c.grade === g);
+      const lines = new Set(of.map((c) => charmLine(c)));
+      expect(lines, g).toEqual(new Set(LINE_IDS));
+    }
+    for (const line of LINE_IDS) {
+      const share = charms.filter((c) => charmLine(c) === line).length / charms.length;
+      expect(share, line).toBeGreaterThan(0.23);
+      expect(share, line).toBeLessThan(0.27);
+    }
+  });
+
+  it('draws favoured affixes at the designed rate over 100k rolls', () => {
+    // One affix from 9: three weigh 3 and six weigh 1, so each favoured one
+    // comes up 3/15 of the time and each other one 1/15.
+    for (const line of LINE_IDS) {
+      const rng = createRng(77);
+      const seen = new Map<AffixId, number>();
+      for (let i = 0; i < N; i++) {
+        const [a] = drawAffixes(rng, 1, line);
+        seen.set(a?.id as AffixId, (seen.get(a?.id as AffixId) ?? 0) + 1);
+      }
+      for (const id of AFFIX_IDS) {
+        const p = CHARM_LINES[line].favours.includes(id) ? 3 / 15 : 1 / 15;
+        const got = (seen.get(id) ?? 0) / N;
+        expect(Math.abs(got - p), `${line} ${id}`).toBeLessThan(5 * Math.sqrt((p * (1 - p)) / N));
+      }
+    }
+  });
+
+  it('never repeats an affix, and can still roll every affix on every line', () => {
+    const rng = createRng(5);
+    for (const line of LINE_IDS) {
+      const all = drawAffixes(rng, AFFIX_IDS.length, line).map((a) => a.id);
+      expect(new Set(all).size).toBe(AFFIX_IDS.length);
+    }
+    for (const line of LINE_IDS) {
+      const seen = new Set(
+        charms.filter((c) => charmLine(c) === line).flatMap((c) => c.affixes.map((a) => a.id)),
+      );
+      expect(seen, line).toEqual(new Set(AFFIX_IDS));
+    }
+  });
+
+  it("favours a line's affixes on seeded Charm drops", () => {
+    for (const line of LINE_IDS) {
+      const affixes = charms.filter((c) => charmLine(c) === line).flatMap((c) => c.affixes);
+      const favoured = affixes.filter((a) => CHARM_LINES[line].favours.includes(a.id)).length;
+      // An even draw would give 3/9; weighted it is well over that.
+      expect(favoured / affixes.length, line).toBeGreaterThan(0.45);
+    }
+  });
+
+  it('draws every other item evenly, with the same numbers as before the lines', () => {
+    // The draw before the lines, written out: a non-Charm must roll as it did.
+    const legacy = (rng: Rng, count: number) => {
+      const pool = [...AFFIX_IDS];
+      const out = [];
+      for (let n = count; n > 0; n--) {
+        const id = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+        out.push({ id, roll: Math.floor(rng() * 101) / 100 });
+      }
+      return out;
+    };
+    for (let seed = 1; seed <= 200; seed++) {
+      expect(drawAffixes(createRng(seed), 1 + (seed % 5), null)).toEqual(
+        legacy(createRng(seed), 1 + (seed % 5)),
+      );
+    }
+  });
+
+  it('rolls utility affixes at 0.75x on a Talisman and 1.5x on a Jade Slip', () => {
+    for (const id of UTILITY) {
+      const top = { id, roll: 1 };
+      const bottom = { id, roll: 0 };
+      const full = rangeAt(AFFIXES[id], 10);
+      for (const [line, k] of [
+        [0, 0.75],
+        [1, 0.75],
+        [2, 0.75],
+        [3, 1.5],
+      ] as const) {
+        const item = charm('earth', line, [top]);
+        expect(affixScale(item, id)).toBe(k);
+        // Within the 0.1% rounding of both ranges, scaled.
+        expect(
+          Math.abs(itemAffixValue(item, top) - full.hi * k),
+          `${id} ${line}`,
+        ).toBeLessThanOrEqual(0.0015);
+        expect(
+          Math.abs(itemAffixValue(item, bottom) - full.lo * k),
+          `${id} ${line}`,
+        ).toBeLessThanOrEqual(0.0015);
+      }
+    }
+    // Spot values from docs/design.md: qi regen 2–6% at level 1.
+    const at1 = (line: number, roll: number) =>
+      itemAffixValue({ ...charm('mortal', line), level: 1 }, { id: 'qiRegen', roll });
+    expect([at1(0, 0), at1(0, 1)]).toEqual([0.015, 0.045]);
+    expect([at1(3, 0), at1(3, 1)]).toEqual([0.03, 0.09]);
+  });
+
+  it('leaves other affixes and other types at the full range', () => {
+    const crit = { id: 'critChance' as const, roll: 1 };
+    for (let line = 0; line < 4; line++) {
+      expect(itemAffixValue(charm('heaven', line), crit)).toBe(affixValue(crit, 10));
+    }
+    const qi = { id: 'qiRegen' as const, roll: 1 };
+    const ring: Item = { ...charm('heaven', 0), slot: 'accessory', name: 'Golden Sun Bell' };
+    expect(affixScale(ring, 'qiRegen')).toBe(1);
+    expect(itemAffixValue(ring, qi)).toBe(affixValue(qi, 10));
+  });
+
+  it('sums scaled utility affixes into the equipment bonuses', () => {
+    const qi = { id: 'qiRegen' as const, roll: 1 };
+    const tal = charm('spirit', 2, [qi]);
+    const jade = charm('spirit', 3, [qi]);
+    expect(equipmentBonuses({ charm1: tal }).qiRegen).toBe(itemAffixValue(tal, qi));
+    expect(equipmentBonuses({ charm1: jade }).qiRegen).toBe(itemAffixValue(jade, qi));
+    expect(equipmentBonuses({ charm1: jade }).qiRegen).toBeGreaterThan(
+      equipmentBonuses({ charm1: tal }).qiRegen * 1.9,
+    );
+  });
+
+  it('keeps the base stat and affix count per grade the same on every line', () => {
+    for (const g of GRADE_IDS) {
+      const counts = LINE_IDS.map(
+        (line) =>
+          new Set(
+            charms
+              .filter((c) => c.grade === g && charmLine(c) === line)
+              .map((c) => c.affixes.length),
+          ),
+      );
+      for (const c of counts) expect(c, g).toEqual(counts[0]);
+    }
+    const base = LINE_IDS.map((_, line) => baseValue(charm('earth', line)));
+    expect(new Set(base).size).toBe(1);
   });
 });

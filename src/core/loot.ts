@@ -196,14 +196,84 @@ const ACCESSORY_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Amulet', 'Phoenix Flame Bell', 'Phoenix Flame Mirror'],
 };
 
-/** Talisman and seal names by grade. */
+/**
+ * Charm names by grade in four lines, always listed Attack Talisman, Defend
+ * Talisman, Utility Talisman, Jade Slip (CHARM_LINES). Charms from before the
+ * lines carry the first name, so they load as Attack Talismans.
+ */
 const CHARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Paper Ward Talisman'],
-  spirit: ['Azure Thunder Talisman'],
-  earth: ['Jade Seal Talisman'],
-  heaven: ['Golden Heaven Seal'],
-  immortal: ['Phoenix Flame Talisman'],
+  mortal: [
+    'Paper Ward Talisman',
+    'Paper Body-Guard Talisman',
+    'Paper Fortune Talisman',
+    'Cloudy Jade Slip',
+  ],
+  spirit: [
+    'Azure Thunder Talisman',
+    'Azure Barrier Talisman',
+    'Azure Clear-Mind Talisman',
+    'Azure Spirit Jade Slip',
+  ],
+  earth: [
+    'Jade Seal Talisman',
+    'Jade Vajra Talisman',
+    'Jade Wealth Talisman',
+    'Emerald Jade Token',
+  ],
+  heaven: [
+    'Golden Heaven Seal',
+    'Golden Bell Guard Talisman',
+    'Golden Treasure-Seeking Talisman',
+    'Golden Sun Jade Token',
+  ],
+  immortal: [
+    'Phoenix Flame Talisman',
+    'Phoenix Rebirth Talisman',
+    'Phoenix Heaven-Luck Talisman',
+    'Phoenix Blood Jade',
+  ],
 };
+
+export type CharmLineId = 'attack' | 'defend' | 'utility' | 'jade';
+
+/** The utility affixes: their range on a Charm is scaled by its line's `utility`. */
+const UTILITY_AFFIXES: readonly AffixId[] = ['qiRegen', 'stoneFind', 'treasureFind'];
+
+/**
+ * The Charm lines in CHARM_NAMES order (docs/design.md §6): the affixes each
+ * favours (weight FAVOURED_WEIGHT when drawn, every other affix 1) and the
+ * scale on the range of a utility affix.
+ */
+export const CHARM_LINES: Readonly<
+  Record<CharmLineId, { name: string; favours: readonly AffixId[]; utility: number }>
+> = {
+  attack: {
+    name: 'Attack Talisman',
+    favours: ['critChance', 'critDamage', 'attackSpeed'],
+    utility: 0.75,
+  },
+  defend: { name: 'Defend Talisman', favours: ['maxHp', 'defence', 'lifesteal'], utility: 0.75 },
+  utility: { name: 'Utility Talisman', favours: UTILITY_AFFIXES, utility: 0.75 },
+  jade: { name: 'Jade Slip', favours: UTILITY_AFFIXES, utility: 1.5 },
+};
+
+/** How much more likely a Charm's favoured affix is to be drawn than any other. */
+export const FAVOURED_WEIGHT = 3;
+
+const CHARM_LINE_IDS = Object.keys(CHARM_LINES) as CharmLineId[];
+
+/** A Charm's line, from its name; null for any other item or an unknown name. */
+export function charmLine(item: Pick<Item, 'slot' | 'name' | 'grade'>): CharmLineId | null {
+  if (item.slot !== 'charm' || !Object.hasOwn(CHARM_NAMES, item.grade)) return null;
+  const i = CHARM_NAMES[item.grade].indexOf(item.name);
+  return CHARM_LINE_IDS[i] ?? null;
+}
+
+/** The scale on an affix's range on this item: a Charm's line scales its utility affixes. */
+export function affixScale(item: Pick<Item, 'slot' | 'name' | 'grade'>, id: AffixId): number {
+  const line = charmLine(item);
+  return line && UTILITY_AFFIXES.includes(id) ? CHARM_LINES[line].utility : 1;
+}
 
 /**
  * Item types. `names` lists every name the type can have, in icon-atlas row
@@ -486,8 +556,15 @@ export function baseValue(item: Item): number {
   return valueAt(SLOTS[item.slot].base, item.level, item.baseRoll);
 }
 
-export function affixValue(affix: Affix, level: number): number {
-  return valueAt(AFFIXES[affix.id], level, affix.roll);
+/** An affix's value at an item level; `scale` multiplies both ends of its range (affixScale). */
+export function affixValue(affix: Affix, level: number, scale = 1): number {
+  const def = AFFIXES[affix.id];
+  return valueAt({ ...def, lo: def.lo * scale, hi: def.hi * scale }, level, affix.roll);
+}
+
+/** An affix's value on the item that carries it. */
+export function itemAffixValue(item: Item, affix: Affix): number {
+  return affixValue(affix, item.level, affixScale(item, affix.id));
 }
 
 /**
@@ -509,6 +586,27 @@ export function rollGrade(rng: Rng): GradeId {
   throw new Error('rollGrade: weights do not cover the roll');
 }
 
+/**
+ * Draws `count` affixes without replacement, so an item never has the same
+ * affix twice, each with its roll. A Charm's line favours some affixes
+ * (FAVOURED_WEIGHT); with no line every affix is as likely, as it always was.
+ */
+export function drawAffixes(rng: Rng, count: number, line: CharmLineId | null): Affix[] {
+  const favours = line ? CHARM_LINES[line].favours : [];
+  const weight = (id: AffixId) => (favours.includes(id) ? FAVOURED_WEIGHT : 1);
+  const pool = [...AFFIX_IDS];
+  const affixes: Affix[] = [];
+  for (let n = count; n > 0; n--) {
+    let at = 0;
+    if (line) {
+      let w = int(rng, 0, pool.reduce((sum, id) => sum + weight(id), 0) - 1);
+      while ((w -= weight(pool[at] as AffixId)) >= 0) at++;
+    } else at = int(rng, 0, pool.length - 1);
+    affixes.push({ id: pool.splice(at, 1)[0] as AffixId, roll: roll(rng) });
+  }
+  return affixes;
+}
+
 export function rollItem(rng: Rng, level: number): Item {
   if (!Number.isInteger(level) || level < 1) throw new RangeError(`rollItem: bad level ${level}`);
   const slot = pick(rng, SLOT_IDS);
@@ -523,13 +621,8 @@ export function rollItem(rng: Rng, level: number): Item {
   };
   // Drawn only for a disc, so every other drop rolls the same numbers as before.
   if (isDisc(item)) item.array = pick(rng, ARRAY_IDS);
-  // Draw affixes without replacement: one item never has the same affix twice.
-  const pool = [...AFFIX_IDS];
   const [min, max] = GRADES[grade].affixes;
-  for (let n = int(rng, min, max); n > 0; n--) {
-    const id = pool.splice(int(rng, 0, pool.length - 1), 1)[0] as AffixId;
-    item.affixes.push({ id, roll: roll(rng) });
-  }
+  item.affixes = drawAffixes(rng, int(rng, min, max), charmLine(item));
   if (grade === 'immortal') item.unique = pick(rng, UNIQUE_IDS);
   return item;
 }
@@ -573,7 +666,7 @@ export function equipmentBonuses(equipment: Equipment): Bonuses {
     if (!item) continue;
     // A disc's base roll is its array's strength, not a stat (equippedArray).
     if (!item.array) b[SLOTS[item.slot].base.stat] += baseValue(item);
-    for (const a of item.affixes) b[AFFIXES[a.id].stat] += affixValue(a, item.level);
+    for (const a of item.affixes) b[AFFIXES[a.id].stat] += itemAffixValue(item, a);
     if (item.unique) b[UNIQUES[item.unique].stat] += UNIQUES[item.unique].value;
   }
   return b;
