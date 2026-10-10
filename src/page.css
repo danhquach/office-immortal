@@ -1,11 +1,13 @@
 /* Colours: every text colour here passes 4.5:1 on every surface of its theme
    (checked by src/ui/contrast.test.ts). Text vars: --ink, --muted, --up, --down, --grade-*.
-   Surfaces: --bg, --panel. The combat strip pairs --strip-ink and --strip-hurt with --strip-bg; its text sits on
+   Surfaces: --bg, --panel, --head (panel headers). --grid is the sheet's cell lines. The combat strip pairs --strip-ink and --strip-hurt with --strip-bg; its text sits on
    --strip-bg chips over the stage art. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f3f1ec;
   --panel: #ffffff;
+  --head: #f6f6f3;
+  --grid: #e6e3dc;
   --ink: #23262b;
   --muted: #5c626b;
   --line: #d6d3cc;
@@ -23,29 +25,37 @@
   --grade-heaven: #865c00;
   --grade-immortal: #b0122d;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #17191c;
-    --panel: #212429;
-    --ink: #e6e4df;
-    --muted: #a3a9b1;
-    --line: #34383d;
-    --accent: #7fb0ff;
-    --strip-bg: #0e1117;
-    --strip-ink: #e8ecf2;
-    --up: #6fd38a;
-    --down: #ff8a80;
-    --grade-mortal: #a9aeb5;
-    --grade-spirit: #7aaeff;
-    --grade-earth: #6ccb6f;
-    --grade-heaven: #e8bb2a;
-    --grade-immortal: #ff7389;
-  }
+/* Dark is the default (before any script runs, too); light shows only when
+   Settings resolves to it (data-theme, set by app.ts). */
+:root:not([data-theme='light']) {
+  color-scheme: dark;
+  --bg: #17191c;
+  --panel: #212429;
+  --head: #282c32;
+  --grid: #272b30;
+  --ink: #e6e4df;
+  --muted: #a3a9b1;
+  --line: #34383d;
+  --accent: #7fb0ff;
+  --strip-bg: #0e1117;
+  --strip-ink: #e8ecf2;
+  --up: #6fd38a;
+  --down: #ff8a80;
+  --grade-mortal: #a9aeb5;
+  --grade-spirit: #7aaeff;
+  --grade-earth: #6ccb6f;
+  --grade-heaven: #e8bb2a;
+  --grade-immortal: #ff7389;
 }
 
+/* The page is a sheet: faint cell lines behind every panel. */
 body {
   margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 6rem 1.5rem;
   color: var(--ink);
   font:
     15px/1.45 system-ui,
@@ -54,7 +64,8 @@ body {
 main {
   max-width: 72rem;
   margin: 0 auto;
-  padding: 0 1rem 1rem;
+  /* The status bar closes the page. */
+  padding: 0 1rem;
 }
 h1,
 h2,
@@ -95,24 +106,94 @@ select {
   outline-offset: 2px;
 }
 
-/* Office shell */
+/* Office shell: window chrome edge to edge (a shadow fills the sides past the
+   page's max width), generic, never one real product's look. */
+.titlebar,
+.formula,
+.statusbar {
+  background: var(--panel);
+  box-shadow: 0 0 0 100vmax var(--panel);
+  clip-path: inset(0 -100vmax);
+}
 .titlebar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.4rem 0;
+  gap: 0.25rem 0.6rem;
+  padding: 0.25rem 0;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 0.5rem;
 }
 .titlebar .file {
   font-family: ui-monospace, monospace;
 }
+/* A plain sheet glyph: a blue square ruled into cells. */
+.glyph {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background:
+    linear-gradient(var(--panel) 0 0) 0 6px / 100% 1px no-repeat,
+    linear-gradient(var(--panel) 0 0) 0 12px / 100% 1px no-repeat,
+    linear-gradient(var(--panel) 0 0) 6px 0 / 1px 100% no-repeat,
+    var(--accent);
+}
+.titlebar .glyph + .file {
+  margin-right: auto;
+}
+.titlebar button {
+  padding: 0.1rem 0.6rem;
+}
+/* Formula bar: set dressing, hidden from screen readers. */
+.formula {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.formula .ref {
+  width: 3.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+}
+.formula .fx {
+  font-style: italic;
+}
+.formula .expr {
+  font-family: ui-monospace, monospace;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.4rem;
+  padding: 0.1rem 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+}
+.statusbar .sheet-tab {
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 3px 3px;
+  font-weight: 600;
+}
+.statusbar .muted {
+  margin-left: auto;
+}
 .titlebar .tools {
   display: flex;
   gap: 0.5rem;
-  margin-left: auto;
+  margin: 0 0 0 auto;
 }
 .panel {
   background: var(--panel);
@@ -120,12 +201,15 @@ select {
   border-radius: 4px;
   padding: 0.5rem 0.6rem;
 }
+/* A panel's title sits on a header bar across its top, like a sheet object. */
 .panel > h2 {
-  margin-bottom: 0.5rem;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 0.8rem;
+  margin: -0.5rem -0.6rem 0.5rem;
+  padding: 0.3rem 0.6rem;
+  background: var(--head);
+  border-bottom: 1px solid var(--line);
+  border-radius: 4px 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
 }
 .muted {
   color: var(--muted);
@@ -164,6 +248,7 @@ select {
 }
 .kpi {
   padding: 0.3rem 0.5rem;
+  border-left: 3px solid var(--accent);
 }
 /* Full: one row of tiles, each as wide as its value, so none wraps. */
 @media (min-width: 768px) {
@@ -178,6 +263,23 @@ select {
     white-space: nowrap;
   }
 }
+/* Full: the strip takes the left half, the tiles fill the right half in
+   three columns beside it; everything else spans both. */
+@media (min-width: 1100px) {
+  .game:not(.side) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .game:not(.side) > :not(.strip, .kpis) {
+    grid-column: 1 / -1;
+  }
+  .kpis {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .kpi .value {
+    white-space: normal;
+  }
+}
 /* The realm and its job title are the longest value; give it room. */
 .kpi.realm {
   grid-column: span 2;
@@ -188,16 +290,56 @@ select {
   font-size: 0.8rem;
 }
 .kpi .value {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 600;
 }
-/* The character and the bag hug their content; details and drops take the rest. */
+/* Fixed column widths, so switching a tab never resizes a panel: the
+   character fits the paper doll, the bag fits eight cells, details and drops
+   take the rest. Panels in a row share one height. */
 .columns {
   display: grid;
-  grid-template-columns: auto auto minmax(15rem, 1fr);
+  grid-template-columns: 18.5rem 26.5rem minmax(15rem, 1fr);
   grid-template-areas: 'char bag side';
   gap: 0.5rem;
-  align-items: start;
+}
+/* Full: the row is as tall as the bag, whatever tab is open; the character,
+   details and drops fill it and scroll inside instead of stretching it. */
+@media (min-width: 1100px) {
+  .columns > .character,
+  .columns > .side {
+    contain: size;
+  }
+  .columns > .character {
+    overflow-y: auto;
+  }
+  .columns > .side {
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+  /* The bag's tabs share one cell, so the panel is as tall as the tallest
+     tab and the row never changes height with the open tab. */
+  .inventory {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+  }
+  .inventory > .tabpanel {
+    grid-area: 3 / 1;
+  }
+  .inventory > .tabpanel[hidden] {
+    display: block;
+    visibility: hidden;
+  }
+  .side > .details {
+    overflow-y: auto;
+  }
+  /* A fixed height, so new drops never squeeze the details. */
+  .side > .log {
+    box-sizing: border-box;
+    height: 4.75rem;
+    overflow-y: auto;
+  }
+  .side > .log p {
+    margin: 0;
+  }
 }
 .columns > .character {
   grid-area: char;
@@ -211,7 +353,7 @@ select {
 /* Too narrow for three columns: details move under the grid. */
 @media (max-width: 1099px) {
   .columns {
-    grid-template-columns: auto minmax(15rem, 1fr);
+    grid-template-columns: 18.5rem minmax(15rem, 1fr);
     grid-template-areas:
       'char bag'
       'char side';
@@ -219,8 +361,9 @@ select {
 }
 @media (max-width: 767px) {
   .columns {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'bag' 'side' 'char';
+    align-items: start;
   }
   /* Fewer, bigger cells: easy to tap and the labels never overlap. */
   .inventory .bag {
@@ -235,6 +378,55 @@ select {
   color: var(--strip-ink);
   border-radius: 4px;
   padding: 0.5rem 0.6rem;
+}
+/* On the sheet the strip is an embedded chart: a header bar (floor, kills,
+   a live marker), then the dark stage and the fighters. The pop-out keeps
+   the plain strip. */
+.game .strip {
+  padding: 0;
+  overflow: hidden;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+}
+.game .strip .where {
+  position: static;
+  gap: 0.75rem;
+  justify-content: flex-start;
+  padding: 0.2rem 0.6rem;
+  background: var(--head);
+  border-bottom: 1px solid var(--line);
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.game .strip .where > span {
+  padding: 0;
+  background: none;
+}
+.game .strip .where > :first-child {
+  margin-right: auto;
+  font-weight: 600;
+}
+.game .strip .live {
+  color: var(--up);
+}
+.game .strip .live::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+.game .strip .stage {
+  margin: 0;
+  border-radius: 0;
+}
+.game .strip .fighters {
+  padding: 0.2rem 0.6rem 0.35rem;
+  background: var(--strip-bg);
+  color: var(--strip-ink);
 }
 /* Floor and kills sit over the stage's top corners, on chips. */
 .strip .where {
@@ -469,15 +661,13 @@ select {
   image-rendering: pixelated;
   background-repeat: no-repeat;
 }
-.icon.big {
-  width: 64px;
-  height: 64px;
-  margin: 0;
-}
 .item-head {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.5rem;
+}
+.item-head .icon {
+  margin: 0;
 }
 .cell .q {
   position: absolute;
@@ -617,22 +807,41 @@ body.dragging * {
   user-select: none;
 }
 
-/* Item details */
+/* Item details: compact, so one item fits the panel without scrolling. */
+.details {
+  font-size: 0.85rem;
+}
 .details .title {
   font-weight: 600;
-  font-size: 1.05rem;
-}
-.details h3 {
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 400;
+  font-size: 0.95rem;
 }
 .details .lines,
 .details .compare {
   list-style: none;
-  margin: 0.25rem 0 0.5rem;
+  margin: 0.2rem 0;
   padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.75rem;
+}
+/* One comparison per position: where, vs what, and its Equip button on one line. */
+.details .cmp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+  padding-top: 0.3rem;
+  border-top: 1px solid var(--line);
+}
+.details h3 {
+  min-width: 0;
+  font-size: inherit;
+  color: var(--muted);
+  font-weight: 400;
+}
+.details .row {
+  margin: 0.3rem 0 0;
 }
 .up {
   color: var(--up);

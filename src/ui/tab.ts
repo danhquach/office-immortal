@@ -105,6 +105,8 @@ export async function popOut(
   try {
     copyStyles(win.document, pip.document);
     pip.document.documentElement.lang = win.document.documentElement.lang;
+    const theme = win.document.documentElement.dataset.theme;
+    if (theme) pip.document.documentElement.dataset.theme = theme;
     pip.document.title = win.document.title;
     pip.document.body.className = 'popped';
     pip.document.body.append(build());

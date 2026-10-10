@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import css from '../page.css?raw';
 import { contrast } from './contrast.ts';
 
-/** The custom properties set in the light block and in the dark-scheme block of page.css. */
+/** The custom properties set in the light block and in the dark (default) block of page.css. */
 function themes(): { light: Map<string, string>; dark: Map<string, string> } {
-  const dark = /@media \(prefers-color-scheme: dark\)\s*{\s*:root\s*{([^}]*)}/.exec(css);
+  const dark = /:root:not\(\[data-theme='light'\]\)\s*{([^}]*)}/.exec(css);
   const light = /^:root\s*{([^}]*)}/m.exec(css);
   if (!light?.[1] || !dark?.[1]) throw new Error('page.css: theme blocks not found');
   const vars = (block: string) =>
@@ -20,7 +20,7 @@ function themes(): { light: Map<string, string>; dark: Map<string, string> } {
 
 const GRADES = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
 const TEXT = ['--ink', '--muted', '--up', '--down', ...GRADES.map((g) => `--grade-${g}`)];
-const SURFACES = ['--bg', '--panel'];
+const SURFACES = ['--bg', '--panel', '--head'];
 
 describe('contrast', () => {
   it('matches known WCAG ratios', () => {
