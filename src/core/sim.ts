@@ -40,6 +40,7 @@ import {
   rollDrop,
   slotsFor,
   type EquipSlotId,
+  type GradeId,
   type Item,
 } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
@@ -164,9 +165,32 @@ export function retire(state: GameState): GameState {
 }
 
 /**
+ * The lowest realm (index into REALMS) that may equip a weapon of each grade
+ * (docs/design.md §6): Spirit Treasures need Foundation Establishment, Immortal
+ * Treasures Golden Core. Magic Tools and every other item type have no gate.
+ */
+const WEAPON_REALM: Readonly<Partial<Record<GradeId, number>>> = {
+  earth: 1,
+  heaven: 1,
+  immortal: 2,
+};
+
+/** The realm (index into REALMS) needed to equip `item`; 0 when anyone may. */
+export function requiredRealm(item: Item): number {
+  if (item.slot !== 'weapon' || !Object.hasOwn(WEAPON_REALM, item.grade)) return 0;
+  return WEAPON_REALM[item.grade] ?? 0;
+}
+
+/** True when the cultivator's realm is high enough to equip `item`. */
+export function canEquip(c: Cultivator, item: Item): boolean {
+  return realmOf(c.level) >= requiredRealm(item);
+}
+
+/**
  * Equips the bag item at `index` into position `to` (by default its first free
  * position, else its first), returning the new state; `state` is left
- * untouched. Whatever was in that position goes back into the bag.
+ * untouched. Whatever was in that position goes back into the bag. Throws if
+ * the cultivator's realm is below the item's (requiredRealm).
  */
 export function equip(state: GameState, index: number, to?: EquipSlotId): GameState {
   const item = Number.isInteger(index) ? state.inventory[index] : undefined;
@@ -174,6 +198,7 @@ export function equip(state: GameState, index: number, to?: EquipSlotId): GameSt
   if (to !== undefined && !slotsFor(item.slot).includes(to)) {
     throw new RangeError(`equip: ${item.slot} does not fit ${to}`);
   }
+  if (!canEquip(state.cultivator, item)) throw new RangeError('equip: realm too low');
   const s = structuredClone(state);
   const c = s.cultivator;
   const at = to ?? defaultSlot(c.equipment, item);

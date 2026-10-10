@@ -13,12 +13,14 @@ import {
 import { INVENTORY_SIZE, sellPrice } from './economy.ts';
 import {
   ARRAY_TICK,
+  canEquip,
   canFaceTribulation,
   ENEMY_ARRIVAL,
   equip,
   faceTribulation,
   mitigate,
   newGame,
+  requiredRealm,
   tick,
   type GameState,
 } from './sim.ts';
@@ -304,6 +306,78 @@ describe('equip', () => {
     const b = tick(start, 600);
     expect(a.kills).toBeGreaterThan(b.kills);
     expect(a.highestFloor).toBeGreaterThanOrEqual(b.highestFloor);
+  });
+});
+
+describe('treasure tier realm gate', () => {
+  /** A fresh run at `level`, with a `grade` weapon in the bag. */
+  function at(level: number, grade: GradeId): GameState {
+    const s = withBag(newGame(1, 'sword'), [{ ...weapon(5, 0), grade }]);
+    s.cultivator.level = level;
+    return s;
+  }
+
+  // Each tier at its boundary: the last level of the realm below, then the first allowed.
+  it.each([
+    ['mortal', 1, null],
+    ['spirit', 1, null],
+    ['earth', 10, 11],
+    ['heaven', 10, 11],
+    ['immortal', 20, 21],
+  ] as const)('gates a %s weapon: blocked at %s, allowed from %s', (grade, below, from) => {
+    if (from === null) {
+      expect(equip(at(below, grade), 0).cultivator.equipment.weapon?.grade).toBe(grade);
+      return;
+    }
+    const low = at(below, grade);
+    expect(canEquip(low.cultivator, low.inventory[0] as Item)).toBe(false);
+    expect(() => equip(low, 0)).toThrow(RangeError);
+    expect(equip(at(from, grade), 0).cultivator.equipment.weapon?.grade).toBe(grade);
+  });
+
+  it('names the realm each tier needs', () => {
+    const w = weapon(5, 0);
+    expect(
+      ['mortal', 'spirit', 'earth', 'heaven', 'immortal'].map((grade) =>
+        requiredRealm({ ...w, grade: grade as GradeId }),
+      ),
+    ).toEqual([0, 0, 1, 1, 2]);
+  });
+
+  it('gates weapons only', () => {
+    for (const slot of [
+      'head',
+      'chest',
+      'boots',
+      'attachment',
+      'sideArm',
+      'accessory',
+      'charm',
+    ] as const) {
+      expect(requiredRealm({ ...weapon(5, 0), slot, grade: 'immortal' })).toBe(0);
+    }
+  });
+
+  it('gives no gate for a grade it does not know', () => {
+    for (const grade of ['__proto__', 'toString', 'constructor'])
+      expect(requiredRealm({ ...weapon(5, 0), grade: grade as GradeId })).toBe(0);
+  });
+
+  it('leaves the state untouched when blocked', () => {
+    const low = at(1, 'immortal');
+    const copy = structuredClone(low);
+    expect(() => equip(low, 0)).toThrow(RangeError);
+    expect(low).toEqual(copy);
+  });
+
+  it('keeps an already equipped weapon and swaps it out for an allowed one', () => {
+    const s = at(1, 'mortal');
+    s.cultivator.equipment.weapon = { ...weapon(9, 1), grade: 'immortal' };
+    const after = equip(s, 0);
+    expect(after.cultivator.equipment.weapon?.grade).toBe('mortal');
+    expect(after.inventory[0]?.grade).toBe('immortal');
+    // A gated weapon left on keeps fighting.
+    expect(tick(s, 60).cultivator.equipment.weapon?.grade).toBe('immortal');
   });
 });
 
@@ -685,7 +759,9 @@ describe('Path balance', () => {
     for (let m = 0; m < minutes; m++) {
       s = tick(s, 60);
       for (let i = 0; i < s.inventory.length; i++) {
-        for (const to of slotsFor((s.inventory[i] as Item).slot)) {
+        const item = s.inventory[i] as Item;
+        if (!canEquip(s.cultivator, item)) continue;
+        for (const to of slotsFor(item.slot)) {
           const next = equip(s, i, to);
           if (power(next) > power(s) * 1.001) {
             s = next;

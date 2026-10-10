@@ -187,6 +187,14 @@ Every drop is generated from a seeded roll.
 - **Treasure tier:** a weapon's details show its tier by grade: Mortal and
   Spirit are a **Magic Tool**, Earth and Heaven a **Spirit Treasure**, Immortal
   an **Immortal Treasure**.
+- **Tier gate:** a tier needs a minimum realm to equip. A Magic Tool needs
+  none, a Spirit Treasure needs Foundation Establishment (level 11) and an
+  Immortal Treasure needs Golden Core (level 21). The gates sit low so a rare
+  drop is usable early in a run. Below the realm, Details names it ("Requires
+  Golden Core to equip.") and the Equip action is disabled; a double-click or
+  drag does nothing. The gate applies only when equipping, so a weapon already
+  worn (e.g. from a save made before the gate) stays equipped. Other item types
+  have no tier and no gate.
 - **Retired names:** a save's weapon with a name from before the five families
   (Iron Jian, Bronze Longsword, Tempered Steel Blade; Azure Cloud Jian, Sky
   River Blade, Frost Lotus Sword; Jade Serpent Blade, Verdant Pine Sword,

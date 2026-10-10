@@ -5,6 +5,7 @@ import { equip, faceTribulation, newGame, tick, type GameState } from '../core/s
 import {
   arraySetUp,
   compareToEquipped,
+  equipBlock,
   cellLabel,
   durationLabel,
   formatBonus,
@@ -99,6 +100,27 @@ describe('items', () => {
   it('gives no treasure tier for a grade it does not know', () => {
     expect(treasureTier({ ...stapler, grade: '__proto__' as Item['grade'] })).toBeNull();
     expect(treasureTier({ ...stapler, grade: 'toString' as Item['grade'] })).toBeNull();
+  });
+});
+
+describe('equipBlock', () => {
+  const at = (level: number) => ({ ...newCultivator('sword'), level });
+
+  it('names the realm a Spirit Treasure needs below it, and nothing from it', () => {
+    expect(equipBlock(at(10), stapler)).toBe('Requires Foundation Establishment');
+    expect(equipBlock(at(11), stapler)).toBeNull();
+  });
+
+  it('names the realm an Immortal Treasure needs below it, and nothing from it', () => {
+    const relic = { ...stapler, grade: 'immortal' } as const;
+    expect(equipBlock(at(20), relic)).toBe('Requires Golden Core');
+    expect(equipBlock(at(21), relic)).toBeNull();
+  });
+
+  it('never blocks a Magic Tool or another item type', () => {
+    expect(equipBlock(at(1), { ...stapler, grade: 'mortal' })).toBeNull();
+    expect(equipBlock(at(1), { ...stapler, grade: 'spirit' })).toBeNull();
+    expect(equipBlock(at(1), { ...stapler, slot: 'head', grade: 'immortal' })).toBeNull();
   });
 });
 
