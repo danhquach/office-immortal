@@ -36,7 +36,7 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 
 | Path | Office cover | Role | Primary stat |
 |---|---|---|---|
-| Sword Cultivator | Sales | Fast hits, crit | Agility |
+| Sword Cultivator | Sales | Fast hits, crit, a little lifesteal (5%) | Agility |
 | Body Refiner | Facilities | Tanky, lifesteal | Body |
 | Talisman Master | IT | Burst, area damage | Spirit |
 
@@ -217,8 +217,11 @@ Every drop is generated from a seeded roll.
 | Heaven | 4–5 | 2.7% |
 | Immortal | 5 + one unique effect | 0.3% |
 
-- **Drop chance per kill:** demon 4%, elite 25%, boss 50%, Tribulation
-  100%; treasure find multiplies it. About one drop per floor at the start.
+- **Drop chance per kill:** demon 2%, elite 12%, boss 25%, Tribulation
+  100%; treasure find multiplies it. About 0.55 drops a floor at the start.
+  Offline (Overtime Cultivation, §10) every chance but a Tribulation's is
+  multiplied by 0.5: demon 1%, elite 6%, boss 12.5%, about 0.28 drops a floor.
+  Grades, affixes and item level roll the same online and offline.
 - **Affix pool:** +crit chance, +crit damage, +attack speed, lifesteal,
   +max HP, +defence, +qi regen, +spirit stone find, +treasure find.
 - **Quality %:** how close the item rolled to its maximum, shown on every item
@@ -279,6 +282,11 @@ treasure find, a higher offline cap, more starting stat points.
 - **Overtime Cultivation:** on return, the game replays the time away (capped
   at 8 hours, more with Flexible Hours, §9) and shows a summary: floors
   cleared, levels, drops kept, sold and salvaged, and the currencies earned.
+  Offline means the browser or the game's tab was closed. The replay plays
+  the same as an open tab, except items drop at half the online rate (§6), so
+  playing is the better way to find loot and catch-up is mostly for floors and
+  XP. The summary says that drops are reduced while away. A tab left open in
+  the background is online and keeps the online rate.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini

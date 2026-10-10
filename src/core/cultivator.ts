@@ -24,7 +24,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     name: 'Sword Cultivator',
     primary: 'agility',
     critMultiplier: 2,
-    lifesteal: 0,
+    lifesteal: 0.05,
     burstEvery: 0,
     burstMultiplier: 1,
   },

@@ -1,6 +1,7 @@
 // Overtime Cultivation: the time away is replayed through the same tick() the
-// page uses, so offline progress is exactly what an open tab would have made
-// (docs/design.md §10). Pure: the caller passes in the clock.
+// page uses, so offline progress is what an open tab would have made, except
+// that items drop less often (docs/design.md §10). Pure: the caller passes in
+// the clock.
 
 import { OFFLINE_SECONDS_PER_RANK, type Passives } from './prestige.ts';
 import { tick, type GameState } from './sim.ts';
@@ -48,7 +49,7 @@ export function catchUp(
   const cap = offlineCap(state.passives);
   const capped = awaySeconds > cap;
   const seconds = Number.isNaN(awaySeconds) ? 0 : Math.min(cap, Math.max(0, awaySeconds));
-  const after = tick(state, seconds);
+  const after = tick(state, seconds, { offline: true });
   return {
     state: after,
     summary: {

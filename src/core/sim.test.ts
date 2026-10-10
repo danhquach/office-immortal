@@ -23,13 +23,14 @@ import {
   requiredRealm,
   tick,
   type GameState,
+  type TickOptions,
 } from './sim.ts';
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
-function run(state: GameState, seconds: number, step: number): GameState {
+function run(state: GameState, seconds: number, step: number, opts: TickOptions = {}): GameState {
   const steps = Math.round(seconds / step);
-  for (let i = 0; i < steps; i++) state = tick(state, step);
+  for (let i = 0; i < steps; i++) state = tick(state, step, opts);
   return state;
 }
 
@@ -729,6 +730,17 @@ describe('Formation Disc arrays', () => {
     (array) => {
       const start = wearing(disc(array, 'heaven', 0.6), 9);
       expect(run(start, 1800, 0.5)).toEqual(tick(start, 1800));
+    },
+  );
+
+  it.each<ArrayId>(['binding', 'illusion', 'killing'])(
+    'gives the same result for one big offline step as many small ones with a %s array',
+    (array) => {
+      const start = wearing(disc(array, 'heaven', 0.6), 9);
+      const offline = { offline: true };
+      const big = tick(start, 1800, offline);
+      expect(big.kills).toBeGreaterThan(0);
+      expect(run(start, 1800, 0.5, offline)).toEqual(big);
     },
   );
 });

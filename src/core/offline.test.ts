@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { catchUp, MAX_OFFLINE_SECONDS, offlineSeconds } from './offline.ts';
-import { newGame, tick } from './sim.ts';
+import { newGame, tick, type GameState } from './sim.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -23,10 +23,34 @@ describe('offlineSeconds', () => {
 });
 
 describe('catchUp', () => {
-  it('replays the time away through the sim', () => {
+  it('replays the time away through the sim, at the offline drop rate', () => {
     const start = newGame(9, 'sword');
     const { state } = catchUp(start, 600);
-    expect(state).toEqual(tick(start, 600));
+    expect(state).toEqual(tick(start, 600, { offline: true }));
+  });
+
+  // Every drop, kept, sold or salvaged on pickup.
+  const drops = (s: GameState): number => s.inventory.length + s.dropsSold + s.dropsSalvaged;
+
+  it('drops about half as often as an open tab, background or not, for the same kills', () => {
+    let online = 0;
+    let offline = 0;
+    let onlineKills = 0;
+    let offlineKills = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      const start = newGame(seed, 'sword');
+      // An open tab, foreground or background, plays tick() with no options.
+      const open = tick(start, MAX_OFFLINE_SECONDS);
+      const away = catchUp(start, MAX_OFFLINE_SECONDS).state;
+      online += drops(open);
+      offline += drops(away);
+      onlineKills += open.kills;
+      offlineKills += away.kills;
+    }
+    const ratio = offline / offlineKills / (online / onlineKills);
+    // Tribulations always drop, online and offline, so the ratio sits a little above 0.5.
+    expect(ratio).toBeGreaterThan(0.4);
+    expect(ratio).toBeLessThan(0.65);
   });
 
   it('caps time away measured from a save stamp, as the page does', () => {
