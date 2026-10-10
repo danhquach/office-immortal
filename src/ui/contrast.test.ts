@@ -54,6 +54,22 @@ describe('page.css colours', () => {
       },
     );
 
+    // The XP bar is set once on :root, so the dark theme inherits the same colours.
+    it.each([
+      ['--xp-ink', '--xp-fill'],
+      ['--xp-track-ink', '--xp-track'],
+    ])(`${name}: XP bar %s on %s is at least 4.5:1`, (text, surface) => {
+      expect(
+        contrast(vars.get(text) as string, vars.get(surface) as string),
+      ).toBeGreaterThanOrEqual(4.5);
+    });
+
+    it(`${name}: the XP fill stands out from its track at least 3:1`, () => {
+      expect(
+        contrast(vars.get('--xp-fill') as string, vars.get('--xp-track') as string),
+      ).toBeGreaterThanOrEqual(3);
+    });
+
     it.each(['--strip-ink', '--strip-hurt'])(
       `${name}: %s on the strip is at least 4.5:1`,
       (text) => {
