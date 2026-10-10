@@ -59,14 +59,19 @@ import {
   tick,
   type GameState,
 } from '../core/sim.ts';
+import { createCloud } from '../storage/cloud.ts';
+import { readCloudConfig } from '../storage/cloud-config.ts';
+import { ADOPT_KEY } from '../storage/cloud-meta.ts';
 import {
   browserStorage,
   clearSave,
+  encodeSave,
   loadSave,
   SAVE_KEY,
   writeSave,
   type SaveStorage,
 } from '../storage/save.ts';
+import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
 import {
   dropToast,
   faviconHref,
@@ -80,7 +85,8 @@ import {
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
-import { autosave, runs } from './run.ts';
+import { CLOUD_HINT, cloudStatusLine, needsChoice, saveSummary } from './cloud-view.ts';
+import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
@@ -228,9 +234,46 @@ function newSeed(): number {
 /** The one run playing; starting or loading another stops its timers and listeners first. */
 const run = runs();
 
+/** The cloud save's sync, made on first use; null where the build has no cloud config or storage is blocked. */
+let sync: Sync | null = null;
+/** A message from the cloud save for the player, shown over the game until dismissed. */
+let cloudNote: string | null = null;
+let showCloudNote: ((text: string) => void) | null = null;
+/** Where the run is drawn, so the sync can restart it when it takes the cloud's save. */
+let current: { root: HTMLElement; storage: SaveStorage } | null = null;
+
+function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null {
+  const config = readCloudConfig(import.meta.env);
+  if (!config || !storage) return null;
+  current = { root, storage };
+  sync ??= createSync({
+    cloud: createCloud({
+      config,
+      storage,
+      fetch: (url, init) => fetch(url, init),
+      now: Date.now,
+      // Web Locks keep two tabs from renewing the sign-in at once; older browsers go without.
+      locks: navigator.locks
+        ? { request: (name, callback) => navigator.locks.request(name, callback) }
+        : null,
+    }),
+    storage,
+    now: Date.now,
+    visible: () => !document.hidden,
+    onAdopt: () => current && start(current.root, current.storage),
+    onNote: (text) => {
+      cloudNote = text;
+      showCloudNote?.(text);
+    },
+  });
+  return sync;
+}
+
 /** Loads the saved run and replays the time away, or offers a new run when there is none. */
 export function start(root: HTMLElement, storage: SaveStorage | null = browserStorage()): void {
   run.stop();
+  // Before play() saves over the local run: the cloud check compares against it.
+  cloudSync(root, storage)?.begin();
   showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
   const saved = storage && loadSave(storage);
   if (saved) {
@@ -485,6 +528,134 @@ function overtimePanel(summary: OvertimeSummary): HTMLElement {
   ok.addEventListener('click', () => box.remove());
   box.append(h, el('p', 'muted', 'Your cultivator kept fighting while you were away.'), lines, ok);
   return box;
+}
+
+/**
+ * The cloud save's parts of the page: a note and the choice between two saves
+ * (both over the game, since a choice must not wait for the Menu), and the
+ * Menu's Cloud save section. All text goes in as text; the sync's state is the
+ * only input, and every redraw comes from its status.
+ */
+function cloudPanels(
+  cloud: Sync,
+  scope: RunScope,
+): { note: HTMLElement; choice: HTMLElement; menu: HTMLElement[] } {
+  const note = el('section', 'panel cloud-panel');
+  note.setAttribute('role', 'status');
+  const noteText = el('p');
+  note.append(
+    noteText,
+    button('OK', '', () => {
+      note.hidden = true;
+      cloudNote = null;
+    }),
+  );
+  const showNote = (text: string): void => {
+    noteText.textContent = text;
+    note.hidden = false;
+  };
+  note.hidden = true;
+  if (cloudNote) showNote(cloudNote);
+  showCloudNote = showNote;
+
+  const choice = el('section', 'panel cloud-panel');
+  choice.setAttribute('role', 'alert');
+  const choiceText = el('p');
+  const localLine = el('p', 'muted');
+  const cloudLine = el('p', 'muted');
+  const keep = button('', '', () => void cloud.keepLocal());
+  const use = button('Use cloud save', 'primary', () => cloud.useCloud());
+  choice.append(choiceText, localLine, cloudLine, keep, use);
+  choice.hidden = true;
+
+  const statusLine = el('p');
+  statusLine.setAttribute('aria-live', 'polite');
+  const turnOn = button('', 'primary', () => void cloud.turnOn());
+  const syncNow = button('Sync now', '', () => void cloud.syncNow());
+  const codeLine = el('p', 'muted');
+  const getCode = button('Get link code', '', () => {
+    void cloud.linkCode().then((made) => {
+      if (made) {
+        codeLine.textContent =
+          `Link code: ${made.code}. Enter it on your other device within ` +
+          `${Math.round(made.ttl / 60)} minutes. It works once.`;
+      }
+    });
+  });
+  const turnOff = button('Turn off on this device', '', () => {
+    codeLine.textContent = '';
+    cloud.turnOff();
+  });
+  const linkBox = el('label', 'field', 'Link code from your other device');
+  const linkInput = el('input');
+  linkInput.type = 'text';
+  linkInput.maxLength = 32;
+  linkInput.autocomplete = 'off';
+  linkInput.spellcheck = false;
+  linkBox.append(linkInput);
+  const link = button('Link this device', '', () => {
+    const code = linkInput.value.trim();
+    if (code) void cloud.link(code).then(() => (linkInput.value = ''));
+  });
+  const linkHint = el('p', 'muted hint', 'Linking asks which save to keep.');
+  const linkRow = el('div', 'cloud-row');
+  linkRow.append(linkBox, link);
+
+  const menu = [
+    el('h3', '', 'Cloud save'),
+    el('p', 'muted hint', CLOUD_HINT),
+    statusLine,
+    turnOn,
+    syncNow,
+    getCode,
+    codeLine,
+    linkRow,
+    linkHint,
+    turnOff,
+  ];
+
+  function draw(status: SyncStatus): void {
+    const now = Date.now();
+    setText(statusLine, cloudStatusLine(status, now));
+    const off = status.kind === 'off';
+    const relink = status.kind === 'relink';
+    const on = !off && !relink;
+    setText(turnOn, relink ? 'Start a new cloud save' : 'Turn on cloud save');
+    turnOn.hidden = !(off || relink);
+    linkRow.hidden = linkHint.hidden = !(off || relink);
+    const syncing = status.kind === 'syncing' || status.kind === 'checking';
+    syncNow.hidden = getCode.hidden = !on;
+    setButton(syncNow, 'Sync now', syncing || needsChoice(status));
+    turnOff.hidden = off;
+    codeLine.hidden = !on;
+    choice.hidden = !needsChoice(status);
+    if (status.kind === 'conflict') {
+      setText(
+        choiceText,
+        "This device's save and the cloud save have both changed. Choose which to keep. The other is replaced.",
+      );
+      setText(localLine, `This device: ${saveSummary(status.local, now)}`);
+      setText(cloudLine, `Cloud: ${saveSummary(status.server, now)}`);
+      localLine.hidden = cloudLine.hidden = use.hidden = false;
+      setText(keep, "Keep this device's");
+    } else if (status.kind === 'unreadable') {
+      setText(
+        choiceText,
+        "The cloud save can't be read, so this device's save is kept. You can replace the cloud save with it.",
+      );
+      localLine.hidden = cloudLine.hidden = use.hidden = true;
+      setText(keep, "Overwrite cloud with this device's save");
+    }
+  }
+  draw(cloud.status);
+  const unsubscribe = cloud.subscribe(draw);
+  // "Synced 2 min ago" ages while nothing else changes.
+  scope.every(30_000, () => draw(cloud.status));
+  scope.signal.addEventListener('abort', () => {
+    unsubscribe();
+    if (showCloudNote === showNote) showCloudNote = null;
+  });
+  return { note, choice, menu };
 }
 
 function play(
@@ -978,6 +1149,9 @@ function play(
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
+  const cloud = sync;
+  const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
+  if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   game.append(strip, kpis, columns);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
@@ -998,12 +1172,25 @@ function play(
   bar.append(tools);
 
   // Reset progress: asks first, then deletes the save and starts a new run.
-  const resetText = el(
-    'p',
-    '',
-    'Delete all progress, including Dao Insight and passives? This cannot be undone.',
-  );
+  const resetText = el('p');
+  let resetting = false;
   const resetYes = button('Reset everything', 'primary', () => {
+    if (resetting) return;
+    resetting = true;
+    void resetAll().finally(() => (resetting = false));
+  });
+  async function resetAll(): Promise<void> {
+    // The cloud save goes first, so a failure leaves everything as it was; a
+    // local-only reset would just be undone by the next cloud check.
+    if (cloud && cloud.status.kind !== 'off') {
+      resetText.textContent = 'Deleting the cloud save…';
+      const gone = await cloud.deleteCloud();
+      if (!gone.ok) {
+        resetText.textContent = `${gone.message} Nothing was reset.`;
+        resetYes.hidden = true;
+        return;
+      }
+    }
     if (storage && !clearSave(storage)) {
       resetText.textContent = 'The browser refused to delete the save. Nothing was reset.';
       resetYes.hidden = true;
@@ -1012,7 +1199,7 @@ function play(
     menu.close();
     // start() stops this run (timers, autosave, pop-out) before anything is saved again.
     start(root, storage);
-  });
+  }
   const resetNo = button('Cancel', '', () => {
     resetBox.hidden = true;
     resetAsk.focus();
@@ -1022,6 +1209,12 @@ function play(
   resetBox.append(resetText, resetYes, resetNo);
   resetBox.hidden = true;
   const resetAsk = button('Reset progress…', '', () => {
+    resetText.textContent =
+      'Delete all progress, including Dao Insight and passives' +
+      (cloud && cloud.status.kind !== 'off'
+        ? ', and the cloud save (other devices linked to it lose it too)'
+        : '') +
+      '? This cannot be undone.';
     resetBox.hidden = false;
     resetYes.hidden = false;
     resetNo.focus();
@@ -1061,6 +1254,7 @@ function play(
     if (notices.state() !== 'unsupported') {
       settings.append(el('h3', '', 'Notifications'), noticeBtn);
     }
+    if (cloudUi) settings.append(...cloudUi.menu);
     settings.append(
       el('h3', '', 'Reset progress'),
       el(
@@ -1720,9 +1914,11 @@ function play(
   window.addEventListener(
     'storage',
     (e) => {
-      if (storage && (e.key === null || e.key === SAVE_KEY) && e.newValue === null) {
-        start(root, storage);
-      }
+      if (!storage) return;
+      if ((e.key === null || e.key === SAVE_KEY) && e.newValue === null) start(root, storage);
+      // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
+      // Only an adoption writes this key, so autosaving tabs can't set each other off.
+      else if (e.key === ADOPT_KEY) start(root, storage);
     },
     { signal },
   );
@@ -1774,10 +1970,19 @@ function play(
   function save(): void {
     if (!storage) return;
     step();
-    writeSave(storage, state, Date.now());
+    const savedAt = Date.now();
+    if (writeSave(storage, state, savedAt)) cloud?.offer(encodeSave(state, savedAt), savedAt);
   }
 
   scope.every(TICK_MS, step);
   scope.every(FRAME_TICK_MS, drawSprites);
   autosave(scope, save, { doc: document, win: window }, SAVE_MS);
+  if (cloud) {
+    // After autosave's own listeners, so the upload sends the save they just wrote.
+    document.addEventListener('visibilitychange', () => document.hidden && cloud.flush('hidden'), {
+      signal,
+    });
+    window.addEventListener('pagehide', () => cloud.flush('pagehide'), { signal });
+    window.addEventListener('online', () => cloud.retry(), { signal });
+  }
 }

@@ -1433,6 +1433,31 @@ button.primary {
 .settings .confirm {
   margin-top: 0.5rem;
 }
+/* Cloud save: the link-code row, and the panels over the game (a note, a choice). */
+.field input {
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.3rem;
+  font: inherit;
+}
+.settings .cloud-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: end;
+  margin-top: 0.4rem;
+}
+.settings .cloud-row[hidden] {
+  display: none;
+}
+.cloud-panel button {
+  margin-right: 0.4rem;
+}
+.cloud-panel p {
+  margin: 0 0 0.5rem;
+}
 .help {
   margin: 0;
   padding-left: 1.1rem;
