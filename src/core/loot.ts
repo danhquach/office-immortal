@@ -5,6 +5,7 @@
 // within a range set by the item level. Values and quality are worked out from
 // the rolls, so they can't drift from each other.
 
+import type { PathId } from './cultivator.ts';
 import { chance, int, pick, type Rng } from './rng.ts';
 
 /** An item's type; it decides which equipment positions take the item. */
@@ -257,7 +258,43 @@ export const CHARM_LINES: Readonly<
   jade: { name: 'Jade Slip', favours: UTILITY_AFFIXES, utility: 1.5 },
 };
 
-/** How much more likely a Charm's favoured affix is to be drawn than any other. */
+/** The affixes each Path favours: a family that leans to the Path draws them at FAVOURED_WEIGHT. */
+export const PATH_FAVOURS: Readonly<Record<PathId, readonly AffixId[]>> = {
+  sword: ['critChance', 'critDamage', 'attackSpeed'],
+  body: ['maxHp', 'defence', 'lifesteal'],
+  talisman: ['qiRegen', 'critDamage', 'attackSpeed'],
+};
+
+/**
+ * The Path each family leans toward, in the order of its type's names by grade
+ * (docs/design.md §6). Types not listed (Head, Chest, Boots, Attachment, Charm)
+ * are neutral.
+ */
+const FAMILY_PATHS: Partial<Record<SlotId, readonly PathId[]>> = {
+  // Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal.
+  weapon: ['sword', 'talisman', 'sword', 'talisman', 'body'],
+  // Darts, Binding Rope.
+  sideArm: ['sword', 'body'],
+  // Pendant, Bell, Mirror.
+  accessory: ['body', 'talisman', 'sword'],
+};
+
+/** The Path an item's family leans toward; null for a neutral family or an unknown name. */
+export function itemPath(item: Pick<Item, 'slot' | 'name' | 'grade'>): PathId | null {
+  const paths = Object.hasOwn(FAMILY_PATHS, item.slot) ? FAMILY_PATHS[item.slot] : undefined;
+  if (!paths || !Object.hasOwn(GRADES, item.grade)) return null;
+  return paths[namesFor(item.slot, item.grade).indexOf(item.name)] ?? null;
+}
+
+/** The affixes this item's affix draw favours: its Charm line's or its family's Path's. */
+export function favouredAffixes(item: Pick<Item, 'slot' | 'name' | 'grade'>): readonly AffixId[] {
+  const line = charmLine(item);
+  if (line) return CHARM_LINES[line].favours;
+  const path = itemPath(item);
+  return path ? PATH_FAVOURS[path] : [];
+}
+
+/** How much more likely a favoured affix (Charm line or family Path) is to be drawn than any other. */
 export const FAVOURED_WEIGHT = 3;
 
 const CHARM_LINE_IDS = Object.keys(CHARM_LINES) as CharmLineId[];
@@ -588,17 +625,16 @@ export function rollGrade(rng: Rng): GradeId {
 
 /**
  * Draws `count` affixes without replacement, so an item never has the same
- * affix twice, each with its roll. A Charm's line favours some affixes
- * (FAVOURED_WEIGHT); with no line every affix is as likely, as it always was.
+ * affix twice, each with its roll. `favours` weigh FAVOURED_WEIGHT, every other
+ * affix 1; with none every affix is as likely, as it always was.
  */
-export function drawAffixes(rng: Rng, count: number, line: CharmLineId | null): Affix[] {
-  const favours = line ? CHARM_LINES[line].favours : [];
+export function drawAffixes(rng: Rng, count: number, favours: readonly AffixId[]): Affix[] {
   const weight = (id: AffixId) => (favours.includes(id) ? FAVOURED_WEIGHT : 1);
   const pool = [...AFFIX_IDS];
   const affixes: Affix[] = [];
   for (let n = count; n > 0; n--) {
     let at = 0;
-    if (line) {
+    if (favours.length) {
       let w = int(rng, 0, pool.reduce((sum, id) => sum + weight(id), 0) - 1);
       while ((w -= weight(pool[at] as AffixId)) >= 0) at++;
     } else at = int(rng, 0, pool.length - 1);
@@ -622,7 +658,7 @@ export function rollItem(rng: Rng, level: number): Item {
   // Drawn only for a disc, so every other drop rolls the same numbers as before.
   if (isDisc(item)) item.array = pick(rng, ARRAY_IDS);
   const [min, max] = GRADES[grade].affixes;
-  item.affixes = drawAffixes(rng, int(rng, min, max), charmLine(item));
+  item.affixes = drawAffixes(rng, int(rng, min, max), favouredAffixes(item));
   if (grade === 'immortal') item.unique = pick(rng, UNIQUE_IDS);
   return item;
 }

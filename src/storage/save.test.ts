@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buyBagSpace, changePath, resetStats, setFilter, spendPoints } from '../core/economy.ts';
 import { makeTribulation, type Enemy } from '../core/floors.ts';
-import { charmLine, type Item } from '../core/loot.ts';
+import { charmLine, itemPath, type Item } from '../core/loot.ts';
 import { derive, xpToNext } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import {
@@ -696,6 +696,40 @@ describe('rejects', () => {
         gear('charm', 'mortal', 'Paper Ward Talisman'),
       );
       expect(charmLine(st?.inventory[0] as Item)).toBe('attack');
+    });
+
+    it('loads leaning-family items from before the lean unchanged, with their stored rolls', () => {
+      // Off-Path affixes on each: only new drops lean (#51).
+      const seal = {
+        ...gear('weapon', 'heaven', 'Golden Mountain Seal'),
+        affixes: [
+          { id: 'critChance', roll: 0.2 },
+          { id: 'qiRegen', roll: 1 },
+          { id: 'stoneFind', roll: 0 },
+          { id: 'attackSpeed', roll: 0.55 },
+        ],
+      };
+      const bell = {
+        ...gear('accessory', 'spirit', 'Azure Soul-Scattering Bell'),
+        affixes: [{ id: 'maxHp', roll: 0.4 }],
+      };
+      const save = inBag(seal);
+      (cult(save).equipment as J).accessory1 = bell;
+      const st = load(save)?.state;
+      expect(st?.inventory[0]).toEqual(seal);
+      expect(st?.cultivator.equipment.accessory1).toEqual(bell);
+      expect(itemPath(st?.inventory[0] as Item)).toBe('body');
+      expect(itemPath(st?.cultivator.equipment.accessory1 as Item)).toBe('talisman');
+    });
+
+    it.each([
+      ['a stored Path', 'path', 'sword'],
+      ['stored favoured affixes', 'favours', ['critChance']],
+      ['a prototype key', '__proto__', { path: 'sword' }],
+    ])('rejects a leaning-family item with %s', (_, key, value) => {
+      const flying = gear('weapon', 'mortal', 'Iron Flying Sword');
+      Object.defineProperty(flying, key, { value, enumerable: true });
+      expect(load(inBag(flying))).toBeNull();
     });
 
     it.each(FAMILIES)('loads a %s of %s grade named %s unchanged', (slot, grade, name) => {

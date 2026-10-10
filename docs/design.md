@@ -128,9 +128,9 @@ Every drop is generated from a seeded roll.
 
 - **Accessories and Hidden Weapons come in families** like weapons: each
   grade drops one of each family. Accessories are Pendants, Bells or Mirrors;
-  Hidden Weapons are Darts or Binding Ropes. The family only changes the name
-  and icon: every Accessory rolls the same base stat and affixes, and so does
-  every Hidden Weapon.
+  Hidden Weapons are Darts or Binding Ropes. Every Accessory rolls the same
+  base stat, and so does every Hidden Weapon; the family sets the name, the
+  icon and the Path its affixes lean toward (**Path lean**, below).
 
 | Grade | Pendant | Bell | Mirror |
 |---|---|---|---|
@@ -203,8 +203,9 @@ Every drop is generated from a seeded roll.
 
 - **Weapons are a Taoist cultivator's magic tools,** in five families. Each
   grade drops one of each family, and the material gets richer with the grade
-  (each name has its own icon). The family only changes the name and icon:
-  every weapon rolls the same base stat and affixes.
+  (each name has its own icon). Every weapon rolls the same base stat; the
+  family sets the name, the icon and the Path its affixes lean toward
+  (**Path lean**, below).
 
 | Grade | Flying Sword | Horsetail Whisk | Peachwood Sword | Fan | Seal |
 |---|---|---|---|---|---|
@@ -213,6 +214,24 @@ Every drop is generated from a seeded roll.
 | Earth | Jade Serpent Flying Sword | Jade Thread Whisk | Hundred-Year Peachwood Sword | Jade Crane Fan | Jade Mountain Seal |
 | Heaven | Golden Crow Flying Sword | Golden Sun Whisk | Thunderstruck Peachwood Sword | Golden Cloud Fan | Golden Mountain Seal |
 | Immortal | Phoenix Flame Flying Sword | Phoenix Plume Whisk | Thousand-Year Peachwood Sword | Phoenix Flame Fan | Heaven-Crushing Seal |
+
+- **Path lean:** each Weapon, Hidden Weapon and Accessory family leans toward
+  one Path through its affixes. When a leaning item draws its affixes (still
+  without repeats), each of its Path's three favoured affixes weighs 3 and
+  every other affix 1, the same weighting as a Charm line, so a favoured one is
+  about 3× as likely. Every affix can still roll, the affix count per grade is
+  unchanged, and any Path can equip any item. Head, Chest, Boots and
+  Attachments (Gourds and Formation Discs) are neutral and draw evenly; Charms
+  follow their own lines (above). There is no other bonus for a matching Path.
+  Details shows "Favoured by: <Path>" on a leaning item, highlighted when it is
+  the player's Path. Items saved before the lean keep their stored rolls; only
+  new drops lean.
+
+| Path | Weapon | Hidden Weapon | Accessory | Favoured affixes (weight 3, others 1) |
+|---|---|---|---|---|
+| Sword Cultivator | Flying Sword, Peachwood Sword | Darts | Mirror | crit chance, crit damage, attack speed |
+| Body Refiner | Seal | Binding Rope | Pendant | max HP, defence, lifesteal |
+| Talisman Master | Fan, Horsetail Whisk | (Soul Banner, #52) | Bell | qi regen, crit damage, attack speed |
 
 - **Treasure tier:** a weapon's details show its tier by grade: Mortal and
   Spirit are a **Magic Tool**, Earth and Heaven a **Spirit Treasure**, Immortal

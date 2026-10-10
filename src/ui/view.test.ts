@@ -15,6 +15,7 @@ import {
   itemTag,
   treasureTier,
   charmLineName,
+  favouredBy,
   overtimeLines,
   passiveRow,
   realmLabel,
@@ -704,5 +705,46 @@ describe('sellBelowLabel', () => {
     expect(sellBelowLabel({ count: 0, highest: null, stones: 0 })).toBe(
       'Nothing to sell below that grade.',
     );
+  });
+});
+
+describe('favouredBy', () => {
+  const item = (slot: Item['slot'], name: string, grade: Item['grade'] = 'earth'): Item => ({
+    slot,
+    name,
+    level: 10,
+    grade,
+    baseRoll: 0.5,
+    affixes: [],
+  });
+
+  it.each([
+    ['weapon', 'Jade Serpent Flying Sword', 'Sword Cultivator'],
+    ['weapon', 'Jade Thread Whisk', 'Talisman Master'],
+    ['weapon', 'Hundred-Year Peachwood Sword', 'Sword Cultivator'],
+    ['weapon', 'Jade Crane Fan', 'Talisman Master'],
+    ['weapon', 'Jade Mountain Seal', 'Body Refiner'],
+    ['sideArm', 'Jade Viper Darts', 'Sword Cultivator'],
+    ['sideArm', 'Jade Dragon-Binding Chain', 'Body Refiner'],
+    ['accessory', 'Jade Dragon Pendant', 'Body Refiner'],
+    ['accessory', 'Jade Wind Chime', 'Talisman Master'],
+    ['accessory', 'Jade Demon-Revealing Mirror', 'Sword Cultivator'],
+  ] as const)('names the Path a %s %s leans to', (slot, name, path) => {
+    expect(favouredBy(item(slot, name), 'body')?.text).toBe(`Favoured by: ${path}`);
+  });
+
+  it("marks a match only on the player's Path", () => {
+    const seal = item('weapon', 'Jade Mountain Seal');
+    expect(favouredBy(seal, 'body')?.match).toBe(true);
+    expect(favouredBy(seal, 'sword')?.match).toBe(false);
+    expect(favouredBy(seal, 'talisman')?.match).toBe(false);
+  });
+
+  it('shows nothing on neutral items or an unknown name', () => {
+    expect(favouredBy(item('head', 'Jade Lotus Crown'), 'sword')).toBeNull();
+    expect(favouredBy(item('attachment', 'Jade Formation Disc'), 'sword')).toBeNull();
+    expect(favouredBy(item('charm', 'Jade Vajra Talisman'), 'body')).toBeNull();
+    expect(favouredBy(item('weapon', 'Iron Flying Sword', 'earth'), 'sword')).toBeNull();
+    expect(favouredBy(item('weapon', '__proto__'), 'sword')).toBeNull();
   });
 });
