@@ -109,6 +109,8 @@ import {
   iconCell,
   realmLabel,
   retireLabel,
+  SUMMARY_ICONS,
+  summaryIcon,
   retireLines,
   sellBelowLabel,
   SPRITE_SIZE,
@@ -366,11 +368,30 @@ function setIcon(icon: HTMLElement, item: Item | undefined): void {
   s.backgroundPosition = `${-col * px}px ${-row * px}px`;
 }
 
-function kpi(label: string): { box: HTMLElement; value: HTMLElement } {
+/** Shows column `col` of the summary atlas on `icon`; sized in em, so it follows the chip's text. */
+function setSummaryIcon(icon: HTMLElement, col: number): void {
+  const s = icon.style;
+  s.backgroundImage = cssUrl(artUrl('summary'));
+  s.backgroundSize = `${SUMMARY_ICONS.length * 100}% 100%`;
+  s.backgroundPosition = `${(col / (SUMMARY_ICONS.length - 1)) * 100}% 0`;
+}
+
+/** A summary chip: an optional decorative icon, the label, then the value. */
+function kpi(
+  label: string,
+  iconCol?: number,
+): { box: HTMLElement; icon: HTMLElement | null; value: HTMLElement } {
   const box = el('div', 'kpi');
+  let icon: HTMLElement | null = null;
+  if (iconCol !== undefined) {
+    icon = el('span', 'kpi-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    setSummaryIcon(icon, iconCol);
+    box.append(icon);
+  }
   const value = el('span', 'value');
   box.append(el('span', 'label', label), value);
-  return { box, value };
+  return { box, icon, value };
 }
 
 function panel(className: string, title: string): { box: HTMLElement; heading: HTMLElement } {
@@ -579,9 +600,10 @@ function play(
   const kpis = el('section', 'kpis');
   kpis.setAttribute('aria-label', 'Summary');
   const kPath = kpi('Path');
-  const kRealm = kpi('Realm');
-  const kStones = kpi('Spirit Stones');
-  const kEssence = kpi('Spirit Essence');
+  const kRealm = kpi('Realm', summaryIcon('realm', state.cultivator.level));
+  const kStones = kpi('Spirit Stones', summaryIcon('stones'));
+  const kEssence = kpi('Spirit Essence', summaryIcon('essence'));
+  let realmIcon = summaryIcon('realm', state.cultivator.level);
   kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
@@ -1245,6 +1267,12 @@ function play(
     const c = state.cultivator;
     kPath.value.textContent = PATHS[c.path].name;
     kRealm.value.textContent = realmLabel(c.level);
+    // A breakthrough swaps the realm's icon.
+    const icon = summaryIcon('realm', c.level);
+    if (icon !== realmIcon && kRealm.icon) {
+      realmIcon = icon;
+      setSummaryIcon(kRealm.icon, icon);
+    }
     const bar = xpBar(c);
     xp.style.setProperty('--xp', `${bar.percent}%`);
     for (const n of [xpLevel, xpFillLevel]) setText(n, bar.level);

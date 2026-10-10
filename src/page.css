@@ -282,6 +282,15 @@ select {
   font-size: 0.85rem;
   white-space: nowrap;
 }
+/* Decorative (aria-hidden): drawn at 64 px, shown at the chip's text size. */
+.kpi-icon {
+  display: inline-block;
+  width: 1.25em;
+  height: 1.25em;
+  margin-right: 0.3rem;
+  vertical-align: -0.3em;
+  background-repeat: no-repeat;
+}
 .kpi .label {
   color: var(--muted);
   margin-right: 0.35rem;

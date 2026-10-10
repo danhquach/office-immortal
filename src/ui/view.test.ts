@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newCultivator, type Cultivator } from '../core/cultivator.ts';
+import { newCultivator, REALMS, type Cultivator } from '../core/cultivator.ts';
 import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
@@ -25,6 +25,8 @@ import {
   passiveRow,
   realmLabel,
   retireLabel,
+  SUMMARY_ICONS,
+  summaryIcon,
   retireLines,
   respecView,
   STAT_GROUPS,
@@ -368,6 +370,27 @@ describe('waveLabel', () => {
     }
     expect(seen.slice(0, 3)).toEqual(Array<string>(3).fill('Wave 1 / 3'));
     expect(seen.slice(-3)).toEqual(['Elite', 'Boss', 'Tribulation']);
+  });
+});
+
+describe('summaryIcon', () => {
+  it('has Spirit Stones, Spirit Essence and one icon per realm, each its own column', () => {
+    expect(SUMMARY_ICONS).toHaveLength(2 + REALMS.length);
+    expect(new Set(SUMMARY_ICONS).size).toBe(SUMMARY_ICONS.length);
+    expect(summaryIcon('stones')).toBe(0);
+    expect(summaryIcon('essence')).toBe(1);
+  });
+
+  it('changes the realm icon at each breakthrough, and Immortal keeps the last', () => {
+    expect(summaryIcon('realm', 1)).toBe(2);
+    expect(summaryIcon('realm', 10)).toBe(2);
+    expect(summaryIcon('realm', 11)).toBe(3);
+    expect(summaryIcon('realm', 60)).toBe(7);
+    expect(summaryIcon('realm', 61)).toBe(8);
+    expect(summaryIcon('realm', 3000)).toBe(8);
+    const cols = Array.from({ length: REALMS.length }, (_, r) => summaryIcon('realm', r * 10 + 1));
+    expect(new Set(cols).size).toBe(REALMS.length);
+    expect(cols.every((c) => c >= 0 && c < SUMMARY_ICONS.length)).toBe(true);
   });
 });
 

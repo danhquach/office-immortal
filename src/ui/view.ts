@@ -405,6 +405,18 @@ export function realmLabel(level: number): string {
   return realm.title ? `${realm.name} · ${realm.title}` : realm.name;
 }
 
+/** Icons in the summary atlas, in its column order (tools/art/manifest.json "summary"). */
+export const SUMMARY_ICONS: readonly string[] = [
+  'stones',
+  'essence',
+  ...REALMS.map((_, i) => `realm-${i}`),
+];
+
+/** The summary atlas column of icon `id`, or of the realm `level` is in when `id` is 'realm'. */
+export function summaryIcon(id: 'stones' | 'essence' | 'realm', level = 1): number {
+  return SUMMARY_ICONS.indexOf(id === 'realm' ? `realm-${realmOf(level)}` : id);
+}
+
 /** Items `tick` picked up between two states, newest first. tick() only appends to the bag. */
 export function freshDrops(prev: GameState, next: GameState): Item[] {
   return next.inventory.slice(prev.inventory.length).reverse();
