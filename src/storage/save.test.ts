@@ -287,14 +287,14 @@ describe('rejects', () => {
 
   describe('text', () => {
     const names: [string, string][] = [
-      ['an oversized name', 'Jade Stapler'.repeat(10_000)],
+      ['an oversized name', 'Iron Jian'.repeat(10_000)],
       ['a made-up name', 'Sword of Admin'],
       ['markup', '<img src=x onerror=alert(1)>'],
-      ['a bidi override', 'Jade \u202eStapler'],
-      ['a zero-width space', 'Jade\u200bStapler'],
-      ['a zero-width joiner at the end', 'Jade Stapler\u200d'],
-      ['a Cyrillic look-alike', 'J\u0430de Stapler'],
-      ['padding', ' Jade Stapler'],
+      ['a bidi override', 'Iron \u202eJian'],
+      ['a zero-width space', 'Iron\u200bJian'],
+      ['a zero-width joiner at the end', 'Iron Jian\u200d'],
+      ['a Cyrillic look-alike', 'Ir\u043en Jian'],
+      ['padding', ' Iron Jian'],
     ];
 
     it.each(names)('rejects %s as an item name', (_, name) => {
@@ -306,8 +306,71 @@ describe('rejects', () => {
     });
 
     it('rejects a real name from another slot', () => {
-      const other = item(raw()).slot === 'weapon' ? 'Thinking Cap' : 'Jade Stapler';
+      const other = item(raw()).slot === 'weapon' ? 'Thinking Cap' : 'Iron Jian';
       expect(tampered((s) => void (item(s).name = other))).toBeNull();
+    });
+  });
+
+  describe('weapon names', () => {
+    const weapon = (s: ReturnType<typeof raw>, grade: string, name: string) =>
+      Object.assign(item(s), { slot: 'weapon', grade, name, affixes: [] });
+
+    it('rejects a weapon name from another grade', () => {
+      expect(tampered((s) => void weapon(s, 'mortal', 'Nine Suns Sabre'))).toBeNull();
+    });
+
+    it('rejects a retired weapon name on another type', () => {
+      expect(
+        tampered((s) => void Object.assign(item(s), { slot: 'head', name: 'Jade Stapler' })),
+      ).toBeNull();
+    });
+
+    it.each(['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'])(
+      'renames a retired %s to the first name of its grade',
+      (old) => {
+        const save = raw();
+        weapon(save, 'mortal', old);
+        const loaded = decodeSave(JSON.stringify(save));
+        expect(loaded?.state.inventory[0]?.name).toBe('Iron Jian');
+      },
+    );
+
+    it.each([
+      ['a zero-width joiner', 'Jade Stapler\u200d'],
+      ['a bidi override', 'Jade \u202eStapler'],
+      ['a Cyrillic look-alike', 'J\u0430de Stapler'],
+      ['padding', ' Jade Stapler'],
+      ['a prototype key', '__proto__'],
+      ['an object key', 'constructor'],
+      ['a method name', 'toString'],
+    ])('rejects a weapon named with %s instead of renaming it', (_, name) => {
+      expect(tampered((s) => void weapon(s, 'mortal', name))).toBeNull();
+    });
+
+    it.each([123, null, ['Jade Stapler'], {}])('rejects a weapon name of %j', (name) => {
+      expect(
+        tampered(
+          (s) =>
+            void Object.assign(item(s), { slot: 'weapon', grade: 'mortal', name, affixes: [] }),
+        ),
+      ).toBeNull();
+    });
+
+    it('checks the grade before renaming', () => {
+      expect(tampered((s) => void weapon(s, '__proto__', 'Jade Stapler'))).toBeNull();
+    });
+
+    it('renames by grade', () => {
+      const save = raw();
+      Object.assign(weapon(save, 'heaven', 'Spirit Ruler'), {
+        affixes: [
+          { id: 'critChance', roll: 0.5 },
+          { id: 'maxHp', roll: 0.5 },
+          { id: 'defence', roll: 0.5 },
+          { id: 'qiRegen', roll: 0.5 },
+        ],
+      });
+      expect(decodeSave(JSON.stringify(save))?.state.inventory[0]?.name).toBe('Golden Crow Sword');
     });
   });
 

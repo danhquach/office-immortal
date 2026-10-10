@@ -40,6 +40,8 @@ import {
   AFFIXES,
   EQUIP_SLOTS,
   GRADES,
+  namesFor,
+  renamed,
   SLOTS,
   UNIQUES,
   type Affix,
@@ -404,7 +406,7 @@ function readItem(v: unknown, highestFloor: number): Item {
   if (new Set(affixes.map((a) => a.id)).size !== affixes.length) fail('repeated affix');
   const item: Item = {
     slot,
-    name: oneOf(o.name, SLOTS[slot].names),
+    name: oneOf(renamed(slot, grade, o.name), namesFor(slot, grade)),
     // An item drops on a floor the run has reached.
     level: int(o.level, 1, highestFloor),
     grade,

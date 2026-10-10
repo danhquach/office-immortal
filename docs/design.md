@@ -101,8 +101,19 @@ Every drop is generated from a seeded roll.
   over ten positions. An item fills its first free position; a player can
   choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
-- **Base stat:** each item type rolls in a range (e.g. a Jade Stapler weapon
+- **Base stat:** each item type rolls in a range (e.g. an Iron Jian weapon
   rolls 8–14 damage at item level 10).
+- **Weapon names follow the grade,** so a better drop looks better (each name
+  has its own icon, coloured like its grade):
+
+| Grade | Weapon names |
+|---|---|
+| Mortal | Iron Jian, Bronze Longsword, Tempered Steel Blade |
+| Spirit | Azure Cloud Jian, Sky River Blade, Frost Lotus Sword |
+| Earth | Jade Serpent Blade, Verdant Pine Sword, Emerald Wind Jian |
+| Heaven | Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold Sabre |
+| Immortal | Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre |
+
 - **Grades (rarity) and affix count:**
 
 | Grade | Affixes | Drop weight (start) |

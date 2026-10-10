@@ -28,7 +28,10 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               size), recolor, aura (glow colour), plus any sprite knob to override.
   background  id*, height*, seed, prompt, dim (brightness and saturation, default
               0.8), extra, trim_top (source rows dropped), blend (px of seam fade).
-  icon        id*, family*, materials* (one family per item name), seed, prompt.
+  icon        id*, then either family* and materials* (one recolour of the
+              art-src/icon-<id>.jpg generation per item name) or files* (one
+              ready-made icon_size PNG under art-src/ per item name, used as
+              drawn), plus seed, prompt, source (provenance only).
 """
 
 import json
@@ -459,9 +462,13 @@ def icon_atlas() -> Image.Image:
     one per item name, in the order loot.ts lists the names)."""
     n = MANIFEST["icon_size"]
     entries = MANIFEST["icons"]
-    rows = max(len(e["materials"]) for e in entries)
+    rows = max(len(e.get("files", e.get("materials", []))) for e in entries)
     out = Image.new("RGBA", (n * len(entries), n * rows), (0, 0, 0, 0))
     for c, e in enumerate(entries):
+        if "files" in e:
+            for r, f in enumerate(e["files"]):
+                out.paste(Image.open(SRC / f).convert("RGBA"), (c * n, r * n))
+            continue
         base = icon(e, n)
         for r, dst in enumerate(e["materials"]):
             out.paste(material(base, e["family"], dst), (c * n, r * n))
@@ -487,13 +494,13 @@ KNOBS = {
     "variant": {"id", "size", "base", "recolor", "aura", "seed", "prompt", "lift", "keep", "crop",
                 "flip", "extra", "shadow", "border", "margin"},
     "background": {"id", "height", "seed", "prompt", "dim", "extra", "trim_top", "blend"},
-    "icon": {"id", "family", "materials", "seed", "prompt"},
+    "icon": {"id", "family", "materials", "files", "source", "seed", "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
     "variant": {"id", "size", "base"},
     "background": {"id", "height"},
-    "icon": {"id", "family", "materials"},
+    "icon": {"id"},
 }
 
 
@@ -512,6 +519,16 @@ def check_manifest() -> None:
             errors.append(f"{kind} {name}: missing {k!r}")
         if kind == "variant" and "poses" not in by_id.get(e["base"], {}):
             errors.append(f"variant {name}: base {e['base']!r} is not a sprite with poses")
+        if kind == "icon":
+            if "files" in e and ("family" in e or "materials" in e):
+                errors.append(f"icon {name}: files cannot be mixed with family or materials")
+            elif "files" not in e and not ("family" in e and "materials" in e):
+                errors.append(f"icon {name}: needs either files or both family and materials")
+            for f in e.get("files", []):
+                if not (SRC / f).exists():
+                    errors.append(f"icon {name}: source {f} missing")
+                elif Image.open(SRC / f).size != (MANIFEST["icon_size"],) * 2:
+                    errors.append(f"icon {name}: {f} is not {MANIFEST['icon_size']} px square")
         for f in [] if kind != "sprite" else [e["poses"]["idle"], *(p for r in ("attack", "hit", "death") for p in e["poses"][r])]:
             if not (SRC / f).exists():
                 errors.append(f"sprite {name}: source {f} missing")

@@ -208,6 +208,9 @@ export const ICON_COLUMNS: readonly SlotId[] = [
   'charm',
 ];
 
+/** Rows in the icon atlas: one per name of the type with the most names. */
+export const ICON_ROWS = Math.max(...ICON_COLUMNS.map((s) => SLOTS[s].names.length));
+
 /**
  * An item's cell in the icon atlas: its type's column, and the row of its name's
  * material (one row per name, in the order loot.ts lists them). An unknown

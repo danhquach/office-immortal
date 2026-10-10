@@ -6,7 +6,14 @@ import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
 import { createRng } from '../core/rng.ts';
 import { newGame, type GameState } from '../core/sim.ts';
 import { artUrl } from './art.ts';
-import { enemySprite, ICON_COLUMNS, iconCell, SPRITE_SIZE, stripEvents } from './view.ts';
+import {
+  enemySprite,
+  ICON_COLUMNS,
+  ICON_ROWS,
+  iconCell,
+  SPRITE_SIZE,
+  stripEvents,
+} from './view.ts';
 
 /** Every shipped art file as a base64 data URL, to weigh them. */
 const INLINE = import.meta.glob<string>('../assets/art/*.png', {
@@ -16,7 +23,7 @@ const INLINE = import.meta.glob<string>('../assets/art/*.png', {
 });
 const exists = (name: string) => artUrl(name) !== '';
 const manifest = JSON.parse(manifestText) as {
-  icons: { id: SlotId; materials: string[] }[];
+  icons: { id: SlotId; materials?: string[]; files?: string[] }[];
   sprites: { id: string; size?: number; base?: string }[];
 };
 
@@ -91,18 +98,25 @@ describe('iconCell', () => {
     expect(manifest.icons.map((i) => i.id)).toEqual(ICON_COLUMNS);
   });
 
-  it('gives every item name its own icon, one material row per name', () => {
+  it('gives every item name its own icon, one atlas row per name', () => {
     const cells = new Set<string>();
     for (const slot of ICON_COLUMNS) {
-      expect(manifest.icons.find((i) => i.id === slot)?.materials).toHaveLength(
-        SLOTS[slot].names.length,
-      );
+      const entry = manifest.icons.find((i) => i.id === slot);
+      expect(entry?.files ?? entry?.materials).toHaveLength(SLOTS[slot].names.length);
       for (const name of SLOTS[slot].names) {
         const { col, row } = iconCell({ slot, name } as Item);
         cells.add(`${col},${row}`);
       }
     }
     expect(cells.size).toBe(ICON_COLUMNS.reduce((n, s) => n + SLOTS[s].names.length, 0));
+  });
+
+  it('sizes the atlas the way the page draws it: a 32 px cell per column and row', () => {
+    const png = atob((INLINE['../assets/art/icons.png'] ?? '').split(',')[1] ?? '');
+    // The PNG header stores width and height as big-endian 32-bit numbers at bytes 16 and 20.
+    const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+    expect([u32(16), u32(20)]).toEqual([32 * ICON_COLUMNS.length, 32 * ICON_ROWS]);
+    expect(ICON_ROWS).toBe(15);
   });
 
   it('falls back to the first material for a name it does not know', () => {
