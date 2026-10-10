@@ -282,4 +282,20 @@ describe('equipmentBonuses', () => {
     expect(b.maxHp).toBe(20 + 50);
     expect(b.damagePct).toBe(0.25);
   });
+
+  it('sums to the exact same numbers whatever order the items went on', () => {
+    // Float sums depend on order; a save reloads gear in position order.
+    const positions = Object.keys(EQUIP_SLOTS) as (keyof typeof EQUIP_SLOTS)[];
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = createRng(seed);
+      const worn = positions.map((at) => {
+        let item = rollItem(rng, 1 + (seed % 40));
+        while (item.slot !== EQUIP_SLOTS[at].takes) item = rollItem(rng, item.level);
+        return [at, item] as const;
+      });
+      const forward = equipmentBonuses(Object.fromEntries(worn));
+      const backward = equipmentBonuses(Object.fromEntries([...worn].reverse()));
+      expect(backward).toEqual(forward);
+    }
+  });
 });

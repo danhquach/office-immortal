@@ -22,6 +22,7 @@ import {
   type Item,
   type SlotId,
 } from '../core/loot.ts';
+import type { OvertimeSummary } from '../core/offline.ts';
 import type { GameState } from '../core/sim.ts';
 
 /** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
@@ -187,4 +188,27 @@ export function gridMove(index: number, key: string, size: number, cols: number)
     End: Math.min(size - 1, index - (index % cols) + cols - 1),
   };
   return moves[key] ?? null;
+}
+
+/** A time away, e.g. "45 s", "12 min" or "2 h 5 min". */
+export function durationLabel(seconds: number): string {
+  const s = Math.floor(seconds);
+  if (s < 60) return `${s} s`;
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+}
+
+/** The Overtime Cultivation summary, one line per count. */
+export function overtimeLines(summary: OvertimeSummary): string[] {
+  const away = `Away ${durationLabel(summary.seconds)}`;
+  const lines = [
+    summary.capped ? `Away more than ${durationLabel(summary.seconds)} (the most replayed)` : away,
+    `Floors climbed: ${summary.floorsClimbed}`,
+    `Levels gained: ${summary.levels}`,
+    `Kills: ${summary.kills}`,
+    `Drops kept: ${summary.dropsKept}`,
+  ];
+  if (summary.dropsLost > 0) lines.push(`Lost to a full bag: ${summary.dropsLost}`);
+  return lines;
 }

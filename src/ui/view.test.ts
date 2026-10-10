@@ -5,11 +5,13 @@ import { newGame, tick } from '../core/sim.ts';
 import {
   compareToEquipped,
   cellLabel,
+  durationLabel,
   formatBonus,
   freshDrops,
   gridMove,
   itemLines,
   itemTag,
+  overtimeLines,
   statRows,
   waveLabel,
 } from './view.ts';
@@ -195,5 +197,47 @@ describe('gridMove', () => {
 
   it('ignores other keys', () => {
     expect(move(5, 'Enter')).toBeNull();
+  });
+});
+
+describe('durationLabel', () => {
+  it.each([
+    [0, '0 s'],
+    [59.9, '59 s'],
+    [60, '1 min'],
+    [3599, '59 min'],
+    [3600, '1 h 0 min'],
+    [8 * 3600, '8 h 0 min'],
+    [2 * 3600 + 5 * 60 + 30, '2 h 5 min'],
+  ])('shows %s seconds as %s', (seconds, text) => {
+    expect(durationLabel(seconds)).toBe(text);
+  });
+});
+
+describe('overtimeLines', () => {
+  const summary = {
+    seconds: 7500,
+    capped: false,
+    floorsClimbed: 3,
+    levels: 4,
+    kills: 120,
+    dropsKept: 9,
+    dropsLost: 0,
+  };
+
+  it('lists every count', () => {
+    expect(overtimeLines(summary)).toEqual([
+      'Away 2 h 5 min',
+      'Floors climbed: 3',
+      'Levels gained: 4',
+      'Kills: 120',
+      'Drops kept: 9',
+    ]);
+  });
+
+  it('says when the cap cut the time short, and shows drops lost', () => {
+    const lines = overtimeLines({ ...summary, seconds: 8 * 3600, capped: true, dropsLost: 2 });
+    expect(lines[0]).toBe('Away more than 8 h 0 min (the most replayed)');
+    expect(lines.at(-1)).toBe('Lost to a full bag: 2');
   });
 });
