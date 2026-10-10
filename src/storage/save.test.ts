@@ -606,6 +606,56 @@ describe('rejects', () => {
       expect(eq[at]).toEqual(gear(slot, 'earth', FIRST[slot]?.earth as string));
     });
 
+    // The Bell, Mirror and Binding Rope families (#45): each name loads on its own grade only.
+    const FAMILIES: [string, string, string][] = [
+      ['accessory', 'mortal', 'Bronze Clapper Bell'],
+      ['accessory', 'mortal', 'Bronze Hand Mirror'],
+      ['accessory', 'spirit', 'Azure Soul-Scattering Bell'],
+      ['accessory', 'spirit', 'Azure Bagua Mirror'],
+      ['accessory', 'earth', 'Jade Wind Chime'],
+      ['accessory', 'earth', 'Jade Demon-Revealing Mirror'],
+      ['accessory', 'heaven', 'Golden Sun Bell'],
+      ['accessory', 'heaven', 'Golden Sun Mirror'],
+      ['accessory', 'immortal', 'Phoenix Flame Bell'],
+      ['accessory', 'immortal', 'Phoenix Flame Mirror'],
+      ['charm', 'mortal', 'Hempen Binding Cord'],
+      ['charm', 'spirit', 'Azure Silk Sash'],
+      ['charm', 'earth', 'Jade Dragon-Binding Chain'],
+      ['charm', 'heaven', 'Golden Heaven-Wrapping Sash'],
+      ['charm', 'immortal', 'Phoenix Flame Binding Rope'],
+    ];
+
+    it.each(FAMILIES)('loads a %s of %s grade named %s unchanged', (slot, grade, name) => {
+      const loaded = load(inBag(gear(slot, grade, name)));
+      expect(loaded?.state.inventory[0]).toEqual(gear(slot, grade, name));
+    });
+
+    it.each(FAMILIES)('rejects a %s from another grade than %s named %s', (slot, grade, name) => {
+      const other = grade === 'mortal' ? 'spirit' : 'mortal';
+      expect(load(inBag(gear(slot, other, name)))).toBeNull();
+    });
+
+    it.each(FAMILIES)(
+      'rejects a %s of %s grade named %s on the other type',
+      (slot, grade, name) => {
+        const wrong = slot === 'accessory' ? 'charm' : 'accessory';
+        expect(load(inBag(gear(wrong, grade, name)))).toBeNull();
+      },
+    );
+
+    it.each([
+      ['a missing hyphen', 'accessory', 'spirit', 'Azure Soul Scattering Bell'],
+      ['a Latin look-alike (I for l)', 'accessory', 'mortal', 'Bronze Clapper BeIl'],
+      ['a Cyrillic look-alike', 'accessory', 'earth', 'J\u0430de Wind Chime'],
+      ['a zero-width space', 'charm', 'earth', 'Jade Dragon-Binding\u200bChain'],
+      ['a bidi override', 'accessory', 'heaven', 'Golden Sun \u202eMirror'],
+      ['other casing', 'charm', 'immortal', 'phoenix flame binding rope'],
+      ['padding', 'charm', 'mortal', 'Hempen Binding Cord '],
+      ['a family with no such grade name', 'charm', 'mortal', 'Bronze Binding Rope'],
+    ])('rejects a family name with %s', (_, slot, grade, name) => {
+      expect(load(inBag(gear(slot, grade, name)))).toBeNull();
+    });
+
     it('loads a side arm item, an equipped side arm and a side arm filter unchanged', () => {
       const save = inBag(gear('sideArm', 'mortal', 'Iron Throwing Darts'));
       (cult(save).equipment as J).sideArm = gear('sideArm', 'spirit', 'Azure Frost Darts');

@@ -162,22 +162,28 @@ const ATTACHMENT_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Gourd'],
 };
 
-/** Pendant and amulet names by grade. */
+/**
+ * Accessory names by grade in three families, always listed Pendant, Bell,
+ * Mirror. The family changes only the name and icon.
+ */
 const ACCESSORY_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Bone Bead Pendant'],
-  spirit: ['Azure Spirit Pendant'],
-  earth: ['Jade Dragon Pendant'],
-  heaven: ['Golden Sun Amulet'],
-  immortal: ['Phoenix Flame Amulet'],
+  mortal: ['Bone Bead Pendant', 'Bronze Clapper Bell', 'Bronze Hand Mirror'],
+  spirit: ['Azure Spirit Pendant', 'Azure Soul-Scattering Bell', 'Azure Bagua Mirror'],
+  earth: ['Jade Dragon Pendant', 'Jade Wind Chime', 'Jade Demon-Revealing Mirror'],
+  heaven: ['Golden Sun Amulet', 'Golden Sun Bell', 'Golden Sun Mirror'],
+  immortal: ['Phoenix Flame Amulet', 'Phoenix Flame Bell', 'Phoenix Flame Mirror'],
 };
 
-/** Talisman and seal names by grade. */
+/**
+ * Charm names by grade in two families, always listed Talisman, Binding Rope.
+ * The family changes only the name and icon.
+ */
 const CHARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Paper Ward Talisman'],
-  spirit: ['Azure Thunder Talisman'],
-  earth: ['Jade Seal Talisman'],
-  heaven: ['Golden Heaven Seal'],
-  immortal: ['Phoenix Flame Talisman'],
+  mortal: ['Paper Ward Talisman', 'Hempen Binding Cord'],
+  spirit: ['Azure Thunder Talisman', 'Azure Silk Sash'],
+  earth: ['Jade Seal Talisman', 'Jade Dragon-Binding Chain'],
+  heaven: ['Golden Heaven Seal', 'Golden Heaven-Wrapping Sash'],
+  immortal: ['Phoenix Flame Talisman', 'Phoenix Flame Binding Rope'],
 };
 
 /**

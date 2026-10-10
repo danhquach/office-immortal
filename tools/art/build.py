@@ -39,7 +39,8 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               under art-src/ per item name, e.g. from render-weapons.mjs: no
               cut-out, cropped to its shape and drawn smooth at full cell
               size), plus seed, prompt, source (provenance only).
-              Atlas cells are icon_size x icon_scale px.
+              Atlas cells are icon_size x icon_scale px; the atlas is saved
+              in 256 colours of its own, not the shared palette.
 """
 
 import json
@@ -390,6 +391,13 @@ def indexed(img: Image.Image) -> Image.Image:
     return p
 
 
+def save_smooth(img: Image.Image, path: Path) -> None:
+    """The item icons as a PNG of 256 colours picked from the icons themselves,
+    not the shared palette: close to their source art at a fifth of the size of
+    full colour."""
+    img.convert("RGBA").quantize(256, method=Image.Quantize.FASTOCTREE).save(path, optimize=True)
+
+
 def save(img: Image.Image, path: Path) -> None:
     """An indexed PNG: palette colours plus one transparent entry, the smallest file."""
     (img if img.mode == "P" else indexed(img)).save(path, optimize=True, transparency=len(ALL))
@@ -503,14 +511,13 @@ def icon_atlas(columns: list[str] | None = None) -> Image.Image:
 
 def kept_columns(columns: list[str]) -> Image.Image:
     """The atlas with only `columns` rebuilt: every other column is copied from
-    the shipped icons.png index for index, so its pixels stay exactly as they
-    were (quantizing them again could move a colour to a near one)."""
+    the shipped icons.png. The whole atlas picks its 256 colours again on save,
+    so a kept column's colours can move slightly; rebuild them all with
+    `icons` when their sources are at hand."""
     cell = MANIFEST["icon_size"] * MANIFEST["icon_scale"]
     entries = MANIFEST["icons"]
-    old = Image.open(OUT / "icons.png")
-    out = indexed(icon_atlas(columns))
-    if old.mode != "P" or old.getpalette() != out.getpalette() or old.info.get("transparency") != len(ALL):
-        sys.exit("icons.png is not indexed to the current palette: rebuild the whole atlas")
+    old = Image.open(OUT / "icons.png").convert("RGBA")
+    out = icon_atlas(columns)
     if old.width != out.width or old.height % cell:
         sys.exit(f"icons.png is {old.size}, not {len(entries)} columns of {cell} px cells")
     for c, e in enumerate(entries):
@@ -603,9 +610,9 @@ def main() -> None:
     if not only or "paperdoll" in only:
         save(paperdoll(), OUT / "paperdoll.png")
     if not only or "icons" in only:
-        save(icon_atlas(), OUT / "icons.png")
+        save_smooth(icon_atlas(), OUT / "icons.png")
     elif columns:
-        save(kept_columns(columns), OUT / "icons.png")
+        save_smooth(kept_columns(columns), OUT / "icons.png")
     for bg in MANIFEST["backgrounds"]:
         if (not only or bg["id"] in only) and (SRC / f"{bg['id']}.jpg").exists():
             save(background(bg), OUT / f"bg-{bg['id']}.png")

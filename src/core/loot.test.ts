@@ -170,26 +170,42 @@ describe('rollItem', () => {
     );
   });
 
-  it('names every type but weapons by grade: one name each, in grade order', () => {
-    const types = [
-      'head',
-      'chest',
-      'boots',
-      'attachment',
-      'sideArm',
-      'accessory',
-      'charm',
-    ] as const;
+  it('names every type but weapons by grade, one name per family, in grade order', () => {
+    const families = {
+      head: 1,
+      chest: 1,
+      boots: 1,
+      attachment: 1,
+      sideArm: 1,
+      accessory: 3,
+      charm: 2,
+    } as const;
     // With weapons, that is every type.
-    expect([...types, 'weapon'].sort()).toEqual(Object.keys(SLOTS).sort());
-    for (const slot of types) {
-      for (const g of GRADE_IDS) expect(namesFor(slot, g)).toHaveLength(1);
+    expect([...Object.keys(families), 'weapon'].sort()).toEqual(Object.keys(SLOTS).sort());
+    for (const [slot, n] of Object.entries(families) as [keyof typeof families, number][]) {
+      for (const g of GRADE_IDS) expect(namesFor(slot, g)).toHaveLength(n);
       expect(SLOTS[slot].names).toEqual(GRADE_IDS.flatMap((g) => namesFor(slot, g)));
+      expect(new Set(SLOTS[slot].names).size).toBe(n * GRADE_IDS.length);
+      // Seeded: every grade rolls every one of its names, and only those.
       for (const g of GRADE_IDS) {
         const seen = MANY.filter((i) => i.slot === slot && i.grade === g).map((i) => i.name);
         expect(seen.length, `${slot} ${g}`).toBeGreaterThan(0);
-        expect(new Set(seen)).toEqual(new Set(namesFor(slot, g)));
+        expect(new Set(seen), `${slot} ${g}`).toEqual(new Set(namesFor(slot, g)));
       }
+    }
+  });
+
+  it('gives each grade one Accessory and one Charm of each family, in family order', () => {
+    const accessory = [/ (Pendant|Amulet)$/, / (Bell|Wind Chime)$/, / Mirror$/];
+    const charm = [
+      / (Talisman|Seal)$/,
+      /(Binding Cord|Silk Sash|Binding Chain|Wrapping Sash|Binding Rope)$/,
+    ];
+    for (const g of GRADE_IDS) {
+      const a = namesFor('accessory', g);
+      accessory.forEach((family, i) => expect(a[i], `${g} ${i}`).toMatch(family));
+      const c = namesFor('charm', g);
+      charm.forEach((family, i) => expect(c[i], `${g} ${i}`).toMatch(family));
     }
   });
 
@@ -218,17 +234,32 @@ describe('rollItem', () => {
       ],
       accessory: [
         'Bone Bead Pendant',
+        'Bronze Clapper Bell',
+        'Bronze Hand Mirror',
         'Azure Spirit Pendant',
+        'Azure Soul-Scattering Bell',
+        'Azure Bagua Mirror',
         'Jade Dragon Pendant',
+        'Jade Wind Chime',
+        'Jade Demon-Revealing Mirror',
         'Golden Sun Amulet',
+        'Golden Sun Bell',
+        'Golden Sun Mirror',
         'Phoenix Flame Amulet',
+        'Phoenix Flame Bell',
+        'Phoenix Flame Mirror',
       ],
       charm: [
         'Paper Ward Talisman',
+        'Hempen Binding Cord',
         'Azure Thunder Talisman',
+        'Azure Silk Sash',
         'Jade Seal Talisman',
+        'Jade Dragon-Binding Chain',
         'Golden Heaven Seal',
+        'Golden Heaven-Wrapping Sash',
         'Phoenix Flame Talisman',
+        'Phoenix Flame Binding Rope',
       ],
     };
     for (const [slot, names] of Object.entries(table)) {
