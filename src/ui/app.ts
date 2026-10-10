@@ -44,7 +44,19 @@ import {
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
 import { equip, newGame, tick, type GameState } from '../core/sim.ts';
 import { browserStorage, loadSave, writeSave, type SaveStorage } from '../storage/save.ts';
+import {
+  dropToast,
+  faviconHref,
+  GAME_TITLE,
+  immortalNotice,
+  miniStatus,
+  noteUnseen,
+  NOTHING_UNSEEN,
+  tabTitle,
+  type Unseen,
+} from './hud.ts';
 import { autosave, runs } from './run.ts';
+import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
   cellLabel,
   compareToEquipped,
@@ -66,6 +78,9 @@ const SAVE_MS = 10_000;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
 const SUMMARY_MIN_SECONDS = 60;
 const RECENT_DROPS = 8;
+const FILE_NAME = 'Q3_Cultivation_Report';
+/** The favicon's drop dot blinks at most this often, well under any flashing threshold. */
+const BLINK_MS = 900;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
@@ -137,6 +152,9 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
     play(root, state, storage, summary);
     return;
   }
+  document.title = GAME_TITLE;
+  // No run, no HP ring: the browser's default icon.
+  document.querySelector('link[rel="icon"]')?.remove();
   root.replaceChildren(
     titleBar(),
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
@@ -146,7 +164,7 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
 
 function titleBar(): HTMLElement {
   const bar = el('header', 'titlebar');
-  bar.append(el('h1', 'file', 'Q3_Cultivation_Report'), el('span', 'muted', 'Office Immortal'));
+  bar.append(el('h1', 'file', FILE_NAME), el('span', 'muted', GAME_TITLE));
   return bar;
 }
 
@@ -188,7 +206,7 @@ function fighter(side: 'you' | 'foe'): Fighter {
   track.setAttribute('aria-hidden', 'true');
   const bar = el('span');
   track.append(bar);
-  const hp = el('div');
+  const hp = el('div', 'hp');
   box.append(name, sprite, track, hp);
   return { box, name, sprite, bar, hp };
 }
@@ -310,7 +328,8 @@ const finePointer = matchMedia('(pointer: fine)');
 
 /** A short shake on a sprite that just took damage. */
 function flash(sprite: HTMLElement): void {
-  if (reducedMotion.matches || document.hidden) return;
+  // The strip may be in the pop-out, whose document stays visible while the tab hides.
+  if (reducedMotion.matches || sprite.ownerDocument.hidden) return;
   sprite.animate(
     [{ transform: 'none' }, { transform: 'translateX(3px)', opacity: 0.4 }, { transform: 'none' }],
     { duration: 250, easing: 'steps(2)' },
@@ -567,7 +586,35 @@ function play(
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
   game.append(strip, kpis, columns);
-  root.replaceChildren(titleBar(), game);
+  // Tab HUD, pop-out and notification controls
+  const tools = el('div', 'tools');
+  const notices = notifier(window);
+  const noticeBtn = button('', '', () => {
+    void notices.toggle().then(() => drawTools());
+  });
+  const popBtn = button('Pop out', '', () => void togglePopOut());
+  // Each control is left out where the browser lacks its feature.
+  if (canPopOut(window)) tools.append(popBtn);
+  if (notices.state() !== 'unsupported') tools.append(noticeBtn);
+  const bar = titleBar();
+  bar.append(tools);
+
+  // Mini view, shown in the pop-out: the strip moves in, plus one status line and the latest drop.
+  const mini = el('div', 'mini');
+  const miniLine = el('p', 'status');
+  const miniToast = el('p', 'toast muted', 'No drops yet.');
+  miniToast.setAttribute('aria-live', 'polite');
+  // A click on the pop-out brings the game's tab forward (docs/design.md §14).
+  mini.addEventListener('click', () => window.focus());
+  let pip: Window | null = null;
+  /** A pop-out request is waiting on the browser; further clicks wait for it. */
+  let opening = false;
+  /** Drops kept while the tab was hidden: the title counts them, the favicon marks the best. */
+  let unseen: Unseen = NOTHING_UNSEEN;
+  let blinkOn = true;
+  let blinkAt = 0;
+
+  root.replaceChildren(bar, game);
   away?.querySelector('button')?.focus();
 
   function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
@@ -924,6 +971,107 @@ function play(
     for (const id of ITEM_TYPES) typeBoxes[id].checked = f.slots.includes(id);
   }
 
+  function drawTools(): void {
+    const n = notices.state();
+    setButton(
+      noticeBtn,
+      n === 'blocked' ? 'Notifications blocked' : 'Notify on Immortal drops',
+      n === 'blocked',
+    );
+    noticeBtn.setAttribute('aria-pressed', String(n === 'on'));
+    if (n === 'blocked') noticeBtn.title = 'Allow notifications in your browser settings.';
+    else noticeBtn.removeAttribute('title');
+    setButton(popBtn, pip ? 'Close pop-out' : 'Pop out', false);
+  }
+
+  /** Title, favicon and the pop-out's status line, refreshed while the tab is in the background too. */
+  function drawHud(): void {
+    const c = state.cultivator;
+    const title = tabTitle(state.floor, unseen.count);
+    if (document.title !== title) document.title = title;
+    // A Heaven-or-better drop blinks the favicon's dot, flipping on each redraw at most
+    // every BLINK_MS: about once a second in a throttled background tab, and on each
+    // (rarer) step under heavier throttling. Held still for reduced motion.
+    const now = performance.now();
+    if (unseen.mark && !reducedMotion.matches && now - blinkAt >= BLINK_MS) {
+      blinkOn = !blinkOn;
+      blinkAt = now;
+    }
+    const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
+    setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
+    if (pip) {
+      miniLine.textContent = miniStatus(state.floor, c.level, unseen.count);
+      if (pip.document.title !== title) pip.document.title = title;
+    }
+  }
+
+  /** Counts drops the player has not seen yet, and notifies on an Immortal one. */
+  function noteDrops(items: Item[]): void {
+    const latest = items[0];
+    if (latest) {
+      miniToast.className = `toast grade-${latest.grade}`;
+      miniToast.textContent = dropToast(latest);
+    }
+    const noted = noteUnseen(unseen, items, document.hidden);
+    if (noted.unseen.mark && !unseen.mark) {
+      // A new mark starts lit, for a full blink before it first goes dark.
+      blinkOn = true;
+      blinkAt = performance.now();
+    }
+    unseen = noted.unseen;
+    if (noted.notify) notices.show(immortalNotice(state.floor));
+  }
+
+  /** Puts the strip back above the KPI tiles, unless this run has ended. */
+  function restoreStrip(): void {
+    if (!signal.aborted && !game.contains(strip)) kpis.before(strip);
+  }
+
+  async function togglePopOut(): Promise<void> {
+    if (opening) return;
+    if (pip) {
+      pip.close();
+      return;
+    }
+    opening = true;
+    const opened = await popOut(
+      window,
+      () => {
+        mini.replaceChildren(el('div', 'file', FILE_NAME), strip, miniLine, miniToast);
+        return mini;
+      },
+      (closed) => {
+        // Only the open pop-out's own close counts.
+        if (pip !== closed) return;
+        pip = null;
+        restoreStrip();
+        drawTools();
+      },
+    );
+    opening = false;
+    if (!opened || opened.closed || signal.aborted) {
+      // Refused, failed, closed at once, or the run ended while the browser answered.
+      opened?.close();
+      restoreStrip();
+      return;
+    }
+    pip = opened;
+    drawTools();
+    drawHud();
+  }
+  signal.addEventListener('abort', () => pip?.close());
+
+  // Looking at the tab again clears the count and the favicon's dot.
+  document.addEventListener(
+    'visibilitychange',
+    () => {
+      if (document.hidden) return;
+      unseen = NOTHING_UNSEEN;
+      drawHud();
+    },
+    { signal },
+  );
+
   function draw(prev: GameState | null): void {
     drawStrip(prev);
     drawSummary();
@@ -933,8 +1081,10 @@ function play(
     if (state.dropsSold > 0) handled.push(`Sold on pickup: ${state.dropsSold}`);
     if (state.dropsSalvaged > 0) handled.push(`Salvaged on pickup: ${state.dropsSalvaged}`);
     handledText.textContent = handled.join(' · ');
+    drawHud();
   }
 
+  drawTools();
   draw(null);
 
   // Time-based: each step plays the real time since the last one, so a
@@ -945,7 +1095,9 @@ function play(
     const prev = state;
     state = tick(state, (now - last) / 1000);
     last = now;
-    logDrops(freshDrops(prev, state));
+    const fresh = freshDrops(prev, state);
+    logDrops(fresh);
+    noteDrops(fresh);
     draw(prev);
   }
 

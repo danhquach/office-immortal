@@ -98,6 +98,8 @@ select {
 /* Office shell */
 .titlebar {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: space-between;
   gap: 1rem;
   padding: 0.5rem 0;
@@ -106,6 +108,11 @@ select {
 }
 .titlebar .file {
   font-family: ui-monospace, monospace;
+}
+.titlebar .tools {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
 }
 .panel {
   background: var(--panel);
@@ -581,4 +588,51 @@ button.primary {
   list-style: none;
   margin: 0;
   padding: 0;
+}
+
+/* Mini view: the pop-out window (about 480x160), docs/design.md §14 */
+.popped {
+  margin: 0;
+}
+.mini {
+  box-sizing: border-box;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+}
+.mini .file {
+  font-family: ui-monospace, monospace;
+  color: var(--muted);
+}
+.mini .strip {
+  padding: 0.4rem 0.6rem;
+}
+/* The status line already says the floor; HP shows as bars only. */
+.mini .where,
+.mini .fighter .hp {
+  display: none;
+}
+.mini .fighter {
+  grid-template-rows: auto 32px auto;
+}
+.mini .sprite,
+.mini .foe[data-kind] .sprite {
+  width: 24px;
+  height: 24px;
+  margin: 0.2rem 0;
+}
+.mini .foe[data-kind='elite'] .sprite,
+.mini .foe[data-kind='boss'] .sprite {
+  width: 32px;
+  height: 32px;
+}
+.mini .status,
+.mini .toast {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
