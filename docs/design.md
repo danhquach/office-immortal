@@ -211,7 +211,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 ### Office shell (CSS only, no art)
 
 - A generic spreadsheet / dashboard look: a title bar with a file name
-  (`Q3_Cultivation_Report`), KPI tiles, tables, tabs and a status bar.
+  (`Q3_Cultivation_Report`), a formula bar, faint cell lines behind the
+  panels, KPI tiles, panels with header bars, tabs and a status bar. The
+  combat strip sits in it like an embedded chart, with its own header bar.
 - **Generic, never a copy.** No real software names, logos, icons, ribbon
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.
@@ -224,7 +226,13 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   panel (onto one of a pair to choose it; anywhere else picks its default
   position), by double-click, or with the panel's Equip button (touch
   and keyboard use the button).
-- Light and dark themes; text 4.5:1 or more on its background.
+- In the Full view the character, inventory and side panels keep fixed widths
+  and one shared height whatever tab is open; a taller tab or item scrolls
+  inside its panel.
+- Dark theme by default; Menu → Settings offers Light and Match system. The
+  choice is a display preference, so Reset progress keeps it, and the page
+  paints in it from the first frame. Text 4.5:1 or more on its background in
+  both.
 
 ### Combat strip (pixel art)
 
@@ -252,9 +260,10 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   pause between fights, §5).
 - The sim decides every outcome; the strip only plays it back. Reduced motion
   shows a still pose.
-- The Full view shows the whole stage at 3/4 (156 px tall) so the panels fit
-  one screen, and the Mini view at 3/8 so it fits its 160 px window. Narrow
-  shows it at 1×, whole pixels.
+- The Full view shows the whole stage at 3/4 (156 px tall) in the left half
+  of the page, with the KPI tiles beside it, so the panels fit one screen; the
+  Mini view at 3/8 so it fits its 160 px window. Narrow shows it at 1×, whole
+  pixels.
 
 ### Grade colours
 

@@ -73,6 +73,7 @@ import {
 } from './hud.ts';
 import { artUrl } from './art.ts';
 import { autosave, runs } from './run.ts';
+import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
@@ -111,6 +112,8 @@ const ICON_PX = 32;
 const SUMMARY_MIN_SECONDS = 60;
 const RECENT_DROPS = 8;
 const FILE_NAME = 'Q3_Cultivation_Report';
+/** The formula bar's joke formula: set dressing, so screen readers skip it. */
+const FORMULA = '=INNER_PEACE() + DAILY_GRIND() + LUCK()';
 /** The favicon's drop dot blinks at most this often, well under any flashing threshold. */
 const BLINK_MS = 900;
 /** How far the mouse must move with the button down before a press becomes a drag. */
@@ -188,6 +191,7 @@ const run = runs();
 /** Loads the saved run and replays the time away, or offers a new run when there is none. */
 export function start(root: HTMLElement, storage: SaveStorage | null = browserStorage()): void {
   run.stop();
+  showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
   const saved = storage && loadSave(storage);
   if (saved) {
     const { state, summary } = catchUp(saved.state, offlineSeconds(saved.savedAt, Date.now()));
@@ -207,7 +211,29 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
 
 function titleBar(): HTMLElement {
   const bar = el('header', 'titlebar');
-  bar.append(el('h1', 'file', FILE_NAME), el('span', 'muted', GAME_TITLE));
+  // A generic sheet glyph, drawn in CSS: no real product's logo.
+  const glyph = el('span', 'glyph');
+  glyph.setAttribute('aria-hidden', 'true');
+  bar.append(glyph, el('h1', 'file', FILE_NAME), el('span', 'muted', GAME_TITLE));
+  return bar;
+}
+
+/** The office shell's set dressing: a formula bar. */
+function formulaBar(): HTMLElement {
+  const bar = el('div', 'formula');
+  bar.setAttribute('aria-hidden', 'true');
+  bar.append(el('span', 'ref', 'A1'), el('span', 'fx', 'fx'), el('span', 'expr', FORMULA));
+  return bar;
+}
+
+/** The status bar under the sheet: ready state, the one sheet tab, autosave. */
+function statusBar(): HTMLElement {
+  const bar = el('footer', 'statusbar');
+  bar.append(
+    el('span', '', 'Ready'),
+    el('span', 'sheet-tab', 'Dashboard'),
+    el('span', 'muted', 'Autosave on'),
+  );
   return bar;
 }
 
@@ -284,14 +310,14 @@ function useSheet(f: StageSprite, name: string, size: number): void {
   s.backgroundSize = `${size * 4}px ${size * 4}px`;
 }
 
-/** An item's icon from the atlas, at `scale` (1 in a cell, 2 in the details panel). */
-function setIcon(icon: HTMLElement, item: Item | undefined, scale = 1): void {
+/** An item's icon from the atlas. */
+function setIcon(icon: HTMLElement, item: Item | undefined): void {
   if (!item) {
     icon.style.backgroundImage = '';
     return;
   }
   const { col, row } = iconCell(item);
-  const px = ICON_PX * scale;
+  const px = ICON_PX;
   const s = icon.style;
   s.backgroundImage = cssUrl(artUrl('icons'));
   s.backgroundSize = `${px * 8}px ${px * 3}px`;
@@ -399,8 +425,9 @@ function figure(): HTMLImageElement {
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-/** A mouse or pen: the input that can double-click and drag. */
-const finePointer = matchMedia('(pointer: fine)');
+const osDark = matchMedia('(prefers-color-scheme: dark)');
+/** The theme picked this visit: kept across runs even where storage is blocked. */
+let pickedTheme: Theme | null = null;
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
@@ -444,7 +471,8 @@ function play(
   const where = el('div', 'where');
   const floorText = el('span');
   const killText = el('span');
-  where.append(floorText, killText);
+  const live = el('span', 'live', 'Live');
+  where.append(floorText, killText, live);
   const you = fighter('you');
   const foe = fighter('foe');
   // The stage: the zone's tiling background with both sprites on its floor.
@@ -786,6 +814,11 @@ function play(
     resetNo.focus();
   });
 
+  /** The Settings theme choice; start() already put the saved one on the page. */
+  let theme = pickedTheme ?? readTheme(storage);
+  /** Shows `theme` on the page and, while it is open, the pop-out. */
+  const applyTheme = (): void =>
+    showTheme([document.documentElement, pip?.document.documentElement], theme, osDark.matches);
   const menu = mainMenu();
 
   function mainMenu(): HTMLDialogElement {
@@ -799,6 +832,19 @@ function play(
       button('Close', '', () => dialog.close()),
     );
     const settings = el('div', 'settings');
+    const themePick = choice('Theme', [
+      ['dark', 'Dark'],
+      ['light', 'Light'],
+      ['system', 'Match system'],
+    ]);
+    themePick.select.value = theme;
+    themePick.select.addEventListener('change', () => {
+      theme = pickedTheme = pickTheme(themePick.select.value);
+      // Blocked storage still changes it for this visit.
+      writeTheme(storage, theme);
+      applyTheme();
+    });
+    settings.append(themePick.box);
     if (notices.state() !== 'unsupported') {
       settings.append(el('h3', '', 'Notifications'), noticeBtn);
     }
@@ -837,7 +883,7 @@ function play(
   let blinkOn = true;
   let blinkAt = 0;
 
-  root.replaceChildren(bar, game, menu);
+  root.replaceChildren(bar, formulaBar(), game, statusBar(), menu);
   away?.querySelector('button')?.focus();
 
   function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
@@ -1005,11 +1051,16 @@ function play(
     const lines = el('ul', 'lines');
     for (const line of itemLines(item)) lines.append(el('li', '', line));
     const head = el('div', 'item-head');
-    const icon = el('span', 'icon big');
+    const icon = el('span', 'icon');
     icon.setAttribute('aria-hidden', 'true');
-    setIcon(icon, item, 2);
-    head.append(icon, el('div', `title grade-${item.grade}`, item.name));
-    const parts: HTMLElement[] = [head, el('div', `tag grade-${item.grade}`, itemTag(item)), lines];
+    setIcon(icon, item);
+    const name = el('div');
+    name.append(
+      el('div', `title grade-${item.grade}`, item.name),
+      el('div', `tag grade-${item.grade}`, itemTag(item)),
+    );
+    head.append(icon, name);
+    const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {
       parts.push(el('p', 'muted', 'Equipped.'));
     } else {
@@ -1025,24 +1076,22 @@ function play(
         const compare = el('ul', 'compare');
         for (const d of diff) compare.append(el('li', d.better ? 'up' : 'down', d.text));
         if (!diff.length) compare.append(el('li', 'muted', 'No change'));
-        const equipBtn = el('button', 'primary', fits.length > 1 ? `Equip in ${name}` : 'Equip');
+        // The line it sits on already names the position.
+        const equipBtn = el('button', 'primary', 'Equip');
+        if (fits.length > 1) equipBtn.setAttribute('aria-label', `Equip in ${name}`);
         equipBtn.type = 'button';
         equipBtn.addEventListener('click', () => equipFromBag(index, to));
-        parts.push(
-          el('h3', '', current ? `In ${name}, vs ${current.name}:` : `In ${name} (empty):`),
-          compare,
+        const cmp = el('div', 'cmp');
+        cmp.append(
+          el('h3', '', current ? `${name}: vs ${current.name}` : `${name}: empty`),
           equipBtn,
         );
-      }
-      if (finePointer.matches) {
-        parts.push(el('p', 'muted hint', 'Or double-click it, or drag it onto your character.'));
+        parts.push(cmp, compare);
       }
       const row = el('div', 'row');
-      const sellBtn = button(`Sell for ${sellPrice(item)} Spirit Stones`, '', () =>
-        dispose(index, 'sell'),
-      );
+      const sellBtn = button(`Sell: ${sellPrice(item)} Stones`, '', () => dispose(index, 'sell'));
       sellBtn.dataset.action = 'sell';
-      const salvageBtn = button(`Salvage for ${essenceValue(item)} Spirit Essence`, '', () =>
+      const salvageBtn = button(`Salvage: ${essenceValue(item)} Essence`, '', () =>
         dispose(index, 'salvage'),
       );
       salvageBtn.dataset.action = 'salvage';
@@ -1363,6 +1412,8 @@ function play(
     drawHud();
   }
   signal.addEventListener('abort', () => pip?.close());
+  // Match system follows the OS while the game is open.
+  osDark.addEventListener('change', applyTheme, { signal });
 
   // A Reset progress in another tab deletes the save: this tab stops its run
   // too, so its autosave can't write the old state back.

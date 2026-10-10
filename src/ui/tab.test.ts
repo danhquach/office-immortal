@@ -147,7 +147,7 @@ describe('pop-out', () => {
       }),
       document: {
         title: '',
-        documentElement: { lang: '' },
+        documentElement: { lang: '', dataset: {} as DOMStringMap },
         head: { append: (n: Node) => head.push(n) },
         body: { className: '', append: append ?? ((n: unknown) => body.push(n)) },
         createElement: (tag: string): Node => ({ tag }),
@@ -161,7 +161,7 @@ describe('pop-out', () => {
     return {
       document: {
         title: 'F3 · Office Immortal',
-        documentElement: { lang: 'en' },
+        documentElement: { lang: 'en', dataset: { theme: 'light' } },
         styleSheets,
       },
       documentPictureInPicture: { requestWindow: async () => pip },
@@ -192,6 +192,7 @@ describe('pop-out', () => {
     expect(body).toEqual([content]);
     expect(pip.document.title).toBe('F3 · Office Immortal');
     expect(pip.document.documentElement.lang).toBe('en');
+    expect(pip.document.documentElement.dataset.theme).toBe('light');
     expect(pip.document.body.className).toBe('popped');
     expect(onClose).not.toHaveBeenCalled();
     listeners.pagehide?.();
