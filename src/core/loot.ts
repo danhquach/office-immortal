@@ -144,13 +144,17 @@ const HEAD_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Crown'],
 };
 
-/** Hidden weapon names by grade: throwing darts and flying knives. */
+/**
+ * Hidden weapon names by grade in two families, always listed Darts (throwing
+ * darts and flying knives), Binding Rope. The family changes only the name and
+ * icon.
+ */
 const SIDE_ARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Iron Throwing Darts'],
-  spirit: ['Azure Frost Darts'],
-  earth: ['Jade Viper Darts'],
-  heaven: ['Golden Crow Flying Knives'],
-  immortal: ['Phoenix Flame Darts'],
+  mortal: ['Iron Throwing Darts', 'Hempen Binding Cord'],
+  spirit: ['Azure Frost Darts', 'Azure Silk Sash'],
+  earth: ['Jade Viper Darts', 'Jade Dragon-Binding Chain'],
+  heaven: ['Golden Crow Flying Knives', 'Golden Heaven-Wrapping Sash'],
+  immortal: ['Phoenix Flame Darts', 'Phoenix Flame Binding Rope'],
 };
 
 /** Gourd names by grade, worn at the hip. */
@@ -174,16 +178,13 @@ const ACCESSORY_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Amulet', 'Phoenix Flame Bell', 'Phoenix Flame Mirror'],
 };
 
-/**
- * Charm names by grade in two families, always listed Talisman, Binding Rope.
- * The family changes only the name and icon.
- */
+/** Talisman and seal names by grade. */
 const CHARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Paper Ward Talisman', 'Hempen Binding Cord'],
-  spirit: ['Azure Thunder Talisman', 'Azure Silk Sash'],
-  earth: ['Jade Seal Talisman', 'Jade Dragon-Binding Chain'],
-  heaven: ['Golden Heaven Seal', 'Golden Heaven-Wrapping Sash'],
-  immortal: ['Phoenix Flame Talisman', 'Phoenix Flame Binding Rope'],
+  mortal: ['Paper Ward Talisman'],
+  spirit: ['Azure Thunder Talisman'],
+  earth: ['Jade Seal Talisman'],
+  heaven: ['Golden Heaven Seal'],
+  immortal: ['Phoenix Flame Talisman'],
 };
 
 /**

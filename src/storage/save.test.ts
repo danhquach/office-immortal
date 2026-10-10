@@ -606,7 +606,8 @@ describe('rejects', () => {
       expect(eq[at]).toEqual(gear(slot, 'earth', FIRST[slot]?.earth as string));
     });
 
-    // The Bell, Mirror and Binding Rope families (#45): each name loads on its own grade only.
+    // The Bell, Mirror (Accessory) and Binding Rope (Hidden Weapon) families (#45):
+    // each name loads on its own type and grade only.
     const FAMILIES: [string, string, string][] = [
       ['accessory', 'mortal', 'Bronze Clapper Bell'],
       ['accessory', 'mortal', 'Bronze Hand Mirror'],
@@ -618,11 +619,11 @@ describe('rejects', () => {
       ['accessory', 'heaven', 'Golden Sun Mirror'],
       ['accessory', 'immortal', 'Phoenix Flame Bell'],
       ['accessory', 'immortal', 'Phoenix Flame Mirror'],
-      ['charm', 'mortal', 'Hempen Binding Cord'],
-      ['charm', 'spirit', 'Azure Silk Sash'],
-      ['charm', 'earth', 'Jade Dragon-Binding Chain'],
-      ['charm', 'heaven', 'Golden Heaven-Wrapping Sash'],
-      ['charm', 'immortal', 'Phoenix Flame Binding Rope'],
+      ['sideArm', 'mortal', 'Hempen Binding Cord'],
+      ['sideArm', 'spirit', 'Azure Silk Sash'],
+      ['sideArm', 'earth', 'Jade Dragon-Binding Chain'],
+      ['sideArm', 'heaven', 'Golden Heaven-Wrapping Sash'],
+      ['sideArm', 'immortal', 'Phoenix Flame Binding Rope'],
     ];
 
     it.each(FAMILIES)('loads a %s of %s grade named %s unchanged', (slot, grade, name) => {
@@ -636,10 +637,14 @@ describe('rejects', () => {
     });
 
     it.each(FAMILIES)(
-      'rejects a %s of %s grade named %s on the other type',
+      'rejects a %s of %s grade named %s on any other type',
       (slot, grade, name) => {
-        const wrong = slot === 'accessory' ? 'charm' : 'accessory';
-        expect(load(inBag(gear(wrong, grade, name)))).toBeNull();
+        // Charm covers a rope saved where it first stood in this change.
+        for (const wrong of ['accessory', 'sideArm', 'charm', 'attachment'].filter(
+          (t) => t !== slot,
+        )) {
+          expect(load(inBag(gear(wrong, grade, name))), wrong).toBeNull();
+        }
       },
     );
 
@@ -647,11 +652,11 @@ describe('rejects', () => {
       ['a missing hyphen', 'accessory', 'spirit', 'Azure Soul Scattering Bell'],
       ['a Latin look-alike (I for l)', 'accessory', 'mortal', 'Bronze Clapper BeIl'],
       ['a Cyrillic look-alike', 'accessory', 'earth', 'J\u0430de Wind Chime'],
-      ['a zero-width space', 'charm', 'earth', 'Jade Dragon-Binding\u200bChain'],
+      ['a zero-width space', 'sideArm', 'earth', 'Jade Dragon-Binding\u200bChain'],
       ['a bidi override', 'accessory', 'heaven', 'Golden Sun \u202eMirror'],
-      ['other casing', 'charm', 'immortal', 'phoenix flame binding rope'],
-      ['padding', 'charm', 'mortal', 'Hempen Binding Cord '],
-      ['a family with no such grade name', 'charm', 'mortal', 'Bronze Binding Rope'],
+      ['other casing', 'sideArm', 'immortal', 'phoenix flame binding rope'],
+      ['padding', 'sideArm', 'mortal', 'Hempen Binding Cord '],
+      ['a family with no such grade name', 'sideArm', 'mortal', 'Bronze Binding Rope'],
     ])('rejects a family name with %s', (_, slot, grade, name) => {
       expect(load(inBag(gear(slot, grade, name)))).toBeNull();
     });

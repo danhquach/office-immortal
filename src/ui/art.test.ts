@@ -148,7 +148,7 @@ describe('iconCell', () => {
     // Each family's file prefix, in the order loot.ts lists the families.
     const families: Record<string, string[]> = {
       accessory: ['accessory', 'accessory-bell', 'accessory-mirror'],
-      charm: ['charm', 'charm-rope'],
+      sideArm: ['sideArm', 'sideArm-rope'],
     };
     for (const entry of manifest.icons) {
       if (entry.id === 'weapon') continue;
@@ -158,34 +158,34 @@ describe('iconCell', () => {
       );
       expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length * prefixes.length);
     }
-    // 25 weapons, 15 accessories, 10 charms and 5 of each of the other five types.
+    // 25 weapons, 15 accessories, 10 hidden weapons and 5 of each of the other five types.
     const icons = manifest.icons.reduce((n, i) => n + (i.sources ?? i.renders ?? []).length, 0);
     expect(icons).toBe(25 + 15 + 10 + 5 * 5);
     // No recoloured pixel-pack icon is left in the atlas.
     expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
   });
 
-  it('puts each Accessory and Charm family name in its own row', () => {
-    const at = (slot: 'accessory' | 'charm', name: string) => iconCell({ slot, name } as Item);
+  it('puts each Accessory and Hidden Weapon family name in its own row', () => {
+    const at = (slot: 'accessory' | 'sideArm', name: string) => iconCell({ slot, name } as Item);
     const acc = ICON_COLUMNS.indexOf('accessory');
-    const charm = ICON_COLUMNS.indexOf('charm');
+    const side = ICON_COLUMNS.indexOf('sideArm');
     expect(at('accessory', 'Bone Bead Pendant')).toEqual({ col: acc, row: 0 });
     expect(at('accessory', 'Bronze Clapper Bell')).toEqual({ col: acc, row: 1 });
     expect(at('accessory', 'Bronze Hand Mirror')).toEqual({ col: acc, row: 2 });
     expect(at('accessory', 'Phoenix Flame Mirror')).toEqual({ col: acc, row: 14 });
-    expect(at('charm', 'Paper Ward Talisman')).toEqual({ col: charm, row: 0 });
-    expect(at('charm', 'Hempen Binding Cord')).toEqual({ col: charm, row: 1 });
-    expect(at('charm', 'Phoenix Flame Binding Rope')).toEqual({ col: charm, row: 9 });
+    expect(at('sideArm', 'Iron Throwing Darts')).toEqual({ col: side, row: 0 });
+    expect(at('sideArm', 'Hempen Binding Cord')).toEqual({ col: side, row: 1 });
+    expect(at('sideArm', 'Phoenix Flame Binding Rope')).toEqual({ col: side, row: 9 });
   });
 
-  it('puts each Hidden Weapon name in its grade row of the side arm column', () => {
+  it('puts each Hidden Weapon name in its own row of the side arm column', () => {
     const col = ICON_COLUMNS.indexOf('sideArm');
     SLOTS.sideArm.names.forEach((name, row) =>
       expect(iconCell({ slot: 'sideArm', name } as Item), name).toEqual({ col, row }),
     );
     expect(iconCell({ slot: 'sideArm', name: 'Phoenix Flame Darts' } as Item)).toEqual({
       col,
-      row: 4,
+      row: 8,
     });
   });
 

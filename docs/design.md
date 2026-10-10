@@ -112,9 +112,9 @@ Every drop is generated from a seeded roll.
 - **Base stat:** each item type rolls in a range (e.g. an Iron Flying Sword
   weapon rolls 8–14 damage at item level 10).
 - **Every other item's name follows the grade,** one name per grade (per
-  family for Accessories and Charms, below), so a better drop looks better
-  (each name has its own icon, coloured like its grade: Mortal grey, Spirit
-  azure, Earth jade, Heaven white and gold, Immortal crimson and gold):
+  family for Accessories and Hidden Weapons, below), so a better drop looks
+  better (each name has its own icon, coloured like its grade: Mortal grey,
+  Spirit azure, Earth jade, Heaven white and gold, Immortal crimson and gold):
 
 | Grade | Head | Chest | Boots | Attachment |
 |---|---|---|---|---|
@@ -124,19 +124,11 @@ Every drop is generated from a seeded roll.
 | Heaven | Golden Sun Crown | Golden Elder Robe | Golden Cloud Boots | Golden Nectar Gourd |
 | Immortal | Phoenix Flame Crown | Phoenix Flame Robe | Phoenix Flame Boots | Phoenix Flame Gourd |
 
-| Grade | Hidden Weapon |
-|---|---|
-| Mortal | Iron Throwing Darts |
-| Spirit | Azure Frost Darts |
-| Earth | Jade Viper Darts |
-| Heaven | Golden Crow Flying Knives |
-| Immortal | Phoenix Flame Darts |
-
-- **Accessories and Charms come in families** like weapons: each grade drops
-  one of each family. Accessories are Pendants, Bells or Mirrors; Charms are
-  Talismans or Binding Ropes. The family only changes the name and icon:
-  every Accessory rolls the same base stat and affixes, and so does every
-  Charm.
+- **Accessories and Hidden Weapons come in families** like weapons: each
+  grade drops one of each family. Accessories are Pendants, Bells or Mirrors;
+  Hidden Weapons are Darts or Binding Ropes. The family only changes the name
+  and icon: every Accessory rolls the same base stat and affixes, and so does
+  every Hidden Weapon.
 
 | Grade | Pendant | Bell | Mirror |
 |---|---|---|---|
@@ -146,13 +138,13 @@ Every drop is generated from a seeded roll.
 | Heaven | Golden Sun Amulet | Golden Sun Bell | Golden Sun Mirror |
 | Immortal | Phoenix Flame Amulet | Phoenix Flame Bell | Phoenix Flame Mirror |
 
-| Grade | Talisman | Binding Rope |
-|---|---|---|
-| Mortal | Paper Ward Talisman | Hempen Binding Cord |
-| Spirit | Azure Thunder Talisman | Azure Silk Sash |
-| Earth | Jade Seal Talisman | Jade Dragon-Binding Chain |
-| Heaven | Golden Heaven Seal | Golden Heaven-Wrapping Sash |
-| Immortal | Phoenix Flame Talisman | Phoenix Flame Binding Rope |
+| Grade | Darts | Binding Rope | Charm |
+|---|---|---|---|
+| Mortal | Iron Throwing Darts | Hempen Binding Cord | Paper Ward Talisman |
+| Spirit | Azure Frost Darts | Azure Silk Sash | Azure Thunder Talisman |
+| Earth | Jade Viper Darts | Jade Dragon-Binding Chain | Jade Seal Talisman |
+| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash | Golden Heaven Seal |
+| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope | Phoenix Flame Talisman |
 
 - **Weapons are a Taoist cultivator's magic tools,** in five families. Each
   grade drops one of each family, and the material gets richer with the grade
@@ -179,8 +171,8 @@ Every drop is generated from a seeded roll.
   rejected. A Head, Hidden Weapon, Attachment, Accessory or Charm with a name
   from before names followed the grade (the office names, e.g. Thinking Cap,
   Stapler Dagger, Coffee Gourd, Lanyard Pendant, Sticky-Note Talisman) loads as
-  the first name of its type and grade (a Pendant or Talisman for Accessories
-  and Charms); on another type it is rejected.
+  the first name of its type and grade (a Pendant for Accessories, Darts for
+  Hidden Weapons); on another type it is rejected.
 
 - **Grades (rarity) and affix count:**
 

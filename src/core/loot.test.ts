@@ -176,9 +176,9 @@ describe('rollItem', () => {
       chest: 1,
       boots: 1,
       attachment: 1,
-      sideArm: 1,
+      sideArm: 2,
       accessory: 3,
-      charm: 2,
+      charm: 1,
     } as const;
     // With weapons, that is every type.
     expect([...Object.keys(families), 'weapon'].sort()).toEqual(Object.keys(SLOTS).sort());
@@ -195,17 +195,17 @@ describe('rollItem', () => {
     }
   });
 
-  it('gives each grade one Accessory and one Charm of each family, in family order', () => {
+  it('gives each grade one Accessory and one Hidden Weapon of each family, in family order', () => {
     const accessory = [/ (Pendant|Amulet)$/, / (Bell|Wind Chime)$/, / Mirror$/];
-    const charm = [
-      / (Talisman|Seal)$/,
+    const sideArm = [
+      / (Darts|Flying Knives)$/,
       /(Binding Cord|Silk Sash|Binding Chain|Wrapping Sash|Binding Rope)$/,
     ];
     for (const g of GRADE_IDS) {
       const a = namesFor('accessory', g);
       accessory.forEach((family, i) => expect(a[i], `${g} ${i}`).toMatch(family));
-      const c = namesFor('charm', g);
-      charm.forEach((family, i) => expect(c[i], `${g} ${i}`).toMatch(family));
+      const h = namesFor('sideArm', g);
+      sideArm.forEach((family, i) => expect(h[i], `${g} ${i}`).toMatch(family));
     }
   });
 
@@ -220,10 +220,15 @@ describe('rollItem', () => {
       ],
       sideArm: [
         'Iron Throwing Darts',
+        'Hempen Binding Cord',
         'Azure Frost Darts',
+        'Azure Silk Sash',
         'Jade Viper Darts',
+        'Jade Dragon-Binding Chain',
         'Golden Crow Flying Knives',
+        'Golden Heaven-Wrapping Sash',
         'Phoenix Flame Darts',
+        'Phoenix Flame Binding Rope',
       ],
       attachment: [
         'Clay Wine Gourd',
@@ -251,15 +256,10 @@ describe('rollItem', () => {
       ],
       charm: [
         'Paper Ward Talisman',
-        'Hempen Binding Cord',
         'Azure Thunder Talisman',
-        'Azure Silk Sash',
         'Jade Seal Talisman',
-        'Jade Dragon-Binding Chain',
         'Golden Heaven Seal',
-        'Golden Heaven-Wrapping Sash',
         'Phoenix Flame Talisman',
-        'Phoenix Flame Binding Rope',
       ],
     };
     for (const [slot, names] of Object.entries(table)) {
