@@ -149,6 +149,7 @@ describe('iconCell', () => {
     const families: Record<string, string[]> = {
       accessory: ['accessory', 'accessory-bell', 'accessory-mirror'],
       sideArm: ['sideArm', 'sideArm-rope'],
+      attachment: ['attachment', 'attachment-disc'],
     };
     for (const entry of manifest.icons) {
       if (entry.id === 'weapon') continue;
@@ -158,9 +159,9 @@ describe('iconCell', () => {
       );
       expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length * prefixes.length);
     }
-    // 25 weapons, 15 accessories, 10 hidden weapons and 5 of each of the other five types.
+    // 25 weapons, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other four types.
     const icons = manifest.icons.reduce((n, i) => n + (i.sources ?? i.renders ?? []).length, 0);
-    expect(icons).toBe(25 + 15 + 10 + 5 * 5);
+    expect(icons).toBe(25 + 15 + 10 + 10 + 5 * 4);
     // No recoloured pixel-pack icon is left in the atlas.
     expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
   });

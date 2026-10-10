@@ -446,10 +446,15 @@
       "id": "attachment",
       "sources": [
         "items/attachment-mortal.jpg",
+        "items/attachment-disc-mortal.jpg",
         "items/attachment-spirit.jpg",
+        "items/attachment-disc-spirit.jpg",
         "items/attachment-earth.jpg",
+        "items/attachment-disc-earth.jpg",
         "items/attachment-heaven.jpg",
-        "items/attachment-immortal.jpg"
+        "items/attachment-disc-heaven.jpg",
+        "items/attachment-immortal.jpg",
+        "items/attachment-disc-immortal.jpg"
       ]
     },
     {

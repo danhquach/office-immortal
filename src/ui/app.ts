@@ -85,6 +85,7 @@ import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
+  arraySetUp,
   cellLabel,
   compareToEquipped,
   freshDrops,
@@ -135,6 +136,8 @@ const FORMULA = '=INNER_PEACE() + DAILY_GRIND() + LUCK()';
 const BLINK_MS = 900;
 /** How long a Tribulation banner stays over the stage. */
 const TRIAL_BANNER_MS = 2400;
+/** How long an array's set-up shows: the pause before the fight (sim ENEMY_ARRIVAL). */
+const ARRAY_SETUP_MS = 1200;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
@@ -536,6 +539,12 @@ function play(
   trialBanner.setAttribute('role', 'status');
   let bannerTimer = 0;
   stage.append(trialBanner);
+  // A disc's array being set up as each fight starts. Not read out: it comes
+  // every few seconds, and the item's Details says the same in words.
+  const arrayMark = el('p', 'array-setup');
+  arrayMark.setAttribute('aria-hidden', 'true');
+  let arrayTimer = 0;
+  stage.append(arrayMark);
   strip.append(where, trialCall, stage, fighters);
   let zone = '';
 
@@ -1067,6 +1076,7 @@ function play(
     strip.classList.toggle('trial', enemy?.kind === 'tribulation');
     if (prev) {
       banner(tribulationBanner(prev, state));
+      showArray(arraySetUp(prev, state));
       // Only replays what the sim decided between the two states.
       const e = stripEvents(prev, state);
       const now = performance.now();
@@ -1108,6 +1118,18 @@ function play(
       trialBanner.classList.remove('show');
       trialBanner.textContent = '';
     }, TRIAL_BANNER_MS);
+  }
+
+  /** Shows an array's set-up under the fighters for the pause before a fight; null does nothing. */
+  function showArray(text: string | null): void {
+    if (text === null) return;
+    arrayMark.textContent = text;
+    arrayMark.classList.add('show');
+    clearTimeout(arrayTimer);
+    arrayTimer = window.setTimeout(() => {
+      arrayMark.classList.remove('show');
+      arrayMark.textContent = '';
+    }, ARRAY_SETUP_MS);
   }
 
   function playAction(f: StageSprite, action: Action, now: number): void {

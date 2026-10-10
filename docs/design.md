@@ -95,6 +95,8 @@ The realm name is primary; the job title is shown beside it.
   Tribulation replays the floor instead, §4).
 - **Combat is numbers.** Attack timers, damage, crit and HP resolve in the
   pure simulation; the strip animation only shows what happened.
+- **Arrays:** an equipped Formation Disc sets up its array as each fight
+  starts (§6); the strip shows it being set up.
 - **A pause between fights:** after a kill or a loss, neither side attacks
   for 1.2 s, so the fallen one's death plays out before the next fight.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer
@@ -104,8 +106,8 @@ The realm name is primary; the job title is shown beside it.
 
 Every drop is generated from a seeded roll.
 
-- **Slots:** Head, Chest, Boots, Attachment (worn at the hip, e.g. a pill
-  gourd), Weapon, Hidden Weapon (throwing darts and knives), two Accessories
+- **Slots:** Head, Chest, Boots, Attachment (worn at the hip: a pill gourd
+  or a formation disc), Weapon, Hidden Weapon (throwing darts and knives), two Accessories
   and two Charms: eight item types over ten positions. An item fills its
   first free position; a player can choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
@@ -137,6 +139,29 @@ Every drop is generated from a seeded roll.
 | Earth | Jade Dragon Pendant | Jade Wind Chime | Jade Demon-Revealing Mirror |
 | Heaven | Golden Sun Amulet | Golden Sun Bell | Golden Sun Mirror |
 | Immortal | Phoenix Flame Amulet | Phoenix Flame Bell | Phoenix Flame Mirror |
+
+- **Attachments come in two families:** Gourds and Formation Discs, even
+  odds. A Gourd's base stat is lifesteal. A Formation Disc has no base stat:
+  it carries one array (Binding, Illusion or Killing, even odds), set up
+  automatically at the start of every fight, Tribulations included. Its base
+  roll is the array's strength, within a range set by the grade (not the item
+  level). Affixes roll as on any Attachment. Details names the array and its
+  effect as text.
+
+| Grade | Formation Disc | Binding Array: enemy's first attack later by | Illusion Array: enemy attack misses | Killing Array: each second, share of the cultivator's damage per second |
+|---|---|---|---|---|
+| Mortal | Bronze Formation Disc | 0.5–1.0 s | 3–5% | 5–10% |
+| Spirit | Azure Bagua Disc | 1.0–1.5 s | 5–8% | 10–15% |
+| Earth | Jade Formation Disc | 1.5–2.0 s | 8–11% | 15–20% |
+| Heaven | Golden Star Disc | 2.0–2.5 s | 11–14% | 20–25% |
+| Immortal | Phoenix Flame Formation Disc | 2.5–3.0 s | 14–18% | 25–30% |
+
+- **How the arrays fight:** Binding delays only the enemy's first attack of
+  the fight; the cultivator's timing is unchanged. Illusion rolls a seeded miss
+  on every enemy attack. Killing deals its damage once a second from the start
+  of the fight: a share of the cultivator's damage per second, not per hit, so
+  fast and slow Paths gain alike (no crit, burst or lifesteal; reduced by the
+  enemy's defence, at least 1). A kill by the array counts as any other kill.
 
 | Grade | Darts | Binding Rope | Charm |
 |---|---|---|---|
