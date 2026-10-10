@@ -486,20 +486,35 @@
       "id": "sideArm",
       "sources": [
         "items/sideArm-mortal.jpg",
+        "items/sideArm-rope-mortal.jpg",
         "items/sideArm-spirit.jpg",
+        "items/sideArm-rope-spirit.jpg",
         "items/sideArm-earth.jpg",
+        "items/sideArm-rope-earth.jpg",
         "items/sideArm-heaven.jpg",
-        "items/sideArm-immortal.jpg"
+        "items/sideArm-rope-heaven.jpg",
+        "items/sideArm-immortal.jpg",
+        "items/sideArm-rope-immortal.jpg"
       ]
     },
     {
       "id": "accessory",
       "sources": [
         "items/accessory-mortal.jpg",
+        "items/accessory-bell-mortal.jpg",
+        "items/accessory-mirror-mortal.jpg",
         "items/accessory-spirit.jpg",
+        "items/accessory-bell-spirit.jpg",
+        "items/accessory-mirror-spirit.jpg",
         "items/accessory-earth.jpg",
+        "items/accessory-bell-earth.jpg",
+        "items/accessory-mirror-earth.jpg",
         "items/accessory-heaven.jpg",
-        "items/accessory-immortal.jpg"
+        "items/accessory-bell-heaven.jpg",
+        "items/accessory-mirror-heaven.jpg",
+        "items/accessory-immortal.jpg",
+        "items/accessory-bell-immortal.jpg",
+        "items/accessory-mirror-immortal.jpg"
       ]
     },
     {

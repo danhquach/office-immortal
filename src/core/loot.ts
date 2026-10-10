@@ -144,13 +144,17 @@ const HEAD_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Crown'],
 };
 
-/** Hidden weapon names by grade: throwing darts and flying knives. */
+/**
+ * Hidden weapon names by grade in two families, always listed Darts (throwing
+ * darts and flying knives), Binding Rope. The family changes only the name and
+ * icon.
+ */
 const SIDE_ARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Iron Throwing Darts'],
-  spirit: ['Azure Frost Darts'],
-  earth: ['Jade Viper Darts'],
-  heaven: ['Golden Crow Flying Knives'],
-  immortal: ['Phoenix Flame Darts'],
+  mortal: ['Iron Throwing Darts', 'Hempen Binding Cord'],
+  spirit: ['Azure Frost Darts', 'Azure Silk Sash'],
+  earth: ['Jade Viper Darts', 'Jade Dragon-Binding Chain'],
+  heaven: ['Golden Crow Flying Knives', 'Golden Heaven-Wrapping Sash'],
+  immortal: ['Phoenix Flame Darts', 'Phoenix Flame Binding Rope'],
 };
 
 /** Gourd names by grade, worn at the hip. */
@@ -162,13 +166,16 @@ const ATTACHMENT_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Gourd'],
 };
 
-/** Pendant and amulet names by grade. */
+/**
+ * Accessory names by grade in three families, always listed Pendant, Bell,
+ * Mirror. The family changes only the name and icon.
+ */
 const ACCESSORY_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Bone Bead Pendant'],
-  spirit: ['Azure Spirit Pendant'],
-  earth: ['Jade Dragon Pendant'],
-  heaven: ['Golden Sun Amulet'],
-  immortal: ['Phoenix Flame Amulet'],
+  mortal: ['Bone Bead Pendant', 'Bronze Clapper Bell', 'Bronze Hand Mirror'],
+  spirit: ['Azure Spirit Pendant', 'Azure Soul-Scattering Bell', 'Azure Bagua Mirror'],
+  earth: ['Jade Dragon Pendant', 'Jade Wind Chime', 'Jade Demon-Revealing Mirror'],
+  heaven: ['Golden Sun Amulet', 'Golden Sun Bell', 'Golden Sun Mirror'],
+  immortal: ['Phoenix Flame Amulet', 'Phoenix Flame Bell', 'Phoenix Flame Mirror'],
 };
 
 /** Talisman and seal names by grade. */

@@ -111,10 +111,10 @@ Every drop is generated from a seeded roll.
 - **Item level** = the floor it dropped on. It caps every roll.
 - **Base stat:** each item type rolls in a range (e.g. an Iron Flying Sword
   weapon rolls 8–14 damage at item level 10).
-- **Every other item's name follows the grade,** one name per grade, so a
-  better drop looks better (each name has its own icon, coloured like its
-  grade: Mortal grey, Spirit azure, Earth jade, Heaven white and gold,
-  Immortal crimson and gold):
+- **Every other item's name follows the grade,** one name per grade (per
+  family for Accessories and Hidden Weapons, below), so a better drop looks
+  better (each name has its own icon, coloured like its grade: Mortal grey,
+  Spirit azure, Earth jade, Heaven white and gold, Immortal crimson and gold):
 
 | Grade | Head | Chest | Boots | Attachment |
 |---|---|---|---|---|
@@ -124,13 +124,27 @@ Every drop is generated from a seeded roll.
 | Heaven | Golden Sun Crown | Golden Elder Robe | Golden Cloud Boots | Golden Nectar Gourd |
 | Immortal | Phoenix Flame Crown | Phoenix Flame Robe | Phoenix Flame Boots | Phoenix Flame Gourd |
 
-| Grade | Hidden Weapon | Accessory | Charm |
+- **Accessories and Hidden Weapons come in families** like weapons: each
+  grade drops one of each family. Accessories are Pendants, Bells or Mirrors;
+  Hidden Weapons are Darts or Binding Ropes. The family only changes the name
+  and icon: every Accessory rolls the same base stat and affixes, and so does
+  every Hidden Weapon.
+
+| Grade | Pendant | Bell | Mirror |
 |---|---|---|---|
-| Mortal | Iron Throwing Darts | Bone Bead Pendant | Paper Ward Talisman |
-| Spirit | Azure Frost Darts | Azure Spirit Pendant | Azure Thunder Talisman |
-| Earth | Jade Viper Darts | Jade Dragon Pendant | Jade Seal Talisman |
-| Heaven | Golden Crow Flying Knives | Golden Sun Amulet | Golden Heaven Seal |
-| Immortal | Phoenix Flame Darts | Phoenix Flame Amulet | Phoenix Flame Talisman |
+| Mortal | Bone Bead Pendant | Bronze Clapper Bell | Bronze Hand Mirror |
+| Spirit | Azure Spirit Pendant | Azure Soul-Scattering Bell | Azure Bagua Mirror |
+| Earth | Jade Dragon Pendant | Jade Wind Chime | Jade Demon-Revealing Mirror |
+| Heaven | Golden Sun Amulet | Golden Sun Bell | Golden Sun Mirror |
+| Immortal | Phoenix Flame Amulet | Phoenix Flame Bell | Phoenix Flame Mirror |
+
+| Grade | Darts | Binding Rope | Charm |
+|---|---|---|---|
+| Mortal | Iron Throwing Darts | Hempen Binding Cord | Paper Ward Talisman |
+| Spirit | Azure Frost Darts | Azure Silk Sash | Azure Thunder Talisman |
+| Earth | Jade Viper Darts | Jade Dragon-Binding Chain | Jade Seal Talisman |
+| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash | Golden Heaven Seal |
+| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope | Phoenix Flame Talisman |
 
 - **Weapons are a Taoist cultivator's magic tools,** in five families. Each
   grade drops one of each family, and the material gets richer with the grade
@@ -157,7 +171,8 @@ Every drop is generated from a seeded roll.
   rejected. A Head, Hidden Weapon, Attachment, Accessory or Charm with a name
   from before names followed the grade (the office names, e.g. Thinking Cap,
   Stapler Dagger, Coffee Gourd, Lanyard Pendant, Sticky-Note Talisman) loads as
-  the name of its type and grade; on another type it is rejected.
+  the first name of its type and grade (a Pendant for Accessories, Darts for
+  Hidden Weapons); on another type it is rejected.
 
 - **Grades (rarity) and affix count:**
 
@@ -311,9 +326,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   city windows at night, a boardroom above the clouds. Dimmed so the fighters
   stay the brightest thing in the strip.
 - **Item icons:** one atlas cell per item name, 64×64, shown at 32×32 (sharp
-  on high-density screens). Weapons, robes and boots have their own drawn icon
-  for each name; the other types have one drawn icon each, and each name is a
-  colour swap of it. The grade stays on the cell border and its initial, never
+  on high-density screens). Every item name has its own drawn icon, kept close
+  to its source art (256 colours picked from the icons themselves, not the
+  shared palette). The grade stays on the cell border and its initial, never
   on the icon alone.
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
@@ -362,13 +377,15 @@ Grade is also written as text, never shown by colour alone.
 - Concept art is generated with an image model to explore direction; it is
   reference only and never shipped.
 - Shipped art is generated per asset, then cleaned to its final pixel size and
-  the shared palette by `tools/art/build.py` (prompts and seeds in
-  `tools/art/manifest.json`; the generated sources are not committed). No
-  commercial characters, logos or brand marks in any asset. All of it is
-  served from the site itself and stays under 1 MB.
+  the shared palette (item icons: their own 256 colours) by
+  `tools/art/build.py` (prompts and seeds in `tools/art/manifest.json`; the
+  generated sources are not committed). No commercial characters, logos or
+  brand marks in any asset. All of it is served from the site itself and
+  stays under 1 MB.
 - Weapon icons are drawn by hand as SVG in `tools/art/weapons.mjs`, so their
   editable sources are committed. `node tools/art/render-weapons.mjs` renders
   them to transparent PNGs in `art-src/weapons/`, and
   `python3 tools/art/build.py icons:weapon` fits them into the atlas's weapon
-  column, copying every other column from the shipped atlas unchanged (their
-  sources are not always at hand).
+  column, copying every other column from the shipped atlas (their sources
+  are not always at hand; the atlas picks its 256 colours again on save, so
+  their colours can move slightly).
