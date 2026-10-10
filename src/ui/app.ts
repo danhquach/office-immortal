@@ -214,7 +214,8 @@ function titleBar(): HTMLElement {
   // A generic sheet glyph, drawn in CSS: no real product's logo.
   const glyph = el('span', 'glyph');
   glyph.setAttribute('aria-hidden', 'true');
-  bar.append(glyph, el('h1', 'file', FILE_NAME), el('span', 'muted', GAME_TITLE));
+  // The game's name as a red rubber stamp; CSS sets the capitals, so screen readers say the words.
+  bar.append(glyph, el('h1', 'file', FILE_NAME), el('span', 'stamp', GAME_TITLE));
   return bar;
 }
 
