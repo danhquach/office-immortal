@@ -420,17 +420,24 @@
     },
     {
       "id": "chest",
-      "seed": 1542,
-      "prompt": "a pinstripe navy daoist robe jacket, folded collar",
-      "family": "blue",
-      "materials": ["red", "blue", "green"]
+      "sources": [
+        "items/chest-mortal.jpg",
+        "items/chest-spirit.jpg",
+        "items/chest-earth.jpg",
+        "items/chest-heaven.jpg",
+        "items/chest-immortal.jpg"
+      ]
     },
     {
-      "id": "pants",
-      "seed": 1543,
-      "prompt": "a pair of grey pleated trousers",
-      "family": "grey",
-      "materials": ["grey", "brown", "gold"]
+      "id": "boots",
+      "pair": true,
+      "sources": [
+        "items/boots-mortal.jpg",
+        "items/boots-spirit.jpg",
+        "items/boots-earth.jpg",
+        "items/boots-heaven.jpg",
+        "items/boots-immortal.jpg"
+      ]
     },
     {
       "id": "attachment",
@@ -521,5 +528,6 @@
     "size": [64, 80],
     "prompt": "pixel art game sprite, a plain featureless grey mannequin figure, full body, straight front view, arms slightly away from the body with open hands level with the hips, legs slightly apart, no face, no clothes, bold dark outline, magenta background"
   },
-  "icon_size": 32
+  "icon_size": 32,
+  "icon_scale": 2
 }

@@ -53,6 +53,21 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 // Typed views into the tampered JSON.
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
+
+/** The save as versions before 4 wrote it: Boots were called Pants. */
+function withPants(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  const st = save.state;
+  for (const i of st.inventory as J[]) if (i.slot === 'boots') i.slot = 'pants';
+  const eq = cult(save).equipment as J;
+  if (eq.boots) {
+    (eq.boots as J).slot = 'pants';
+    eq.pants = eq.boots;
+    delete eq.boots;
+  }
+  const filter = st.filter as J | undefined;
+  if (filter) filter.slots = (filter.slots as string[]).map((s) => (s === 'boots' ? 'pants' : s));
+  return save;
+}
 const item = (s: ReturnType<typeof raw>) => (s.state.inventory as J[])[0] as J;
 const enemy = (s: ReturnType<typeof raw>) => (s.state.enemies as J[])[0] as J;
 
@@ -172,7 +187,7 @@ describe('rejects', () => {
   });
 
   it.each([
-    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 4)],
+    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 5)],
     ['a version as text', (s: ReturnType<typeof raw>) => void ((s as J).v = '1')],
     ['a missing state', (s: ReturnType<typeof raw>) => void delete (s as J).state],
     ['an extra top-level key', (s: ReturnType<typeof raw>) => void ((s as J).admin = true)],
@@ -520,6 +535,112 @@ describe('rejects', () => {
     });
   });
 
+  describe('a version 3 save: Pants became Boots', () => {
+    const gear = (slot: string, name: string, grade = 'mortal', affixes: J[] = []): J => ({
+      slot,
+      name,
+      level: 1,
+      grade,
+      baseRoll: 0.5,
+      affixes,
+    });
+    const spirit = [{ id: 'maxHp', roll: 0.5 }];
+
+    /** A v3 save with pants in the bag, on the cultivator and in the filter. */
+    function v3(change: (s: ReturnType<typeof raw>) => void = () => {}): ReturnType<typeof raw> {
+      const save = withPants(raw());
+      save.v = 3;
+      (save.state.inventory as J[])[0] = gear('pants', 'Khaki Leggings');
+      const eq = cult(save).equipment as J;
+      delete eq.boots;
+      eq.pants = gear('pants', 'Slacks of Stillness', 'spirit', spirit);
+      (save.state.filter as J).slots = ['chest', 'pants'];
+      change(save);
+      return save;
+    }
+    const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+
+    it('loads pants as boots, renamed by grade', () => {
+      const st = load(v3())?.state;
+      expect(st?.inventory[0]).toMatchObject({ slot: 'boots', name: 'Hempen Cloth Boots' });
+      expect(st?.cultivator.equipment.boots).toMatchObject({
+        slot: 'boots',
+        name: 'Azure Cloud Boots',
+      });
+      expect(st?.filter.slots).toEqual(['chest', 'boots']);
+    });
+
+    it('renames a retired robe by grade', () => {
+      const s = v3(
+        (save) => void ((save.state.inventory as J[])[0] = gear('chest', 'Silk Cardigan')),
+      );
+      expect(load(s)?.state.inventory[0]?.name).toBe('Hempen Novice Robe');
+    });
+
+    it('saves boots as boots and loads them back', () => {
+      const st = load(v3())?.state;
+      expect(st && decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+    });
+
+    it.each([
+      ['a boots item', (s: ReturnType<typeof raw>) => void (item(s).slot = 'boots')],
+      [
+        'a boots position',
+        (s: ReturnType<typeof raw>) =>
+          void ((cult(s).equipment as J).boots = gear('boots', 'Hempen Cloth Boots')),
+      ],
+      [
+        'pants listed twice in the filter',
+        (s: ReturnType<typeof raw>) => void ((s.state.filter as J).slots = ['pants', 'boots']),
+      ],
+      ['look-alike pants', (s: ReturnType<typeof raw>) => void (item(s).slot = 'Pants')],
+      ['a zero-width pants', (s: ReturnType<typeof raw>) => void (item(s).slot = 'pants\u200b')],
+      [
+        'a bidi override on pants',
+        (s: ReturnType<typeof raw>) => void (item(s).slot = '\u202epants'),
+      ],
+      [
+        'a robe in the pants position',
+        (s: ReturnType<typeof raw>) =>
+          void ((cult(s).equipment as J).pants = gear('chest', 'Silk Cardigan')),
+      ],
+      [
+        'pants in the chest position',
+        (s: ReturnType<typeof raw>) =>
+          void ((cult(s).equipment as J).chest = gear('pants', 'Khaki Leggings')),
+      ],
+      [
+        'a pants item named for another grade',
+        (s: ReturnType<typeof raw>) =>
+          void ((s.state.inventory as J[])[0] = gear('pants', 'Azure Cloud Boots')),
+      ],
+      [
+        'a constructor position',
+        (s: ReturnType<typeof raw>) => void ((cult(s).equipment as J)['constructor'] = {}),
+      ],
+    ])('rejects %s in a v3 save', (_, change) => {
+      expect(load(v3(change))).toBeNull();
+    });
+
+    it.each([
+      [
+        'a pants item',
+        (s: ReturnType<typeof raw>) => void Object.assign(item(s), gear('pants', 'Khaki Leggings')),
+      ],
+      [
+        'a pants position',
+        (s: ReturnType<typeof raw>) =>
+          void ((cult(s).equipment as J).pants = gear('boots', 'Hempen Cloth Boots')),
+      ],
+      [
+        'pants in the filter',
+        (s: ReturnType<typeof raw>) => void ((s.state.filter as J).slots = ['pants']),
+      ],
+    ])('rejects %s in a v4 save', (_, change) => {
+      expect(tampered(change)).toBeNull();
+    });
+  });
+
   describe('a version 1 save', () => {
     /** The save as v1 wrote it: no currencies, filter, bag size or unspent points. */
     function v1(): string {
@@ -540,7 +661,7 @@ describe('rejects', () => {
       }
       st.dropsLost = 3;
       delete cult(save).unspent;
-      return JSON.stringify({ ...save, v: 1 });
+      return JSON.stringify({ ...withPants(save), v: 1 });
     }
 
     it('loads, with the new fields at their defaults', () => {
@@ -616,8 +737,23 @@ describe('Dao Insight and passives', () => {
   it('loads a version 2 save with no insight or passives', () => {
     const save = raw();
     for (const k of ['insight', 'passives', 'retirements']) delete save.state[k];
-    const loaded = decodeSave(JSON.stringify({ ...save, v: 2 }));
+    const loaded = decodeSave(JSON.stringify({ ...withPants(save), v: 2 }));
     expect(loaded?.state).toEqual({ ...STATE, insight: 0, passives: noPassives(), retirements: 0 });
+  });
+
+  it.each([1, 2])('rejects boots in a version %i save', (v) => {
+    const save = withPants(raw());
+    for (const k of ['insight', 'passives', 'retirements']) delete save.state[k];
+    if (v === 1) {
+      for (const k of ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']) {
+        delete save.state[k];
+      }
+      save.state.dropsLost = 0;
+      delete cult(save).unspent;
+    }
+    expect(decodeSave(JSON.stringify({ ...save, v }))).not.toBeNull();
+    item(save).slot = 'boots';
+    expect(decodeSave(JSON.stringify({ ...save, v }))).toBeNull();
   });
 
   it('rejects a version 2 save that carries v3 fields', () => {

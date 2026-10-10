@@ -129,9 +129,21 @@ describe('rollItem', () => {
     }
   });
 
+  it('names robes and boots by grade: one name each, in grade order', () => {
+    for (const slot of ['chest', 'boots'] as const) {
+      for (const g of GRADE_IDS) expect(namesFor(slot, g)).toHaveLength(1);
+      expect(SLOTS[slot].names).toEqual(GRADE_IDS.flatMap((g) => namesFor(slot, g)));
+      for (const g of GRADE_IDS) {
+        const seen = MANY.filter((i) => i.slot === slot && i.grade === g).map((i) => i.name);
+        expect(seen.length, `${slot} ${g}`).toBeGreaterThan(0);
+        expect(new Set(seen)).toEqual(new Set(namesFor(slot, g)));
+      }
+    }
+  });
+
   it('keeps one name list for the types without grade names', () => {
     for (const s of Object.keys(SLOTS) as (keyof typeof SLOTS)[]) {
-      if (s === 'weapon') continue;
+      if (SLOTS[s].byGrade) continue;
       for (const g of GRADE_IDS) expect(namesFor(s, g)).toBe(SLOTS[s].names);
     }
   });

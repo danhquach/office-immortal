@@ -59,12 +59,13 @@ import { ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
- * bag upgrades; v2 before Early Retirement and Dao Insight.
+ * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
+ * where Boots are now.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -228,6 +229,9 @@ const COUNT = Number.MAX_SAFE_INTEGER;
 function readState(v: unknown, version: number): GameState {
   const v1 = version === 1;
   const before3 = version < 3;
+  // Before v4, the Boots type and position were called Pants.
+  const before4 = version < 4;
+  const slot: SlotName = before4 ? fromPants : (id) => id;
   const o = obj(v, [
     'time',
     'rng',
@@ -253,7 +257,15 @@ function readState(v: unknown, version: number): GameState {
   const bagSize = v1 ? INVENTORY_SIZE : int(o.bagSize, INVENTORY_SIZE, MAX_BAG_SIZE);
   if ((bagSize - INVENTORY_SIZE) % BAG_ROW !== 0) fail('bag size');
   const passives = before3 ? noPassives() : readPassives(o.passives);
-  const cultivator = readCultivator(o.cultivator, time, highestFloor, v1, bonusPoints(passives));
+  const cultivator = readCultivator(
+    o.cultivator,
+    time,
+    highestFloor,
+    v1,
+    bonusPoints(passives),
+    slot,
+    before4,
+  );
   const state: GameState = {
     time,
     rng: { s: int(rng.s, 0, 0xffffffff) },
@@ -262,11 +274,11 @@ function readState(v: unknown, version: number): GameState {
     highestFloor,
     enemies: readEnemies(o.enemies, floor, cultivator),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL),
-    inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor)),
+    inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, slot)),
     bagSize,
     stones: v1 ? 0 : int(o.stones, 0, COUNT),
     essence: v1 ? 0 : int(o.essence, 0, COUNT),
-    filter: v1 ? defaultFilter() : readFilter(o.filter),
+    filter: v1 ? defaultFilter() : readFilter(o.filter, slot),
     dropsSold: v1 ? 0 : int(o.dropsSold, 0, COUNT),
     dropsSalvaged: v1 ? 0 : int(o.dropsSalvaged, 0, COUNT),
     kills: int(o.kills, 0, COUNT),
@@ -287,9 +299,21 @@ function readPassives(v: unknown): Passives {
 
 const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];
 
-function readFilter(v: unknown): LootFilter {
+/** An older save's name for an item type or position, as it is called now. */
+type SlotName = (id: unknown) => unknown;
+
+/**
+ * Pants became Boots in v4: the type, and the position that takes it. A save
+ * from before has no boots.
+ */
+function fromPants(id: unknown): unknown {
+  if (id === 'boots') fail('boots before v4');
+  return id === 'pants' ? 'boots' : id;
+}
+
+function readFilter(v: unknown, slot: SlotName): LootFilter {
   const o = obj(v, ['minGrade', 'slots', 'action']);
-  const slots = arr(o.slots, SLOT_IDS.length).map((id) => oneOf(id, SLOT_IDS));
+  const slots = arr(o.slots, SLOT_IDS.length).map((id) => oneOf(slot(id), SLOT_IDS));
   // In SLOTS order without repeats, as setFilter keeps them.
   if (SLOT_IDS.filter((id) => slots.includes(id)).join() !== slots.join()) fail('filter slots');
   return {
@@ -305,6 +329,8 @@ function readCultivator(
   highestFloor: number,
   v1: boolean,
   bonus: number,
+  slot: SlotName,
+  before4: boolean,
 ): Cultivator {
   const o = obj(v, [
     'path',
@@ -328,11 +354,14 @@ function readCultivator(
     3 * BASE_STAT + STARTING_PRIMARY_BONUS + STAT_POINTS_PER_LEVEL * (level - 1) + bonus;
   const unspent = v1 ? 0 : int(o.unspent, 0, points);
   if (stats.body + stats.agility + stats.spirit + unspent !== points) fail('stat points');
-  const eq = obj(o.equipment, [], EQUIP_IDS);
+  // The positions under the names this save uses.
+  const saved = before4 ? EQUIP_IDS.map((at) => (at === 'boots' ? 'pants' : at)) : EQUIP_IDS;
+  const eq = obj(o.equipment, [], saved);
   const equipment: Equipment = {};
-  for (const at of EQUIP_IDS) {
-    if (!Object.hasOwn(eq, at)) continue;
-    const item = readItem(eq[at], highestFloor);
+  for (const [i, at] of EQUIP_IDS.entries()) {
+    const key = saved[i] as string;
+    if (!Object.hasOwn(eq, key)) continue;
+    const item = readItem(eq[key], highestFloor, slot);
     if (EQUIP_SLOTS[at].takes !== item.slot) fail('item in wrong slot');
     equipment[at] = item;
   }
@@ -393,9 +422,9 @@ function readEnemies(v: unknown, floor: number, c: Cultivator): Enemy[] {
   });
 }
 
-function readItem(v: unknown, highestFloor: number): Item {
+function readItem(v: unknown, highestFloor: number, slotName: SlotName): Item {
   const o = obj(v, ['slot', 'name', 'level', 'grade', 'baseRoll', 'affixes'], ['unique']);
-  const slot = oneOf(o.slot, SLOT_IDS);
+  const slot = oneOf(slotName(o.slot), SLOT_IDS);
   const grade = oneOf(o.grade, GRADE_IDS);
   const [min, max] = GRADES[grade].affixes;
   const affixes: Affix[] = arr(o.affixes, max).map((a) => {

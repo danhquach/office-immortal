@@ -23,7 +23,9 @@ const INLINE = import.meta.glob<string>('../assets/art/*.png', {
 });
 const exists = (name: string) => artUrl(name) !== '';
 const manifest = JSON.parse(manifestText) as {
-  icons: { id: SlotId; materials?: string[]; files?: string[] }[];
+  icons: { id: SlotId; materials?: string[]; files?: string[]; sources?: string[] }[];
+  icon_size: number;
+  icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
 };
 
@@ -102,7 +104,9 @@ describe('iconCell', () => {
     const cells = new Set<string>();
     for (const slot of ICON_COLUMNS) {
       const entry = manifest.icons.find((i) => i.id === slot);
-      expect(entry?.files ?? entry?.materials).toHaveLength(SLOTS[slot].names.length);
+      expect(entry?.files ?? entry?.sources ?? entry?.materials).toHaveLength(
+        SLOTS[slot].names.length,
+      );
       for (const name of SLOTS[slot].names) {
         const { col, row } = iconCell({ slot, name } as Item);
         cells.add(`${col},${row}`);
@@ -111,11 +115,13 @@ describe('iconCell', () => {
     expect(cells.size).toBe(ICON_COLUMNS.reduce((n, s) => n + SLOTS[s].names.length, 0));
   });
 
-  it('sizes the atlas the way the page draws it: a 32 px cell per column and row', () => {
+  it('sizes the atlas the way the page draws it: one cell per column and row', () => {
     const png = atob((INLINE['../assets/art/icons.png'] ?? '').split(',')[1] ?? '');
     // The PNG header stores width and height as big-endian 32-bit numbers at bytes 16 and 20.
     const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
-    expect([u32(16), u32(20)]).toEqual([32 * ICON_COLUMNS.length, 32 * ICON_ROWS]);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect(cell).toBe(64);
+    expect([u32(16), u32(20)]).toEqual([cell * ICON_COLUMNS.length, cell * ICON_ROWS]);
     expect(ICON_ROWS).toBe(15);
   });
 
