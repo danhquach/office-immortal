@@ -46,7 +46,6 @@ import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.t
 import {
   buyPassive,
   canRetire,
-  passiveCost,
   PASSIVE_IDS,
   retirePreview,
   type PassiveId,
@@ -93,7 +92,7 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
-  passiveLabel,
+  passiveRow,
   PATH_BLURBS,
   enemySprite,
   ICON_COLUMNS,
@@ -195,6 +194,17 @@ function choice(
 function setButton(b: HTMLButtonElement, text: string, off: boolean): void {
   if (b.textContent !== text) b.textContent = text;
   if (b.getAttribute('aria-disabled') !== String(off)) b.setAttribute('aria-disabled', String(off));
+}
+
+function setText(node: HTMLElement, text: string): void {
+  if (node.textContent !== text) node.textContent = text;
+}
+
+/** The Dao Insight mark; decorative, the words beside it carry the meaning. */
+function gem(): HTMLElement {
+  const g = el('span', 'gem', '◆');
+  g.setAttribute('aria-hidden', 'true');
+  return g;
 }
 
 /** A seed for a new run. Runs replay from it; it need not be secret. */
@@ -579,27 +589,63 @@ function play(
   pathRow.append(pathPick.box, pathBtn);
   statsBody.append(stats, points, resetBtn, pathRow, shopNote);
 
-  // Early Retirement: the Dao Insight shop, then the retire button and its
-  // confirmation listing what is kept and what is lost.
-  const insightText = el('p');
-  const passiveBtns = {} as Record<PassiveId, HTMLButtonElement>;
-  const passiveList = el('div', 'passives');
+  // Early Retirement: the Dao Insight total, the passive shop (one line per
+  // passive, its effect on expand), then the retire box with its confirmation.
+  const insightTotal = el('div', 'insight');
+  const insightCount = el('b');
+  const retiredText = el('small', 'muted');
+  insightTotal.append(gem(), insightCount, el('span', '', 'Dao Insight'), retiredText);
+  const passiveRows = {} as Record<
+    PassiveId,
+    {
+      row: HTMLElement;
+      name: HTMLElement;
+      rank: HTMLElement;
+      buy: HTMLButtonElement;
+      detail: HTMLElement;
+    }
+  >;
+  const passiveList = el('ul', 'passives');
+  passiveList.setAttribute('aria-label', 'Passives');
   for (const id of PASSIVE_IDS) {
-    passiveBtns[id] = button('', '', () => act(buyPassive(state, id)));
-    passiveList.append(passiveBtns[id]);
+    const row = el('li', 'passive');
+    const toggle = el('button', 'more');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-expanded', 'false');
+    toggle.setAttribute('aria-controls', `passive-${id}`);
+    const name = el('span', 'name');
+    const rank = el('span', 'rank');
+    toggle.append(name, ' ', rank);
+    const buy = button('', '', () => act(buyPassive(state, id)));
+    const detail = el('p', 'detail');
+    detail.id = `passive-${id}`;
+    detail.hidden = true;
+    toggle.addEventListener('click', () => {
+      detail.hidden = !detail.hidden;
+      toggle.setAttribute('aria-expanded', String(!detail.hidden));
+    });
+    row.append(toggle, buy, detail);
+    passiveList.append(row);
+    passiveRows[id] = { row, name, rank, buy, detail };
   }
   // The lists follow the run while open (every kill changes the Spirit Stones
   // lost), so they are not a live region: the Retire button is described by
   // them instead, and focus lands there.
   const retireBox = el('div', 'confirm');
   const keptList = el('ul', 'lines');
-  const keptHead = el('p', '', 'Retire early? You keep:');
+  const keptHead = el('h4', 'keep', 'You keep');
   keptHead.id = 'retire-kept';
   keptList.id = 'retire-kept-list';
-  const lostHead = el('p', '', 'You lose:');
+  const lostHead = el('h4', 'lose', 'You lose');
   lostHead.id = 'retire-lost';
   const lostList = el('ul', 'lines');
   lostList.id = 'retire-lost-list';
+  const keptCol = el('div');
+  keptCol.append(keptHead, keptList);
+  const lostCol = el('div');
+  lostCol.append(lostHead, lostList);
+  const cols = el('div', 'cols');
+  cols.append(keptCol, lostCol);
   const retireYes = button('Retire', 'primary', () => {
     // A new run on a fresh page; play() saves it straight away.
     play(root, retire(state), storage, null);
@@ -616,7 +662,7 @@ function play(
     retireBox.hidden = true;
     retireBtn.focus();
   });
-  retireBox.append(keptHead, keptList, lostHead, lostList, retireYes, retireNo);
+  retireBox.append(el('p', 'ask', 'Retire early?'), cols, retireYes, retireNo);
   retireBox.hidden = true;
   const retireBtn = button('', '', askRetire);
   function askRetire(): void {
@@ -640,19 +686,18 @@ function play(
       });
     }
   }
-  const retireBody = el('div', 'retire');
-  retireBody.append(
-    insightText,
-    passiveList,
-    el(
-      'p',
-      'muted hint',
-      'Retiring starts again at floor 1, level 1 and pays Dao Insight for the highest floor ' +
-        'reached. Passives last through every run.',
-    ),
+  const reward = el('span', 'reward');
+  const retireHead = el('div', 'head');
+  retireHead.append(el('h3', '', 'Early Retirement'), reward);
+  const retireSection = el('section', 'early');
+  retireSection.append(
+    retireHead,
+    el('p', 'muted hint', 'Back to floor 1, level 1. Pays for your highest floor.'),
     retireBtn,
     retireBox,
   );
+  const retireBody = el('div', 'retire');
+  retireBody.append(insightTotal, passiveList, retireSection);
 
   const charTabs = tabs([
     { id: 'gear', label: 'Equipment', body: slots },
@@ -1366,16 +1411,29 @@ function play(
       'A Path change puts every stat point into the new Path’s primary stat. A reset takes ' +
       'them back to spend as you choose.';
 
-    insightText.textContent = `Dao Insight: ${state.insight} · Retirements: ${state.retirements}`;
+    setText(insightCount, String(state.insight));
+    setText(retiredText, `Retirements: ${state.retirements}`);
     for (const id of PASSIVE_IDS) {
-      const cost = passiveCost(state.passives, id);
-      setButton(
-        passiveBtns[id],
-        passiveLabel(state.passives, id),
-        cost === null || state.insight < cost,
-      );
+      const view = passiveRow(state.passives, state.insight, id);
+      const r = passiveRows[id];
+      if (r.row.dataset.state !== view.state) r.row.dataset.state = view.state;
+      setText(r.name, view.name);
+      setText(r.rank, view.rank);
+      setText(r.detail, view.detail);
+      setButton(r.buy, view.buy, view.state !== 'can');
+      if (r.buy.getAttribute('aria-label') !== view.buyName)
+        r.buy.setAttribute('aria-label', view.buyName);
     }
-    setButton(retireBtn, retireLabel(retirePreview(state)), !canRetire(state));
+    const preview = retirePreview(state);
+    if (reward.dataset.insight !== String(preview.insight)) {
+      reward.dataset.insight = String(preview.insight);
+      if (preview.insight > 0) {
+        reward.replaceChildren(`+${preview.insight}`, gem(), el('span', 'sr-only', ' Dao Insight'));
+      } else {
+        reward.replaceChildren(el('span', 'muted', 'Locked'));
+      }
+    }
+    setButton(retireBtn, retireLabel(preview), !canRetire(state));
     drawRetire();
 
     points.hidden = c.unspent === 0;

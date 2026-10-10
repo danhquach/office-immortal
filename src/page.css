@@ -1023,19 +1023,150 @@ button.primary {
 .confirm button {
   margin-right: 0.4rem;
 }
-/* Early Retirement: the Dao Insight shop and the retire confirmation */
-.passives {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0.5rem 0;
+/* Early Retirement: the Dao Insight total, the passive shop and the retire box */
+.retire {
   max-width: 24rem;
 }
-.passives button {
+.gem {
+  color: var(--grade-heaven);
+}
+.insight {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.35rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+.insight b {
+  font-size: 1.3rem;
+  color: var(--grade-heaven);
+}
+.insight small {
+  margin-left: auto;
+  font-size: 0.8rem;
+}
+.passives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.passive {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.4rem;
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--line);
+}
+/* The name is a disclosure: a plain line of text that shows the effect below. */
+.passive .more {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  border: 0;
+  background: none;
+  padding: 0.15rem 0;
   text-align: left;
 }
+.passive .more::before {
+  content: '▸';
+  content: '▸' / '';
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+.passive .more[aria-expanded='true']::before {
+  content: '▾';
+  content: '▾' / '';
+}
+.passive .name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.passive .rank {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.passive[data-state='can'] > button:not(.more) {
+  border-color: var(--accent);
+}
+.passive[data-state='cant'] .name {
+  color: var(--muted);
+}
+.passive[data-state='max'] .rank {
+  color: var(--grade-heaven);
+}
+.passive .detail {
+  flex-basis: 100%;
+  margin: 0 0 0.25rem 1rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.early {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.45rem;
+  margin-top: 0.6rem;
+}
+.early .head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0 0.4rem;
+}
+.early h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+.early .reward {
+  position: relative;
+  font-weight: 600;
+  color: var(--grade-heaven);
+}
+.early .hint {
+  margin: 0.15rem 0 0.4rem;
+}
 .retire .confirm {
-  margin-top: 0.5rem;
-  max-width: 24rem;
+  margin: 0.5rem 0 0;
+}
+.confirm .ask {
+  font-weight: 600;
+}
+.confirm .cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
+}
+.confirm h4 {
+  margin: 0 0 0.15rem;
+  font-size: 0.8rem;
+}
+.confirm .keep {
+  color: var(--up);
+}
+.confirm .lose {
+  color: var(--down);
+}
+.confirm .cols ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .filter {
   display: grid;
