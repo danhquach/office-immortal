@@ -52,7 +52,14 @@ import {
   type PassiveId,
 } from '../core/prestige.ts';
 import { equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
-import { browserStorage, loadSave, writeSave, type SaveStorage } from '../storage/save.ts';
+import {
+  browserStorage,
+  clearSave,
+  loadSave,
+  SAVE_KEY,
+  writeSave,
+  type SaveStorage,
+} from '../storage/save.ts';
 import {
   dropToast,
   faviconHref,
@@ -109,6 +116,17 @@ const BLINK_MS = 900;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
+/** The Help tab of the main menu: how the game plays, in short. */
+const HELP_LINES: readonly string[] = [
+  'Your cultivator fights on their own, floor after floor. A floor is waves of demons, an elite and a boss.',
+  'Losing a fight sends you back one floor to grow stronger.',
+  'Drops land in the Inventory. Select one to compare it with what you wear, then equip it with its Equip button, a double-click or by dragging it onto your character.',
+  'Sell drops for Spirit Stones or salvage them into Spirit Essence. The Auto filter does it for you as drops land.',
+  'Spirit Stones buy bag space, stat resets and Path changes (Character, Stats tab).',
+  'At each realm cap a Tribulation joins the floor; beat it to break through to the next realm.',
+  'Early Retirement (Character, Retirement tab) starts again at floor 1 and pays Dao Insight, spent on passives that last every run.',
+  'Progress saves on its own and keeps going while you are away (Overtime Cultivation).',
+];
 const STAT_NAMES: readonly [StatId, string][] = [
   ['body', 'Body'],
   ['agility', 'Agility'],
@@ -720,7 +738,7 @@ function play(
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
   game.append(strip, kpis, columns);
-  // Tab HUD, pop-out and notification controls
+  // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);
   const noticeBtn = button('', '', () => {
@@ -729,9 +747,80 @@ function play(
   const popBtn = button('Pop out', '', () => void togglePopOut());
   // Each control is left out where the browser lacks its feature.
   if (canPopOut(window)) tools.append(popBtn);
-  if (notices.state() !== 'unsupported') tools.append(noticeBtn);
+  const menuBtn = button('Menu', '', () => {
+    resetBox.hidden = true;
+    menu.showModal();
+  });
+  menuBtn.setAttribute('aria-haspopup', 'dialog');
+  tools.append(menuBtn);
   const bar = titleBar();
   bar.append(tools);
+
+  // Reset progress: asks first, then deletes the save and starts a new run.
+  const resetText = el(
+    'p',
+    '',
+    'Delete all progress, including Dao Insight and passives? This cannot be undone.',
+  );
+  const resetYes = button('Reset everything', 'primary', () => {
+    if (storage && !clearSave(storage)) {
+      resetText.textContent = 'The browser refused to delete the save. Nothing was reset.';
+      resetYes.hidden = true;
+      return;
+    }
+    menu.close();
+    // start() stops this run (timers, autosave, pop-out) before anything is saved again.
+    start(root, storage);
+  });
+  const resetNo = button('Cancel', '', () => {
+    resetBox.hidden = true;
+    resetAsk.focus();
+  });
+  const resetBox = el('div', 'confirm');
+  resetBox.setAttribute('role', 'alert');
+  resetBox.append(resetText, resetYes, resetNo);
+  resetBox.hidden = true;
+  const resetAsk = button('Reset progress…', '', () => {
+    resetBox.hidden = false;
+    resetYes.hidden = false;
+    resetNo.focus();
+  });
+
+  const menu = mainMenu();
+
+  function mainMenu(): HTMLDialogElement {
+    const dialog = el('dialog', 'menu');
+    dialog.setAttribute('aria-labelledby', 'menu-title');
+    const head = el('div', 'menu-head');
+    const h = el('h2', '', 'Menu');
+    h.id = 'menu-title';
+    head.append(
+      h,
+      button('Close', '', () => dialog.close()),
+    );
+    const settings = el('div', 'settings');
+    if (notices.state() !== 'unsupported') {
+      settings.append(el('h3', '', 'Notifications'), noticeBtn);
+    }
+    settings.append(
+      el('h3', '', 'Reset progress'),
+      el(
+        'p',
+        'muted hint',
+        'Starts over from the Path choice. Every run, item and passive is lost.',
+      ),
+      resetAsk,
+      resetBox,
+    );
+    const help = el('ul', 'lines help');
+    for (const line of HELP_LINES) help.append(el('li', '', line));
+    const menuTabs = tabs([
+      { id: 'settings', label: 'Settings', body: settings },
+      { id: 'help', label: 'Help', body: help },
+    ]);
+    dialog.append(head, menuTabs.bar, ...menuTabs.panels);
+    return dialog;
+  }
 
   // Mini view, shown in the pop-out: the strip moves in, plus one status line and the latest drop.
   const mini = el('div', 'mini');
@@ -748,7 +837,7 @@ function play(
   let blinkOn = true;
   let blinkAt = 0;
 
-  root.replaceChildren(bar, game);
+  root.replaceChildren(bar, game, menu);
   away?.querySelector('button')?.focus();
 
   function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
@@ -786,6 +875,8 @@ function play(
         useSheet(corpse, enemySprite(e.foeDied.kind, e.foeDied.name), SPRITE_SIZE[e.foeDied.kind]);
         corpse.playing = { action: 'death', start: now };
         corpse.sprite.hidden = false;
+        // The next enemy steps up once the fallen one is down (the sim's pause).
+        foe.sprite.style.visibility = 'hidden';
         foe.playing = { action: 'idle', start: now };
       } else if (e.foeHit) playAction(foe, 'hit', now);
       else if (e.foeAttack) playAction(foe, 'attack', now);
@@ -814,6 +905,8 @@ function play(
   function drawSprites(): void {
     const now = performance.now();
     const reduced = reducedMotion.matches;
+    // No corpse on stage (none started, or it already went): the foe always shows.
+    if (corpse.sprite.hidden) foe.sprite.style.visibility = '';
     for (const f of [you, foe, corpse]) {
       if (f.sprite.hidden) continue;
       const step = advance(f.playing, now, reduced, f === corpse);
@@ -1270,6 +1363,18 @@ function play(
     drawHud();
   }
   signal.addEventListener('abort', () => pip?.close());
+
+  // A Reset progress in another tab deletes the save: this tab stops its run
+  // too, so its autosave can't write the old state back.
+  window.addEventListener(
+    'storage',
+    (e) => {
+      if (storage && (e.key === null || e.key === SAVE_KEY) && e.newValue === null) {
+        start(root, storage);
+      }
+    },
+    { signal },
+  );
 
   // Looking at the tab again clears the count and the favicon's dot.
   document.addEventListener(

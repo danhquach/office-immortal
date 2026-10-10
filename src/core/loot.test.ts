@@ -243,9 +243,10 @@ describe('rollDrop', () => {
     return drops / 20_000;
   }
 
-  it('always drops from a boss and rarely from a demon', () => {
-    expect(dropRate('boss', 0)).toBe(1);
-    // Over 20k draws, ±0.015 is more than 5 standard deviations.
+  it('always drops from a Tribulation, often from a boss and rarely from a demon', () => {
+    expect(dropRate('tribulation', 0)).toBe(1);
+    // Over 20k draws, ±0.02 is more than 5 standard deviations.
+    expect(Math.abs(dropRate('boss', 0) - DROP_CHANCE.boss)).toBeLessThan(0.02);
     expect(Math.abs(dropRate('elite', 0) - DROP_CHANCE.elite)).toBeLessThan(0.02);
     expect(Math.abs(dropRate('demon', 0) - DROP_CHANCE.demon)).toBeLessThan(0.015);
   });
@@ -255,7 +256,7 @@ describe('rollDrop', () => {
   });
 
   it('sets the item level to the floor', () => {
-    const item = rollDrop(createRng(3), 'boss', 17, 0);
+    const item = rollDrop(createRng(3), 'tribulation', 17, 0);
     expect(item?.level).toBe(17);
   });
 });

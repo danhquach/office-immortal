@@ -52,7 +52,7 @@ import {
   type UniqueId,
 } from '../core/loot.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
-import type { GameState } from '../core/sim.ts';
+import { ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
@@ -70,11 +70,14 @@ export const MAX_LEVEL = 3000;
 export const MAX_FLOOR = 3000;
 /** Sim clock limit, in seconds (over 30,000 years). */
 const MAX_TIME = 1e12;
-/** The longest attack interval in the game, in seconds; a next-attack time is never further off. */
-const MAX_INTERVAL = 2;
+/**
+ * The longest attack interval in the game plus the pause before a fight, in
+ * seconds; a next-attack time is never further off.
+ */
+const MAX_INTERVAL = 2 + ENEMY_ARRIVAL;
 
 /** The parts of `Storage` the save uses, so tests can pass a plain object. */
-export type SaveStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type SaveStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
 export interface Save {
   state: GameState;
@@ -109,6 +112,20 @@ export function decodeSave(raw: unknown): Save | null {
 export function writeSave(storage: SaveStorage, state: GameState, savedAt: number): boolean {
   try {
     storage.setItem(SAVE_KEY, encodeSave(state, savedAt));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reset progress: removes the save and any rejected one, so the next start is a
+ * new run. Returns false when storage refuses.
+ */
+export function clearSave(storage: SaveStorage): boolean {
+  try {
+    storage.removeItem(SAVE_KEY);
+    storage.removeItem(REJECTED_KEY);
     return true;
   } catch {
     return false;

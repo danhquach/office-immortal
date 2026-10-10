@@ -87,6 +87,8 @@ The realm name is primary; the job title is shown beside it.
   Tribulation replays the floor instead, §4).
 - **Combat is numbers.** Attack timers, damage, crit and HP resolve in the
   pure simulation; the strip animation only shows what happened.
+- **A pause between fights:** after a kill or a loss, neither side attacks
+  for 1.2 s, so the fallen one's death plays out before the next fight.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer
   Golem, Reply-All Swarm.
 
@@ -111,6 +113,8 @@ Every drop is generated from a seeded roll.
 | Heaven | 4–5 | 2.7% |
 | Immortal | 5 + one unique effect | 0.3% |
 
+- **Drop chance per kill:** demon 4%, elite 25%, boss 50%, Tribulation
+  100%; treasure find multiplies it. About one drop per floor at the start.
 - **Affix pool:** +crit chance, +crit damage, +attack speed, lifesteal,
   +max HP, +defence, +qi regen, +spirit stone find, +treasure find.
 - **Quality %:** how close the item rolled to its maximum, shown on every item
@@ -224,8 +228,8 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 
 ### Combat strip (pixel art)
 
-- Crisp pixel art shown at 1× (whole pixels, `image-rendering: pixelated`), on a
-  limited palette.
+- Crisp pixel art (`image-rendering: pixelated`) on a limited palette, drawn
+  at 1× and scaled down as a whole where a view needs the room (below).
 - **Sprites:** frames are 128×128 for the cultivator and regular demons,
   160×160 for elites and 192×192 for bosses: the detail the art is drawn at,
   not shrunk to fit. Frames: idle 4, attack 4, hit 2, death 4. Each action is
@@ -244,11 +248,13 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
-  falls behind the next one, so the enemy in front is always the one fighting.
+  falls where it stood, and the next one steps up only once it is down (the
+  pause between fights, §5).
 - The sim decides every outcome; the strip only plays it back. Reduced motion
   shows a still pose.
-- The Mini view shows the whole stage at 3/8 so it fits its 160 px window: the
-  one place the art is not at whole pixels.
+- The Full view shows the whole stage at 3/4 (156 px tall) so the panels fit
+  one screen, and the Mini view at 3/8 so it fits its 160 px window. Narrow
+  shows it at 1×, whole pixels.
 
 ### Grade colours
 
@@ -267,10 +273,12 @@ Grade is also written as text, never shown by colour alone.
 
 | View | When | Shows |
 |---|---|---|
-| **Full** | Normal tab, 768 px wide or more | Title bar, KPI tiles, combat strip, loot table, Cultivation Log, side panels |
+| **Full** | Normal tab, 768 px wide or more | Title bar, KPI tiles, combat strip, loot table, Cultivation Log, side panels; compact, to fit a 768 px tall screen |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then KPI tiles, loot, log |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars, one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
 
+- The title bar's **Menu** holds Settings (notifications, Reset progress,
+  which asks first and then deletes the save) and Help (how to play).
 - Full and Narrow are chosen by width; Mini is chosen by height or by being
   the pop-out, and wins when both apply.
 - The Mini view has no inventory or menus. In the pop-out, a click on it

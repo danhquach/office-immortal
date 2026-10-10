@@ -102,9 +102,9 @@ select {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.5rem 0;
+  padding: 0.4rem 0;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 .titlebar .file {
   font-family: ui-monospace, monospace;
@@ -118,7 +118,7 @@ select {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 0.75rem;
+  padding: 0.5rem 0.6rem;
 }
 .panel > h2 {
   margin-bottom: 0.5rem;
@@ -152,14 +152,31 @@ select {
 }
 
 /* Layout: Full is a grid; Narrow (under 768 px) stacks it, strip first. */
+/* Full: compact, so the strip, KPIs and the three panels fit one screen. */
 .game {
   display: grid;
-  gap: 0.75rem;
+  gap: 0.5rem;
 }
 .kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+.kpi {
+  padding: 0.3rem 0.5rem;
+}
+/* Full: one row of tiles, each as wide as its value, so none wraps. */
+@media (min-width: 768px) {
+  .kpis {
+    display: flex;
+    flex-wrap: wrap;
+  }
+  .kpi {
+    flex: 1 1 auto;
+  }
+  .kpi .value {
+    white-space: nowrap;
+  }
 }
 /* The realm and its job title are the longest value; give it room. */
 .kpi.realm {
@@ -171,14 +188,15 @@ select {
   font-size: 0.8rem;
 }
 .kpi .value {
-  font-size: 1.15rem;
+  font-size: 1rem;
   font-weight: 600;
 }
+/* The character and the bag hug their content; details and drops take the rest. */
 .columns {
   display: grid;
-  grid-template-columns: minmax(15rem, 1fr) auto minmax(15rem, 1fr);
+  grid-template-columns: auto auto minmax(15rem, 1fr);
   grid-template-areas: 'char bag side';
-  gap: 0.75rem;
+  gap: 0.5rem;
   align-items: start;
 }
 .columns > .character {
@@ -192,20 +210,14 @@ select {
 }
 /* Too narrow for three columns: details move under the grid. */
 @media (max-width: 1099px) {
-  .kpis {
-    grid-template-columns: repeat(3, 1fr);
-  }
   .columns {
-    grid-template-columns: minmax(15rem, 1fr) auto;
+    grid-template-columns: auto minmax(15rem, 1fr);
     grid-template-areas:
       'char bag'
       'char side';
   }
 }
 @media (max-width: 767px) {
-  .kpis {
-    grid-template-columns: repeat(2, 1fr);
-  }
   .columns {
     grid-template-columns: 1fr;
     grid-template-areas: 'bag' 'side' 'char';
@@ -218,16 +230,29 @@ select {
 
 /* Combat strip */
 .strip {
+  position: relative;
   background: var(--strip-bg);
   color: var(--strip-ink);
   border-radius: 4px;
-  padding: 0.75rem;
+  padding: 0.5rem 0.6rem;
 }
+/* Floor and kills sit over the stage's top corners, on chips. */
 .strip .where {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  left: 0.85rem;
+  right: 0.85rem;
   display: flex;
   justify-content: space-between;
-  margin-bottom: 0.5rem;
   font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+.strip .where > span {
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  background: var(--strip-bg);
 }
 /* The stage: the zone's tiling background (1x, whole pixels) with both
    sprites standing on its floor. Sprite sheets are 4 x 4 frames; app.ts sets
@@ -240,13 +265,20 @@ select {
   align-items: flex-end;
   --stage-pad: 1rem;
   padding: 0 var(--stage-pad) 6px;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.3rem;
   border-radius: 3px;
   overflow: hidden;
   background-color: var(--strip-bg);
   background-repeat: repeat-x;
   background-position: left bottom;
   image-rendering: pixelated;
+}
+/* Full: the whole stage at 3/4 (208 px tall becomes 156), sprites and
+   background together, so the strip leaves room for the panels. */
+@media (min-width: 768px) {
+  .stage {
+    zoom: 0.75;
+  }
 }
 .sprite {
   flex: none;
@@ -301,14 +333,39 @@ select {
   grid-template-columns: 1fr auto 1fr;
   align-items: start;
   gap: 0.75rem;
+  font-size: 0.9rem;
 }
 .vs {
   align-self: center;
 }
+/* Name and HP on one line, the bar under them. */
 .fighter {
   min-width: 0;
   display: grid;
-  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: 'name hp' 'bar bar';
+  gap: 0.15rem 0.5rem;
+}
+.foe {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'hp name' 'bar bar';
+}
+.fighter .name {
+  grid-area: name;
+}
+.fighter .hp {
+  grid-area: hp;
+}
+.fighter .bar {
+  grid-area: bar;
+}
+/* Narrow: too tight for both on one line; name, bar, then HP. */
+@media (max-width: 767px) {
+  .fighter,
+  .foe {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'name' 'bar' 'hp';
+  }
 }
 .fighter .name {
   overflow: hidden;
@@ -433,7 +490,7 @@ select {
   display: flex;
   gap: 2px;
   border-bottom: 1px solid var(--line);
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
 }
 .tab {
   border: 1px solid transparent;
@@ -457,7 +514,7 @@ select {
   position: relative;
   width: 256px;
   height: 320px;
-  margin: 0 auto 0.75rem;
+  margin: 0 auto 0.25rem;
   border-radius: 4px;
 }
 .figure {
@@ -723,4 +780,42 @@ button.primary {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Main menu: Settings and Help, a modal dialog over the game. */
+.menu {
+  width: min(32rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.75rem;
+}
+.menu::backdrop {
+  background: #0008;
+}
+.menu-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.settings h3 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.settings h3:first-child {
+  margin-top: 0;
+}
+.settings .confirm {
+  margin-top: 0.5rem;
+}
+.help {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
 }
