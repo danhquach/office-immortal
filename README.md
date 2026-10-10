@@ -39,7 +39,8 @@ All shipped on `main`:
 - **Overtime Cultivation** ([#5]). Progress continues while the tab is in the
   background or closed, up to a cap.
 - **Tab HUD** ([#9]). Status in the tab title and favicon, a pop-out mini
-  window where the browser supports it, and an optional drop notification.
+  window where the browser supports it, and an optional notification for
+  Immortal drops and due Tribulations.
 
 ## Project layout
 

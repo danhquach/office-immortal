@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newCultivator, type Cultivator } from '../core/cultivator.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
-import { newGame, tick } from '../core/sim.ts';
+import { faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
 import {
   compareToEquipped,
   cellLabel,
@@ -18,6 +18,9 @@ import {
   retireLines,
   sellBelowLabel,
   statRows,
+  tribulationBanner,
+  tribulationCall,
+  tribulationFellDue,
   waveLabel,
   xpLabel,
 } from './view.ts';
@@ -252,6 +255,98 @@ describe('xpLabel', () => {
     expect(xpLabel(c)).toBe(`${xpToNext(10) + 80} / ${xpToNext(10)} · Tribulation due`);
     c.xp = 5;
     expect(xpLabel(c)).toBe(`5 / ${xpToNext(10)}`);
+  });
+});
+
+/** A fresh game held at `level` with the Tribulation due (queued at the floor's end). */
+function dueAt(level: number): GameState {
+  const s = newGame(1, 'sword');
+  s.cultivator.level = level;
+  s.cultivator.xp = xpToNext(level);
+  s.enemies.push(makeTribulation(1, Math.floor((level - 1) / 10)));
+  return s;
+}
+
+describe('tribulationCall', () => {
+  it('names the due Tribulation and the realm a win reaches', () => {
+    expect(tribulationCall(dueAt(10))).toEqual({
+      name: 'Probation Review',
+      next: 'Foundation Establishment',
+    });
+    expect(tribulationCall(dueAt(60))).toEqual({ name: 'Heavenly Audit', next: 'Immortal' });
+  });
+
+  it('is null before the cap, short of the XP, and once the fight is on', () => {
+    expect(tribulationCall(newGame(1, 'sword'))).toBeNull();
+    const short = dueAt(10);
+    short.cultivator.xp -= 1;
+    expect(tribulationCall(short)).toBeNull();
+    expect(tribulationCall(faceTribulation(dueAt(10)))).toBeNull();
+  });
+});
+
+describe('tribulationBanner', () => {
+  it('announces the fight beginning, whether clicked or reached', () => {
+    const due = dueAt(10);
+    expect(tribulationBanner(due, faceTribulation(due))).toBe(
+      'Tribulation begins: Probation Review',
+    );
+    const reached = structuredClone(due);
+    reached.enemies = reached.enemies.slice(-1);
+    expect(tribulationBanner(due, reached)).toBe('Tribulation begins: Probation Review');
+  });
+
+  it('announces a win as a breakthrough into the next realm', () => {
+    const fighting = faceTribulation(dueAt(10));
+    const won = structuredClone(fighting);
+    won.cultivator.level = 11;
+    won.kills += 1;
+    won.enemies.shift();
+    expect(tribulationBanner(fighting, won)).toBe('Breakthrough! Foundation Establishment');
+  });
+
+  it('says the floor replays after a loss', () => {
+    const fighting = faceTribulation(dueAt(10));
+    const lost = dueAt(10);
+    lost.deaths = fighting.deaths + 1;
+    expect(tribulationBanner(fighting, lost)).toBe('Probation Review stands. The floor replays.');
+  });
+
+  it('announces a Tribulation falling due', () => {
+    const before = dueAt(10);
+    before.cultivator.xp -= 1;
+    expect(tribulationBanner(before, dueAt(10))).toBe('Tribulation due: Probation Review');
+  });
+
+  it('stays quiet through an ordinary fight', () => {
+    const s = newGame(1, 'sword');
+    expect(tribulationBanner(s, tick(s, 30))).toBeNull();
+    const due = dueAt(10);
+    expect(tribulationBanner(due, due)).toBeNull();
+  });
+});
+
+describe('tribulationFellDue', () => {
+  it('is true only on the step a Tribulation becomes due', () => {
+    const short = dueAt(10);
+    short.cultivator.xp -= 1;
+    const due = dueAt(10);
+    expect(tribulationFellDue(short, due)).toBe(true);
+    expect(tribulationFellDue(due, due)).toBe(false);
+    expect(tribulationFellDue(due, short)).toBe(false);
+    expect(tribulationFellDue(short, short)).toBe(false);
+  });
+
+  it('is true when it is reached straight into the fight (the boss kill made it due)', () => {
+    const short = dueAt(10);
+    short.cultivator.xp -= 1;
+    expect(tribulationFellDue(short, faceTribulation(dueAt(10)))).toBe(true);
+  });
+
+  it('is false when a lost Tribulation comes round again, so it never repeats', () => {
+    const fighting = faceTribulation(dueAt(10));
+    expect(tribulationFellDue(dueAt(10), fighting)).toBe(false);
+    expect(tribulationFellDue(fighting, dueAt(10))).toBe(false);
   });
 });
 

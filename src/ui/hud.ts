@@ -58,17 +58,25 @@ export function noteUnseen(
   };
 }
 
-/** The tab title: `F12 · 3 drops` while drops wait unseen, else `F12 · Office Immortal`. */
-export function tabTitle(floor: number, unseen: number): string {
-  return `F${floor} · ${unseen > 0 ? dropsLabel(unseen) : GAME_TITLE}`;
+/**
+ * The tab title: `F12 · 3 drops` while drops wait unseen, else `F12 · Office Immortal`;
+ * a due Tribulation goes first: `F12 · Tribulation due · 3 drops`.
+ */
+export function tabTitle(floor: number, unseen: number, due = false): string {
+  const parts = [`F${floor}`];
+  if (due) parts.push('Tribulation due');
+  if (unseen > 0) parts.push(dropsLabel(unseen));
+  else if (!due) parts.push(GAME_TITLE);
+  return parts.join(' · ');
 }
 
 /**
  * The pop-out's status line, e.g. `F21 · Golden Core · Manager · 3 drops`, from a
- * realm label (fixed game text); no count when nothing waits.
+ * realm label (fixed game text); no count when nothing waits. While a
+ * Tribulation is due it says so in place of the realm.
  */
-export function miniStatus(floor: number, realm: string, unseen: number): string {
-  const head = `F${floor} · ${realm}`;
+export function miniStatus(floor: number, realm: string, unseen: number, due = false): string {
+  const head = due ? `F${floor} · Tribulation due` : `F${floor} · ${realm}`;
   return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
 }
 
@@ -117,6 +125,11 @@ export function faviconHref(hpShare: number, mark: GradeId | null): string {
 }
 
 /** The notification for an Immortal-grade drop. Says the floor, never the item. */
-export function immortalNotice(floor: number): { title: string; body: string } {
-  return { title: GAME_TITLE, body: `Immortal-grade drop on floor ${floor}` };
+export function immortalNotice(floor: number): { title: string; body: string; tag: string } {
+  return { title: GAME_TITLE, body: `Immortal-grade drop on floor ${floor}`, tag: 'drop' };
+}
+
+/** The notification for a Tribulation falling due. Says the floor only. */
+export function tribulationNotice(floor: number): { title: string; body: string; tag: string } {
+  return { title: GAME_TITLE, body: `Tribulation due on floor ${floor}`, tag: 'tribulation' };
 }

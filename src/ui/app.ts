@@ -51,7 +51,15 @@ import {
   retirePreview,
   type PassiveId,
 } from '../core/prestige.ts';
-import { equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
+import {
+  canFaceTribulation,
+  equip,
+  faceTribulation,
+  newGame,
+  retire,
+  tick,
+  type GameState,
+} from '../core/sim.ts';
 import {
   browserStorage,
   clearSave,
@@ -69,6 +77,7 @@ import {
   noteUnseen,
   NOTHING_UNSEEN,
   tabTitle,
+  tribulationNotice,
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
@@ -97,6 +106,9 @@ import {
   SPRITE_SIZE,
   statRows,
   stripEvents,
+  tribulationBanner,
+  tribulationCall,
+  tribulationFellDue,
   waveLabel,
   xpLabel,
 } from './view.ts';
@@ -118,6 +130,8 @@ const FILE_NAME = 'Q3_Cultivation_Report';
 const FORMULA = '=INNER_PEACE() + DAILY_GRIND() + LUCK()';
 /** The favicon's drop dot blinks at most this often, well under any flashing threshold. */
 const BLINK_MS = 900;
+/** How long a Tribulation banner stays over the stage. */
+const TRIAL_BANNER_MS = 2400;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
@@ -128,7 +142,7 @@ const HELP_LINES: readonly string[] = [
   'Drops land in the Inventory. Select one to compare it with what you wear, then equip it with its Equip button, a double-click or by dragging it onto your character.',
   'Sell drops for Spirit Stones or salvage them into Spirit Essence. The Auto filter does it for you as drops land.',
   'Spirit Stones buy bag space, stat resets and Path changes (Character, Stats tab).',
-  'At each realm cap a Tribulation joins the floor; beat it to break through to the next realm.',
+  'At each realm cap a Tribulation falls due: face it at once with the flashing alert above the fight, or it joins the end of the floor. Beat it to break through to the next realm.',
   'Early Retirement (Character, Retirement tab) starts again at floor 1 and pays Dao Insight, spent on passives that last every run.',
   'Progress saves on its own and keeps going while you are away (Overtime Cultivation).',
 ];
@@ -486,7 +500,29 @@ function play(
   stage.append(you.sprite, corpse.sprite, foe.sprite);
   const fighters = el('div', 'fighters');
   fighters.append(you.box, el('span', 'vs', 'vs'), foe.box);
-  strip.append(where, stage, fighters);
+  // The Tribulation alert: flashes while one is due; a click starts the fight now.
+  const trialCall = el('button', 'trial-call');
+  trialCall.type = 'button';
+  trialCall.hidden = true;
+  const trialHead = el('strong', '', 'Tribulation due');
+  const trialText = el('span');
+  trialCall.append(trialHead, trialText);
+  trialCall.addEventListener('click', () => {
+    if (!canFaceTribulation(state)) return;
+    const prev = state;
+    act(faceTribulation(state));
+    banner(tribulationBanner(prev, state));
+    // The alert hides once the fight is on; focus moves to the fight, not the page.
+    strip.focus({ preventScroll: true });
+  });
+  strip.tabIndex = -1;
+  // Tribulation moments (falls due, begins, is won, is lost), over the stage; also read out.
+  // Always in the accessibility tree (hidden by opacity only), so each one is announced.
+  const trialBanner = el('p', 'trial-banner');
+  trialBanner.setAttribute('role', 'status');
+  let bannerTimer = 0;
+  stage.append(trialBanner);
+  strip.append(where, trialCall, stage, fighters);
   let zone = '';
 
   // KPI tiles
@@ -911,7 +947,15 @@ function play(
       stage.style.backgroundImage = cssUrl(artUrl(`bg-${z}`));
     }
     useSheet(you, `path-${c.path}`, SPRITE_SIZE.path);
+    const call = tribulationCall(state);
+    trialCall.hidden = !call;
+    const callText = call
+      ? `${call.name}: win it to reach ${call.next}. Click to face it now.`
+      : '';
+    if (trialText.textContent !== callText) trialText.textContent = callText;
+    strip.classList.toggle('trial', enemy?.kind === 'tribulation');
     if (prev) {
+      banner(tribulationBanner(prev, state));
       // Only replays what the sim decided between the two states.
       const e = stripEvents(prev, state);
       const now = performance.now();
@@ -938,6 +982,21 @@ function play(
     }
     showEnemy();
     drawSprites();
+  }
+
+  /** Shows `text` over the stage for a moment; null leaves the banner as it is. */
+  function banner(text: string | null): void {
+    if (text === null) return;
+    trialBanner.textContent = text;
+    // Restarts the fade, even for the same text twice.
+    trialBanner.classList.remove('show');
+    void trialBanner.offsetWidth;
+    trialBanner.classList.add('show');
+    clearTimeout(bannerTimer);
+    bannerTimer = window.setTimeout(() => {
+      trialBanner.classList.remove('show');
+      trialBanner.textContent = '';
+    }, TRIAL_BANNER_MS);
   }
 
   function playAction(f: StageSprite, action: Action, now: number): void {
@@ -1330,7 +1389,7 @@ function play(
     const n = notices.state();
     setButton(
       noticeBtn,
-      n === 'blocked' ? 'Notifications blocked' : 'Notify on Immortal drops',
+      n === 'blocked' ? 'Notifications blocked' : 'Notify on Immortal drops and Tribulations',
       n === 'blocked',
     );
     noticeBtn.setAttribute('aria-pressed', String(n === 'on'));
@@ -1342,7 +1401,8 @@ function play(
   /** Title, favicon and the pop-out's status line, refreshed while the tab is in the background too. */
   function drawHud(): void {
     const c = state.cultivator;
-    const title = tabTitle(state.floor, unseen.count);
+    const due = tribulationCall(state) !== null;
+    const title = tabTitle(state.floor, unseen.count, due);
     if (document.title !== title) document.title = title;
     // A Heaven-or-better drop blinks the favicon's dot, flipping on each redraw at most
     // every BLINK_MS: about once a second in a throttled background tab, and on each
@@ -1355,7 +1415,8 @@ function play(
     const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
     setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
     if (pip) {
-      miniLine.textContent = miniStatus(state.floor, realmLabel(c.level), unseen.count);
+      miniLine.textContent = miniStatus(state.floor, realmLabel(c.level), unseen.count, due);
+      miniLine.classList.toggle('due', due);
       if (pip.document.title !== title) pip.document.title = title;
     }
   }
@@ -1467,6 +1528,9 @@ function play(
     const fresh = freshDrops(prev, state);
     logDrops(fresh);
     noteDrops(fresh);
+    if (document.hidden && tribulationFellDue(prev, state)) {
+      notices.show(tribulationNotice(state.floor));
+    }
     draw(prev);
   }
 

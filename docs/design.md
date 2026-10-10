@@ -64,8 +64,16 @@ in a Tribulation boss that must be beaten to advance.
 The realm name is primary; the job title is shown beside it.
 
 - **The cap:** at level 10, 20, … 60 the level stops; XP keeps coming and is
-  held. Once the next level's XP is held, the realm's Tribulation joins the end
-  of the current floor, so that floor can't be passed until it is won.
+  held. Once the next level's XP is held, the realm's Tribulation falls due and
+  joins the end of the current floor, so that floor can't be passed until it is
+  won.
+- **Facing it early:** while a Tribulation is due, a flashing alert above the
+  fight names it and the realm it leads to. A click starts it at once: it steps
+  to the front, the enemy it interrupts waits behind it, and the cultivator
+  faces it at full HP. Left alone, it is still fought at the end of the floor,
+  so idle and offline play break through as before. A banner over the stage
+  marks it beginning, won or lost; the tab title and the pop-out say it is
+  due, and the drop notification (when on) also fires for it.
 - **Winning** breaks through: the level moves on (spending the held XP) and the
   new realm adds +10% max HP and damage, once (added to gear's % bonuses,
   not multiplied).
@@ -190,7 +198,8 @@ treasure find, a higher offline cap, more starting stat points.
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini
   view (§14) pops out into a small always-on-top window.
-- **Notification:** optional browser notification on an Immortal-grade drop.
+- **Notification:** optional browser notification on an Immortal-grade drop
+  and when a Tribulation falls due (§4).
 
 ## 11. Save
 

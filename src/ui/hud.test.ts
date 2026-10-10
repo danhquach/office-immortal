@@ -12,6 +12,7 @@ import {
   noteUnseen,
   NOTHING_UNSEEN,
   tabTitle,
+  tribulationNotice,
 } from './hud.ts';
 
 const item = (grade: GradeId, name = 'Jade Serpent Blade'): Item => ({
@@ -39,6 +40,11 @@ describe('tabTitle', () => {
   it('shows the game name when nothing is waiting', () => {
     expect(tabTitle(12, 0)).toBe('F12 · Office Immortal');
   });
+
+  it('puts a due Tribulation first, in place of the game name', () => {
+    expect(tabTitle(12, 0, true)).toBe('F12 · Tribulation due');
+    expect(tabTitle(12, 3, true)).toBe('F12 · Tribulation due · 3 drops');
+  });
 });
 
 describe('miniStatus', () => {
@@ -50,6 +56,13 @@ describe('miniStatus', () => {
       'F2 · Qi Condensation · Intern · 1 drop',
     );
     expect(miniStatus(2, 'Qi Condensation · Intern', 0)).toBe('F2 · Qi Condensation · Intern');
+  });
+
+  it('says a Tribulation is due in place of the realm', () => {
+    expect(miniStatus(9, 'Qi Condensation · Intern', 0, true)).toBe('F9 · Tribulation due');
+    expect(miniStatus(9, 'Qi Condensation · Intern', 2, true)).toBe(
+      'F9 · Tribulation due · 2 drops',
+    );
   });
 });
 
@@ -137,6 +150,17 @@ describe('immortalNotice', () => {
     expect(immortalNotice(12)).toEqual({
       title: 'Office Immortal',
       body: 'Immortal-grade drop on floor 12',
+      tag: 'drop',
+    });
+  });
+});
+
+describe('tribulationNotice', () => {
+  it('names the floor only, under its own tag', () => {
+    expect(tribulationNotice(9)).toEqual({
+      title: 'Office Immortal',
+      body: 'Tribulation due on floor 9',
+      tag: 'tribulation',
     });
   });
 });
