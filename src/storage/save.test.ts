@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buyBagSpace, resetStats, setFilter, spendPoints } from '../core/economy.ts';
+import { makeTribulation, type Enemy } from '../core/floors.ts';
 import type { Item } from '../core/loot.ts';
+import { xpToNext } from '../core/cultivator.ts';
 import { equip, newGame, tick, type GameState } from '../core/sim.ts';
 import {
   decodeSave,
@@ -203,7 +205,7 @@ describe('rejects', () => {
       ['unsafe kills', (s: ReturnType<typeof raw>) => void (s.state.kills = 2 ** 60)],
       ['negative deaths', (s: ReturnType<typeof raw>) => void (s.state.deaths = -1)],
       ['a huge level', (s: ReturnType<typeof raw>) => void (cult(s).level = 1e6)],
-      ['XP past the level', (s: ReturnType<typeof raw>) => void (cult(s).xp = 1e15)],
+      ['XP past any level', (s: ReturnType<typeof raw>) => void (cult(s).xp = 2 ** 60)],
       ['HP past max', (s: ReturnType<typeof raw>) => void (cult(s).hp = 1e9)],
       ['HP of 0', (s: ReturnType<typeof raw>) => void (cult(s).hp = 0)],
       ['a far-off attack', (s: ReturnType<typeof raw>) => void (cult(s).nextAttackAt = 1e12)],
@@ -480,5 +482,118 @@ describe('rejects', () => {
       badLost.state.dropsLost = -1;
       expect(decodeSave(JSON.stringify(badLost))).toBeNull();
     });
+  });
+});
+
+describe('realm caps and the Tribulation', () => {
+  /**
+   * A run held at level 10 that lost its Tribulation once, so it is back on a
+   * full floor with the Tribulation queued at its end; `fought` enemies in.
+   */
+  function held(fought = 0): GameState {
+    let s = newGame(7, 'sword');
+    while (s.enemies[0]?.kind !== 'tribulation') s = tick(s, 1);
+    (s.enemies[0] as Enemy).damage = 1e9;
+    const { deaths } = s;
+    while (s.deaths === deaths) s = tick(s, 1);
+    s.enemies.splice(0, fought);
+    return s;
+  }
+
+  function heldRaw(fought = 0): { v: number; savedAt: number; state: Record<string, unknown> } {
+    return JSON.parse(encodeSave(held(fought), SAVED_AT));
+  }
+
+  function decodeChanged(
+    base: ReturnType<typeof heldRaw>,
+    change: (save: ReturnType<typeof heldRaw>) => void,
+  ): unknown {
+    change(base);
+    return decodeSave(JSON.stringify(base));
+  }
+
+  it('round-trips a cultivator held at the cap with its Tribulation queued', () => {
+    expect(held().enemies).toHaveLength(12);
+    for (const fought of [0, 5, 10]) {
+      const s = held(fought);
+      expect(s.cultivator.level).toBe(10);
+      expect(decodeSave(encodeSave(s, 0))?.state).toEqual(s);
+    }
+  });
+
+  it('round-trips a Tribulation in progress, the only enemy left', () => {
+    const s = held(11);
+    expect(s.enemies.map((e) => e.kind)).toEqual(['tribulation']);
+    expect(decodeSave(encodeSave(s, 0))?.state).toEqual(s);
+  });
+
+  it('accepts XP held past the cap', () => {
+    const save = heldRaw();
+    expect(decodeChanged(save, (x) => void (cult(x).xp = 1e9))).not.toBeNull();
+  });
+
+  it('bounds held XP at a whole number a save can store', () => {
+    expect(
+      decodeChanged(heldRaw(), (x) => void (cult(x).xp = Number.MAX_SAFE_INTEGER)),
+    ).not.toBeNull();
+    for (const xp of [2 ** 53 + 2, 1.5, -1]) {
+      expect(decodeChanged(heldRaw(), (x) => void (cult(x).xp = xp))).toBeNull();
+    }
+  });
+
+  it('rejects a held cultivator whose Tribulation is missing', () => {
+    expect(decodeChanged(heldRaw(), (x) => void (x.state.enemies as J[]).pop())).toBeNull();
+  });
+
+  it('rejects a Tribulation on an Immortal', () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.level = 61;
+    s.cultivator.stats.agility += 3 * 60;
+    expect(decodeSave(encodeSave(s, 0))).not.toBeNull();
+    s.enemies.push(makeTribulation(1, 5));
+    expect(decodeSave(encodeSave(s, 0))).toBeNull();
+  });
+
+  it('rejects XP past the next level below a cap', () => {
+    const fresh = newGame(7, 'sword');
+    fresh.cultivator.xp = xpToNext(1) - 1;
+    expect(decodeSave(encodeSave(fresh, 0))).not.toBeNull();
+    fresh.cultivator.xp = xpToNext(1);
+    expect(decodeSave(encodeSave(fresh, 0))).toBeNull();
+  });
+
+  it('rejects a Tribulation for a cultivator not held at the cap', () => {
+    // Too little XP held: not ready, so the queued Tribulation can't be there.
+    expect(decodeChanged(heldRaw(), (x) => void (cult(x).xp = 0))).toBeNull();
+    // A fresh run with a Tribulation pushed onto its floor.
+    const fresh = newGame(7, 'sword');
+    fresh.enemies.push(makeTribulation(1, 0));
+    expect(decodeSave(encodeSave(fresh, 0))).toBeNull();
+  });
+
+  it('rejects a held cultivator whose Tribulation is out of place or misnamed', () => {
+    const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
+    expect(decodeChanged(heldRaw(), (x) => void order(x).unshift(order(x).pop() as J))).toBeNull();
+    expect(decodeChanged(heldRaw(), (x) => void order(x).push(order(x).at(-1) as J))).toBeNull();
+    for (const name of [
+      'Annual Appraisal',
+      'Probation Review\u202e',
+      'Probation\u200bReview',
+      'Pr\u043ebation Review',
+      'Quarterly Review',
+    ]) {
+      expect(decodeChanged(heldRaw(), (x) => void (order(x).at(-1)!.name = name))).toBeNull();
+    }
+    // Numbers must be the sim's own.
+    expect(decodeChanged(heldRaw(), (x) => void (order(x).at(-1)!.maxHp = 1))).toBeNull();
+    expect(decodeChanged(heldRaw(), (x) => void (order(x).at(-1)!.xp = 1e6))).toBeNull();
+  });
+
+  it('rejects a Tribulation with a pollution key', () => {
+    const json = encodeSave(held(11), 0).replace(
+      '"kind":"tribulation"',
+      '"kind":"tribulation","__proto__":{"x":1}',
+    );
+    expect(decodeSave(json)).toBeNull();
   });
 });

@@ -66,6 +66,7 @@ import {
   itemTag,
   overtimeLines,
   PATH_BLURBS,
+  realmLabel,
   sellBelowLabel,
   SLOT_CODES,
   statRows,
@@ -389,12 +390,14 @@ function play(
   const kpis = el('section', 'kpis');
   kpis.setAttribute('aria-label', 'Summary');
   const kPath = kpi('Path');
+  const kRealm = kpi('Realm');
+  kRealm.box.classList.add('realm');
   const kLevel = kpi('Level');
   const kFloor = kpi('Floor');
   const kXp = kpi('XP to next level');
   const kStones = kpi('Spirit Stones');
   const kEssence = kpi('Spirit Essence');
-  kpis.append(kPath.box, kLevel.box, kFloor.box, kXp.box, kStones.box, kEssence.box);
+  kpis.append(kPath.box, kRealm.box, kLevel.box, kFloor.box, kXp.box, kStones.box, kEssence.box);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
   const character = panel('character', 'Character');
@@ -645,6 +648,7 @@ function play(
   function drawSummary(): void {
     const c = state.cultivator;
     kPath.value.textContent = PATHS[c.path].name;
+    kRealm.value.textContent = realmLabel(c.level);
     kLevel.value.textContent = String(c.level);
     kFloor.value.textContent = `${state.floor} (best ${state.highestFloor})`;
     kXp.value.textContent = xpLabel(c);

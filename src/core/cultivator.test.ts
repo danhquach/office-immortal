@@ -2,16 +2,24 @@ import { describe, expect, it } from 'vitest';
 import { affixValue, EQUIP_SLOTS, type AffixId, type EquipSlotId, type Item } from './loot.ts';
 import {
   BASE_STAT,
+  breakThrough,
   derive,
   gainXp,
+  isRealmCap,
+  LAST_CAP,
   MAX_CRIT_CHANCE,
   MAX_LIFESTEAL,
   MIN_ATTACK_INTERVAL,
   newCultivator,
   PATHS,
+  readyForTribulation,
+  REALM_BONUS,
+  realmOf,
+  REALMS,
   STARTING_PRIMARY_BONUS,
   STAT_POINTS_PER_LEVEL,
   xpToNext,
+  type Cultivator,
   type Derived,
   type PathId,
 } from './cultivator.ts';
@@ -160,5 +168,130 @@ describe('gainXp', () => {
     const c = newCultivator('body');
     gainXp(c, xpToNext(1) - 1);
     expect(c.level).toBe(1);
+  });
+});
+
+/** A cultivator at `level` with no XP, its level-up points already on the primary stat. */
+function atLevel(path: PathId, level: number): Cultivator {
+  const c = newCultivator(path);
+  c.level = level;
+  c.stats[PATHS[path].primary] += STAT_POINTS_PER_LEVEL * (level - 1);
+  c.hp = derive(c).maxHp;
+  return c;
+}
+
+describe('realms', () => {
+  it('maps levels to the realms of the design table', () => {
+    expect(REALMS.map((r) => r.name)).toEqual([
+      'Qi Condensation',
+      'Foundation Establishment',
+      'Golden Core',
+      'Nascent Soul',
+      'Spirit Severing',
+      'Immortal Ascension',
+      'Immortal',
+    ]);
+    expect([1, 10, 11, 20, 21, 50, 51, 60, 61, 500].map(realmOf)).toEqual([
+      0, 0, 1, 1, 2, 4, 5, 5, 6, 6,
+    ]);
+  });
+
+  it('caps every 10 levels up to Immortal Ascension, then never', () => {
+    const caps = Array.from({ length: 200 }, (_, i) => i + 1).filter(isRealmCap);
+    expect(caps).toEqual([10, 20, 30, 40, 50, 60]);
+    expect(LAST_CAP).toBe(60);
+  });
+});
+
+describe('realm caps', () => {
+  it('stops at level 10 and holds the XP past the cap', () => {
+    const c = atLevel('sword', 9);
+    gainXp(c, xpToNext(9) + xpToNext(10) + xpToNext(11) + 5);
+    expect(c.level).toBe(10);
+    expect(c.xp).toBe(xpToNext(10) + xpToNext(11) + 5);
+    expect(readyForTribulation(c)).toBe(true);
+  });
+
+  it('keeps holding however much XP comes in', () => {
+    const c = atLevel('body', 20);
+    for (let i = 0; i < 50; i++) gainXp(c, 1e6);
+    expect(c.level).toBe(20);
+    expect(c.xp).toBe(5e7);
+  });
+
+  it('is not ready at the cap until the next level is paid for', () => {
+    const c = atLevel('talisman', 10);
+    gainXp(c, xpToNext(10) - 1);
+    expect(readyForTribulation(c)).toBe(false);
+    gainXp(c, 1);
+    expect(readyForTribulation(c)).toBe(true);
+  });
+
+  it('never caps an Immortal', () => {
+    const c = atLevel('sword', 60);
+    c.xp = xpToNext(60);
+    breakThrough(c);
+    expect(c.level).toBe(61);
+    gainXp(c, xpToNext(61) + xpToNext(62) + xpToNext(63));
+    expect(c.level).toBe(64);
+    expect(readyForTribulation({ ...c, level: 70, xp: 1e9 })).toBe(false);
+  });
+});
+
+describe('breakThrough', () => {
+  it('passes the cap and spends the held XP up to the next one', () => {
+    const c = atLevel('sword', 10);
+    let xp = 0;
+    for (let l = 10; l < 20; l++) xp += xpToNext(l);
+    c.xp = xp + xpToNext(20) + 9;
+    breakThrough(c);
+    expect(c.level).toBe(20);
+    expect(c.xp).toBe(xpToNext(20) + 9);
+    expect(readyForTribulation(c)).toBe(true);
+  });
+
+  it('applies the realm bonus once, on top of the level-up', () => {
+    const held = atLevel('body', 10);
+    held.xp = xpToNext(10);
+    // The same stats one realm lower: what level 11 would be without the bonus.
+    const noBonus = derive({ ...held, stats: { ...held.stats, body: held.stats.body + 3 } });
+    breakThrough(held);
+    const after = derive(held);
+    expect(after.maxHp).toBe(Math.round(noBonus.maxHp * (1 + REALM_BONUS)));
+    expect(after.damage).toBeCloseTo(noBonus.damage * (1 + REALM_BONUS));
+    // Fully healed, bonus included.
+    expect(held.hp).toBe(after.maxHp);
+    // More XP and levels in the same realm add no more realm bonus.
+    gainXp(held, xpToNext(11));
+    expect(held.level).toBe(12);
+    const sameRealm = derive({ ...held, level: 11 });
+    expect(derive(held)).toEqual(sameRealm);
+  });
+
+  it('stays finite and short from the last cap with the most XP a save can hold', () => {
+    const c = atLevel('sword', LAST_CAP);
+    c.xp = Number.MAX_SAFE_INTEGER;
+    breakThrough(c);
+    expect(c.level).toBeGreaterThan(LAST_CAP);
+    expect(c.level).toBeLessThan(300);
+    const d = derive(c);
+    expect(Number.isFinite(d.maxHp) && Number.isFinite(d.damage)).toBe(true);
+  });
+
+  it('never holds more XP than a whole number can store', () => {
+    const c = atLevel('body', 10);
+    c.xp = Number.MAX_SAFE_INTEGER;
+    gainXp(c, 1e6);
+    expect(c.xp).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('refuses below the cap, at the cap without the XP, and past the last cap', () => {
+    expect(() => breakThrough(atLevel('sword', 9))).toThrow(RangeError);
+    const c = atLevel('sword', 10);
+    c.xp = xpToNext(10) - 1;
+    expect(() => breakThrough(c)).toThrow(RangeError);
+    const immortal = atLevel('sword', 61);
+    immortal.xp = 0;
+    expect(() => breakThrough(immortal)).toThrow(RangeError);
   });
 });

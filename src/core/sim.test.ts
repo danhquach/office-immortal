@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { derive, PATHS, type PathId } from './cultivator.ts';
-import type { Item } from './loot.ts';
+import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cultivator.ts';
+import { TRIBULATIONS } from './floors.ts';
+import { slotsFor, type Item } from './loot.ts';
 import { INVENTORY_SIZE, sellPrice } from './economy.ts';
 import { equip, mitigate, newGame, tick, type GameState } from './sim.ts';
 
@@ -73,19 +74,14 @@ describe('floors', () => {
     expect(s.highestFloor).toBeGreaterThan(1);
   });
 
-  it.each(PATH_IDS)('walls %s at a higher floor and drops it back one', (path) => {
-    let s = newGame(5, path);
-    for (let t = 0; t < 4 * 3600 && s.deaths === 0; t++) {
-      const before = s;
-      s = tick(s, 1);
-      if (s.deaths > 0) {
-        expect(before.floor).toBeGreaterThan(1);
-        expect(s.floor).toBe(before.floor - 1);
-        expect(s.highestFloor).toBe(before.floor);
-        expect(s.cultivator.hp).toBeGreaterThan(0);
-      }
-    }
-    expect(s.deaths).toBeGreaterThan(0);
+  it.each(PATH_IDS)('drops %s back one floor on a loss to a regular enemy', (path) => {
+    let s = until(newGame(5, path), (x) => x.floor === 3);
+    for (const e of s.enemies) e.damage = 1e9;
+    const { deaths } = s;
+    s = until(s, (x) => x.deaths > deaths);
+    expect(s.floor).toBe(2);
+    expect(s.highestFloor).toBe(3);
+    expect(s.cultivator.hp).toBe(derive(s.cultivator).maxHp);
   });
 
   it('never drops below floor 1', () => {
@@ -125,7 +121,7 @@ function withBag(state: GameState, items: Item[]): GameState {
 describe('drops', () => {
   it('picks up drops at the item level of the floor they fell on', () => {
     // Steps short enough for one kill each, through deaths that drop a floor.
-    let s = newGame(21, 'sword');
+    let s = newGame(21, 'talisman');
     let checked = 0;
     let afterDeath = 0;
     while (s.time < 3600 && s.inventory.length < INVENTORY_SIZE) {
@@ -248,5 +244,152 @@ describe('equip', () => {
     const b = tick(start, 600);
     expect(a.kills).toBeGreaterThan(b.kills);
     expect(a.highestFloor).toBeGreaterThanOrEqual(b.highestFloor);
+  });
+});
+
+/** Plays one-second steps until `done`, failing rather than looping forever. */
+function until(state: GameState, done: (s: GameState) => boolean, limit = 3600): GameState {
+  for (let t = 0; t < limit && !done(state); t++) state = tick(state, 1);
+  expect(done(state)).toBe(true);
+  return state;
+}
+
+const hasTribulation = (s: GameState) => s.enemies.some((e) => e.kind === 'tribulation');
+
+describe('Tribulation', () => {
+  it.each(PATH_IDS)('holds %s at level 10 until the Tribulation is beaten', (path) => {
+    let s = newGame(7, path);
+    s = until(s, hasTribulation);
+    expect(s.cultivator.level).toBe(10);
+    expect(readyForTribulation(s.cultivator)).toBe(true);
+    // It closes the floor, after the boss, and it is the first realm's.
+    expect(s.enemies[s.enemies.length - 1]).toMatchObject({
+      kind: 'tribulation',
+      name: TRIBULATIONS[0],
+    });
+    // Gear is what beats a Tribulation; this bare run gets a harmless one instead.
+    let broke = false;
+    for (let t = 0; t < 3600 && !broke; t++) {
+      for (const e of s.enemies) if (e.kind === 'tribulation') e.damage = 0;
+      const before = s;
+      s = tick(s, 1);
+      if (s.cultivator.level > 10) {
+        broke = true;
+        // Only a Tribulation kill breaks through.
+        expect(before.enemies[0]?.kind).toBe('tribulation');
+        expect(s.kills).toBeGreaterThan(before.kills);
+      } else {
+        expect(s.cultivator.level).toBe(10);
+      }
+    }
+    expect(broke).toBe(true);
+  });
+
+  it('is never queued before the cap is reached', () => {
+    let s = newGame(3, 'sword');
+    while (s.cultivator.level < 10 || !readyForTribulation(s.cultivator)) {
+      expect(hasTribulation(s)).toBe(false);
+      s = tick(s, 1);
+    }
+  });
+
+  it('is queued once, never twice, while the cultivator is held', () => {
+    let s = until(newGame(7, 'talisman'), hasTribulation);
+    for (let t = 0; t < 900; t++) {
+      expect(s.enemies.filter((e) => e.kind === 'tribulation')).toHaveLength(1);
+      for (const e of s.enemies) if (e.kind === 'tribulation') e.damage = 1e9;
+      s = tick(s, 1);
+    }
+    // It never wins here: held the whole time, losing and replaying the floor.
+    expect(s.cultivator.level).toBe(10);
+    expect(s.deaths).toBeGreaterThan(0);
+  });
+
+  it('replays the same floor, still capped, when the Tribulation wins', () => {
+    let s = until(newGame(7, 'sword'), (x) => x.enemies[0]?.kind === 'tribulation');
+    s.enemies[0]!.damage = 1e9;
+    const { floor, deaths } = s;
+    s = until(s, (x) => x.deaths > deaths);
+    expect(s.cultivator.level).toBe(10);
+    // No drop-back: the same floor from its first wave, the Tribulation at its end.
+    expect(s.floor).toBe(floor);
+    expect(s.cultivator.hp).toBe(derive(s.cultivator).maxHp);
+    expect(readyForTribulation(s.cultivator)).toBe(true);
+    expect(s.enemies).toHaveLength(12);
+    expect(s.enemies[s.enemies.length - 1]?.kind).toBe('tribulation');
+  });
+
+  it('never lets the floor be passed while the Tribulation stands', () => {
+    let s = until(newGame(7, 'sword'), hasTribulation);
+    const { floor, highestFloor } = s;
+    for (let i = 0; i < 600; i++) {
+      for (const e of s.enemies) if (e.kind === 'tribulation') e.damage = 1e9;
+      s = tick(s, 1);
+      expect(s.floor).toBeLessThanOrEqual(floor);
+      expect(s.highestFloor).toBe(highestFloor);
+      expect(s.cultivator.level).toBe(10);
+    }
+    expect(s.deaths).toBeGreaterThan(0);
+  });
+
+  it('plays the same through a breakthrough in one big step as in small ones', () => {
+    const start = newGame(7, 'body');
+    const big = tick(start, 900);
+    expect(big.cultivator.level).toBeGreaterThan(10);
+    expect(big).toEqual(run(start, 900, 1));
+  });
+
+  it('pays out a drop and Spirit Stones for the Tribulation', () => {
+    let s = until(newGame(7, 'body'), (x) => x.enemies[0]?.kind === 'tribulation');
+    s.enemies[0]!.hp = 1;
+    const before = s;
+    s = until(s, (x) => x.kills > before.kills);
+    expect(s.cultivator.level).toBeGreaterThan(10);
+    expect(s.stones).toBeGreaterThan(before.stones);
+    expect(s.inventory.length + s.dropsSold + s.dropsSalvaged).toBe(
+      before.inventory.length + before.dropsSold + before.dropsSalvaged + 1,
+    );
+    // The held XP went into levels past the cap.
+    expect(s.cultivator.xp).toBeLessThan(xpToNext(s.cultivator.level));
+  });
+});
+
+describe('Path balance', () => {
+  /** Rough fighting strength, to pick upgrades: damage per second times toughness. */
+  function power(state: GameState): number {
+    const d = derive(state.cultivator);
+    const dps = (d.damage / d.attackInterval) * (1 + d.critChance * (d.critMultiplier - 1));
+    return (dps * d.maxHp * (1 + d.defence / 50)) / (1 - d.lifesteal);
+  }
+
+  /** A player who checks in every minute, equips every upgrade and empties the bag. */
+  function play(seed: number, path: PathId, minutes: number): GameState {
+    let s = newGame(seed, path);
+    for (let m = 0; m < minutes; m++) {
+      s = tick(s, 60);
+      for (let i = 0; i < s.inventory.length; i++) {
+        for (const to of slotsFor((s.inventory[i] as Item).slot)) {
+          const next = equip(s, i, to);
+          if (power(next) > power(s) * 1.001) {
+            s = next;
+            i = -1;
+            break;
+          }
+        }
+      }
+      s = { ...s, inventory: [] };
+    }
+    return s;
+  }
+
+  it('keeps every Path within 15% of the others on the floor reached', () => {
+    for (const minutes of [10, 60]) {
+      const floors = PATH_IDS.map((path) => {
+        let sum = 0;
+        for (const seed of [1, 2, 3, 4]) sum += play(seed, path, minutes).highestFloor;
+        return sum / 4;
+      });
+      expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
+    }
   });
 });
