@@ -2,10 +2,16 @@
 // page uses, so offline progress is exactly what an open tab would have made
 // (docs/design.md §10). Pure: the caller passes in the clock.
 
+import { OFFLINE_SECONDS_PER_RANK, type Passives } from './prestige.ts';
 import { tick, type GameState } from './sim.ts';
 
-/** The most time away that is replayed: 8 hours, in seconds. */
+/** The most time away that is replayed before passives: 8 hours, in seconds. */
 export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
+
+/** The most time away that is replayed, with the Flexible Hours passive. */
+export function offlineCap(p: Passives): number {
+  return MAX_OFFLINE_SECONDS + OFFLINE_SECONDS_PER_RANK * p.offline;
+}
 
 /** What happened while away, for the summary shown on return. */
 export interface OvertimeSummary {
@@ -39,10 +45,9 @@ export function catchUp(
   state: GameState,
   awaySeconds: number,
 ): { state: GameState; summary: OvertimeSummary } {
-  const capped = awaySeconds > MAX_OFFLINE_SECONDS;
-  const seconds = Number.isNaN(awaySeconds)
-    ? 0
-    : Math.min(MAX_OFFLINE_SECONDS, Math.max(0, awaySeconds));
+  const cap = offlineCap(state.passives);
+  const capped = awaySeconds > cap;
+  const seconds = Number.isNaN(awaySeconds) ? 0 : Math.min(cap, Math.max(0, awaySeconds));
   const after = tick(state, seconds);
   return {
     state: after,

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buyBagSpace, resetStats, setFilter, spendPoints } from '../core/economy.ts';
+import { buyBagSpace, changePath, resetStats, setFilter, spendPoints } from '../core/economy.ts';
 import { makeTribulation, type Enemy } from '../core/floors.ts';
 import type { Item } from '../core/loot.ts';
 import { xpToNext } from '../core/cultivator.ts';
-import { equip, newGame, tick, type GameState } from '../core/sim.ts';
+import { buyPassive, noPassives } from '../core/prestige.ts';
+import { equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
 import {
   decodeSave,
   encodeSave,
@@ -149,7 +150,7 @@ describe('rejects', () => {
   });
 
   it.each([
-    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 3)],
+    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 4)],
     ['a version as text', (s: ReturnType<typeof raw>) => void ((s as J).v = '1')],
     ['a missing state', (s: ReturnType<typeof raw>) => void delete (s as J).state],
     ['an extra top-level key', (s: ReturnType<typeof raw>) => void ((s as J).admin = true)],
@@ -434,7 +435,17 @@ describe('rejects', () => {
     function v1(): string {
       const save = raw();
       const st = save.state;
-      for (const k of ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']) {
+      for (const k of [
+        'bagSize',
+        'stones',
+        'essence',
+        'filter',
+        'dropsSold',
+        'dropsSalvaged',
+        'insight',
+        'passives',
+        'retirements',
+      ]) {
         delete st[k];
       }
       st.dropsLost = 3;
@@ -482,6 +493,101 @@ describe('rejects', () => {
       badLost.state.dropsLost = -1;
       expect(decodeSave(JSON.stringify(badLost))).toBeNull();
     });
+  });
+});
+
+describe('Dao Insight and passives', () => {
+  /** A retired run that bought passives, so every new field is set. */
+  function retired(): GameState {
+    let s = retire({ ...STATE, highestFloor: 20 });
+    s = { ...s, insight: s.insight + 100 };
+    for (const id of ['xp', 'offline', 'points', 'points'] as const) s = buyPassive(s, id);
+    return tick(s, 60);
+  }
+
+  it('round-trips insight, passives and retirements', () => {
+    const s = retired();
+    expect(s.retirements).toBe(1);
+    expect(s.passives).toEqual({ xp: 1, treasure: 0, offline: 1, points: 2 });
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+  });
+
+  it('round-trips Head Start points through a stat reset, re-spend and Path change', () => {
+    let s = { ...retired(), stones: 1e9 };
+    s = resetStats(s);
+    expect(s.cultivator.unspent).toBeGreaterThan(0);
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+    s = spendPoints(s, 'body', s.cultivator.unspent);
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+    s = changePath(s, 'talisman');
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+  });
+
+  it('loads a version 2 save with no insight or passives', () => {
+    const save = raw();
+    for (const k of ['insight', 'passives', 'retirements']) delete save.state[k];
+    const loaded = decodeSave(JSON.stringify({ ...save, v: 2 }));
+    expect(loaded?.state).toEqual({ ...STATE, insight: 0, passives: noPassives(), retirements: 0 });
+  });
+
+  it('rejects a version 2 save that carries v3 fields', () => {
+    const save = raw();
+    expect(decodeSave(JSON.stringify({ ...save, v: 2 }))).toBeNull();
+  });
+
+  function retiredRaw(): ReturnType<typeof raw> {
+    return JSON.parse(encodeSave(retired(), SAVED_AT));
+  }
+  const passivesOf = (x: ReturnType<typeof raw>) => x.state.passives as J;
+
+  it.each([
+    ['negative insight', (x: ReturnType<typeof raw>) => void (x.state.insight = -1)],
+    ['fractional insight', (x: ReturnType<typeof raw>) => void (x.state.insight = 1.5)],
+    ['insight as text', (x: ReturnType<typeof raw>) => void (x.state.insight = '9')],
+    ['huge insight', (x: ReturnType<typeof raw>) => void (x.state.insight = 2 ** 53 + 2)],
+    ['negative retirements', (x: ReturnType<typeof raw>) => void (x.state.retirements = -1)],
+    ['fractional retirements', (x: ReturnType<typeof raw>) => void (x.state.retirements = 1.5)],
+    ['retirements as text', (x: ReturnType<typeof raw>) => void (x.state.retirements = '1')],
+    ['huge retirements', (x: ReturnType<typeof raw>) => void (x.state.retirements = 2 ** 53 + 2)],
+    ['missing insight', (x: ReturnType<typeof raw>) => void delete x.state.insight],
+    ['missing passives', (x: ReturnType<typeof raw>) => void delete x.state.passives],
+    ['missing retirements', (x: ReturnType<typeof raw>) => void delete x.state.retirements],
+    ['a rank as an object', (x: ReturnType<typeof raw>) => void (passivesOf(x).xp = { n: 1 })],
+    ['a missing passive', (x: ReturnType<typeof raw>) => void delete passivesOf(x).xp],
+    ['an unknown passive', (x: ReturnType<typeof raw>) => void (passivesOf(x).godMode = 1)],
+    ['a rank past the max', (x: ReturnType<typeof raw>) => void (passivesOf(x).offline = 9)],
+    ['a negative rank', (x: ReturnType<typeof raw>) => void (passivesOf(x).treasure = -1)],
+    ['a fractional rank', (x: ReturnType<typeof raw>) => void (passivesOf(x).xp = 0.5)],
+    ['passives as an array', (x: ReturnType<typeof raw>) => void (x.state.passives = [])],
+    ['passives as null', (x: ReturnType<typeof raw>) => void (x.state.passives = null)],
+    // Head Start ranks with no points behind them, or points with no ranks.
+    [
+      'Head Start without its points',
+      (x: ReturnType<typeof raw>) => void (passivesOf(x).points = 3),
+    ],
+    ['points without Head Start', (x: ReturnType<typeof raw>) => void (passivesOf(x).points = 0)],
+  ])('rejects %s', (_, change) => {
+    const save = retiredRaw();
+    change(save);
+    expect(decodeSave(JSON.stringify(save))).toBeNull();
+  });
+
+  it('rejects a pollution key in the passives', () => {
+    const text = encodeSave(retired(), SAVED_AT).replace(
+      '"passives":{',
+      '"passives":{"__proto__":{"polluted":true},',
+    );
+    expect(text).toContain('__proto__');
+    expect(decodeSave(text)).toBeNull();
+    expect(({} as J).polluted).toBeUndefined();
+  });
+
+  it('rejects look-alike passive names', () => {
+    for (const name of ['xp\u200b', 'x\u0440', 'XP', ' xp']) {
+      const text = encodeSave(retired(), SAVED_AT).replace('"xp":1,', `"${name}":1,`);
+      expect(text).not.toContain('"xp":1,');
+      expect(decodeSave(text)).toBeNull();
+    }
   });
 });
 

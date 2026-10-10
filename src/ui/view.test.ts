@@ -12,7 +12,10 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
+  passiveLabel,
   realmLabel,
+  retireLabel,
+  retireLines,
   sellBelowLabel,
   statRows,
   waveLabel,
@@ -20,6 +23,7 @@ import {
 } from './view.ts';
 import { makeTribulation } from '../core/floors.ts';
 import { xpToNext } from '../core/cultivator.ts';
+import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
 const stapler: Item = {
   slot: 'weapon',
@@ -132,6 +136,65 @@ describe('statRows', () => {
     expect(rows['Max HP']).toBe('100');
     expect(rows['Crit chance']).toBe('6.6%');
     expect(rows['Crit damage']).toBe('×2');
+  });
+
+  it('adds treasure find from passives to the gear’s', () => {
+    const label = (n: number) =>
+      statRows(newCultivator('sword'), { ...noPassives(), treasure: n }).find(
+        (r) => r.label === 'Treasure find',
+      )?.value;
+    expect(label(0)).toBe('0%');
+    expect(label(3)).toBe('15%');
+  });
+});
+
+describe('Early Retirement', () => {
+  const preview: RetirePreview = {
+    insight: 8,
+    insightAfter: 11,
+    highestFloor: 20,
+    level: 14,
+    items: 9,
+    stones: 1500,
+    essence: 40,
+    bagCells: 8,
+  };
+
+  it('labels the button with the insight, or the floor still needed', () => {
+    expect(retireLabel(preview)).toBe('Retire early for 8 Dao Insight…');
+    expect(retireLabel({ ...preview, insight: 0 })).toBe('Reach floor 10 to retire early');
+  });
+
+  it('lists what is kept and what is lost', () => {
+    expect(retireLines(preview)).toEqual({
+      kept: [
+        'Dao Insight: +8 (11 to spend)',
+        'Passives bought with Dao Insight',
+        'Your Path and auto filter',
+      ],
+      lost: [
+        'Level 14 and floor 20: back to level 1, floor 1',
+        '9 items, in the bag and equipped',
+        '1500 Spirit Stones and 40 Spirit Essence',
+        '8 bought bag slots',
+      ],
+    });
+  });
+
+  it('leaves out bag slots when none were bought, and counts one item', () => {
+    const { lost } = retireLines({ ...preview, items: 1, bagCells: 0 });
+    expect(lost).toContain('1 item, in the bag and equipped');
+    expect(lost.some((l) => l.includes('bag slots'))).toBe(false);
+  });
+
+  it('shows a passive’s rank, effect and next cost', () => {
+    const p = { ...noPassives(), xp: 2, offline: 8 };
+    expect(passiveLabel(p, 'xp')).toBe(
+      'Seniority 2/20: +10% XP per rank. Next rank: 8 Dao Insight',
+    );
+    expect(passiveLabel(p, 'offline')).toBe(
+      'Flexible Hours 8/8: +1 h Overtime Cultivation cap per rank. Max rank',
+    );
   });
 });
 

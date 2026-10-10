@@ -42,7 +42,15 @@ import {
   type SlotId,
 } from '../core/loot.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
-import { equip, newGame, tick, type GameState } from '../core/sim.ts';
+import {
+  buyPassive,
+  canRetire,
+  passiveCost,
+  PASSIVE_IDS,
+  retirePreview,
+  type PassiveId,
+} from '../core/prestige.ts';
+import { equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
 import { browserStorage, loadSave, writeSave, type SaveStorage } from '../storage/save.ts';
 import {
   dropToast,
@@ -65,8 +73,11 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
+  passiveLabel,
   PATH_BLURBS,
   realmLabel,
+  retireLabel,
+  retireLines,
   sellBelowLabel,
   SLOT_CODES,
   statRows,
@@ -438,9 +449,86 @@ function play(
   const pathRow = el('div', 'row');
   pathRow.append(pathPick.box, pathBtn);
   statsBody.append(stats, points, resetBtn, pathRow, shopNote);
+
+  // Early Retirement: the Dao Insight shop, then the retire button and its
+  // confirmation listing what is kept and what is lost.
+  const insightText = el('p');
+  const passiveBtns = {} as Record<PassiveId, HTMLButtonElement>;
+  const passiveList = el('div', 'passives');
+  for (const id of PASSIVE_IDS) {
+    passiveBtns[id] = button('', '', () => act(buyPassive(state, id)));
+    passiveList.append(passiveBtns[id]);
+  }
+  // The lists follow the run while open (every kill changes the Spirit Stones
+  // lost), so they are not a live region: the Retire button is described by
+  // them instead, and focus lands there.
+  const retireBox = el('div', 'confirm');
+  const keptList = el('ul', 'lines');
+  const keptHead = el('p', '', 'Retire early? You keep:');
+  keptHead.id = 'retire-kept';
+  keptList.id = 'retire-kept-list';
+  const lostHead = el('p', '', 'You lose:');
+  lostHead.id = 'retire-lost';
+  const lostList = el('ul', 'lines');
+  lostList.id = 'retire-lost-list';
+  const retireYes = button('Retire', 'primary', () => {
+    // A new run on a fresh page; play() saves it straight away.
+    play(root, retire(state), storage, null);
+    // The old page is gone with its focus: land on the new run's Retirement tab.
+    const tab = root.querySelector<HTMLButtonElement>('#tab-retire');
+    tab?.click();
+    tab?.focus();
+  });
+  retireYes.setAttribute(
+    'aria-describedby',
+    'retire-kept retire-kept-list retire-lost retire-lost-list',
+  );
+  const retireNo = button('Cancel', '', () => {
+    retireBox.hidden = true;
+    retireBtn.focus();
+  });
+  retireBox.append(keptHead, keptList, lostHead, lostList, retireYes, retireNo);
+  retireBox.hidden = true;
+  const retireBtn = button('', '', askRetire);
+  function askRetire(): void {
+    if (!canRetire(state)) return;
+    retireBox.hidden = false;
+    drawRetire();
+    retireYes.focus();
+  }
+  /** Refills the open confirmation, touching only lines that changed. */
+  function drawRetire(): void {
+    if (retireBox.hidden) return;
+    const { kept, lost } = retireLines(retirePreview(state));
+    for (const [list, lines] of [
+      [keptList, kept],
+      [lostList, lost],
+    ] as const) {
+      while (list.children.length > lines.length) list.lastElementChild?.remove();
+      lines.forEach((line, i) => {
+        const li = list.children[i] ?? list.appendChild(el('li'));
+        if (li.textContent !== line) li.textContent = line;
+      });
+    }
+  }
+  const retireBody = el('div', 'retire');
+  retireBody.append(
+    insightText,
+    passiveList,
+    el(
+      'p',
+      'muted hint',
+      'Retiring starts again at floor 1, level 1 and pays Dao Insight for the highest floor ' +
+        'reached. Passives last through every run.',
+    ),
+    retireBtn,
+    retireBox,
+  );
+
   const charTabs = tabs([
     { id: 'gear', label: 'Equipment', body: slots },
     { id: 'stats', label: 'Stats', body: statsBody },
+    { id: 'retire', label: 'Retirement', body: retireBody },
   ]);
   character.box.append(charTabs.bar, ...charTabs.panels);
 
@@ -656,7 +744,7 @@ function play(
       { label: 'Body', value: String(c.stats.body) },
       { label: 'Agility', value: String(c.stats.agility) },
       { label: 'Spirit', value: String(c.stats.spirit) },
-      ...statRows(c),
+      ...statRows(c, state.passives),
     ];
     // Built once, then only the values change, so selecting text doesn't flicker.
     if (!stats.firstChild) {
@@ -964,6 +1052,18 @@ function play(
     shopNote.textContent =
       'A Path change puts every stat point into the new Path’s primary stat. A reset takes ' +
       'them back to spend as you choose.';
+
+    insightText.textContent = `Dao Insight: ${state.insight} · Retirements: ${state.retirements}`;
+    for (const id of PASSIVE_IDS) {
+      const cost = passiveCost(state.passives, id);
+      setButton(
+        passiveBtns[id],
+        passiveLabel(state.passives, id),
+        cost === null || state.insight < cost,
+      );
+    }
+    setButton(retireBtn, retireLabel(retirePreview(state)), !canRetire(state));
+    drawRetire();
 
     points.hidden = c.unspent === 0;
     pointsText.textContent = `Unspent stat points: ${c.unspent}`;

@@ -153,9 +153,10 @@ export function xpToNext(level: number): number {
   return Math.round(50 * 1.2 ** (level - 1));
 }
 
-export function newCultivator(path: PathId): Cultivator {
+/** A level 1 cultivator; `bonusPoints` (from Dao Insight passives) go to the primary stat. */
+export function newCultivator(path: PathId, bonusPoints = 0): Cultivator {
   const stats: Stats = { body: BASE_STAT, agility: BASE_STAT, spirit: BASE_STAT };
-  stats[PATHS[path].primary] += STARTING_PRIMARY_BONUS;
+  stats[PATHS[path].primary] += STARTING_PRIMARY_BONUS + bonusPoints;
   const c: Cultivator = {
     path,
     level: 1,

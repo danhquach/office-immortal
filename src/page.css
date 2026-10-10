@@ -568,6 +568,20 @@ button.primary {
 .confirm button {
   margin-right: 0.4rem;
 }
+/* Early Retirement: the Dao Insight shop and the retire confirmation */
+.passives {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+  max-width: 24rem;
+}
+.passives button {
+  text-align: left;
+}
+.retire .confirm {
+  margin-top: 0.5rem;
+  max-width: 24rem;
+}
 .filter {
   display: grid;
   gap: 0.6rem;
