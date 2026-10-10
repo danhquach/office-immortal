@@ -51,27 +51,26 @@ import {
   type RetirePreview,
 } from '../core/prestige.ts';
 import { canEquip, canFaceTribulation, requiredRealm, type GameState } from '../core/sim.ts';
+import { t, tn, type MessageKey } from './i18n.ts';
 
-/** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
-export const PATH_BLURBS: Readonly<Record<PathId, string>> = {
-  sword: 'Sales · Fast hits, crit, a little lifesteal · Agility',
-  body: 'Facilities · Tanky, lifesteal · Body',
-  talisman: 'IT · Burst, area damage · Spirit',
-};
+/** The Path picker's one-liner: office cover, role, primary stat (docs/design.md §3). */
+export function pathBlurb(id: PathId): string {
+  return t(`pathBlurb.${id}`);
+}
 
-const BONUS_LABELS: Readonly<Record<BonusStat, string>> = {
-  damage: 'Damage',
-  damagePct: 'Damage',
-  maxHp: 'Max HP',
-  maxHpPct: 'Max HP',
-  defence: 'Defence',
-  critChance: 'Crit chance',
-  critDamage: 'Crit damage',
-  attackSpeed: 'Attack speed',
-  lifesteal: 'Lifesteal',
-  qiRegen: 'Qi regen',
-  stoneFind: 'Spirit stone find',
-  treasureFind: 'Treasure find',
+const BONUS_LABELS: Readonly<Record<BonusStat, MessageKey>> = {
+  damage: 'bonus.damage',
+  damagePct: 'bonus.damage',
+  maxHp: 'bonus.maxHp',
+  maxHpPct: 'bonus.maxHp',
+  defence: 'bonus.defence',
+  critChance: 'bonus.critChance',
+  critDamage: 'bonus.critDamage',
+  attackSpeed: 'bonus.attackSpeed',
+  lifesteal: 'bonus.lifesteal',
+  qiRegen: 'bonus.qiRegen',
+  stoneFind: 'bonus.stoneFind',
+  treasureFind: 'bonus.treasureFind',
 };
 
 /** Bonuses kept as plain numbers; every other bonus is a share (0.05 is +5%). */
@@ -89,17 +88,13 @@ function signed(v: number, text: string): string {
 /** One bonus as shown on an item, e.g. "+12.3 Damage" or "+1.5% Crit chance". */
 export function formatBonus(stat: BonusStat, value: number): string {
   const text = FLAT.has(stat) ? num(value, 1) : `${num(value * 100, 1)}%`;
-  return `${signed(value, text)} ${BONUS_LABELS[stat]}`;
+  return `${signed(value, text)} ${t(BONUS_LABELS[stat])}`;
 }
 
 /** What an array of strength `value` does, e.g. "Illusion Array: enemy attacks miss 4.2% of the time". */
 export function arrayLine(id: ArrayId, value: number): string {
-  const effect = {
-    binding: `the enemy's first attack comes ${num(value, 2)} s later`,
-    illusion: `enemy attacks miss ${num(value * 100, 1)}% of the time`,
-    killing: `the enemy takes ${num(value * 100, 1)}% of your damage per second`,
-  }[id];
-  return `${ARRAYS[id].name}: ${effect}`;
+  const v = id === 'binding' ? num(value, 2) : num(value * 100, 1);
+  return `${tn('array', ARRAYS[id].name)}: ${t(`array.${id}`, { v })}`;
 }
 
 /** Every line of an item card after its title: base stat (a disc's array), affixes, unique effect. */
@@ -113,35 +108,40 @@ export function itemLines(item: Item): string[] {
     lines.push(formatBonus(AFFIXES[a.id].stat, itemAffixValue(item, a)));
   if (item.unique) {
     const u = UNIQUES[item.unique];
-    lines.push(`${u.name}: ${formatBonus(u.stat, u.value)}`);
+    lines.push(`${tn('unique', u.name)}: ${formatBonus(u.stat, u.value)}`);
   }
   return lines;
 }
 
 /** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12 · 94%". */
 export function itemTag(item: Item): string {
-  return `${GRADES[item.grade].name} · ${SLOTS[item.slot].name} · Lv ${item.level} · ${quality(item)}%`;
+  return t('item.tag', {
+    grade: tn('grade', GRADES[item.grade].name),
+    slot: tn('slot', SLOTS[item.slot].name),
+    level: item.level,
+    quality: quality(item),
+  });
 }
 
 /** A weapon's treasure tier by grade (docs/design.md §6): what kind of magic tool it is. */
-const TREASURE_TIERS: Readonly<Record<GradeId, string>> = {
-  mortal: 'Magic Tool',
-  spirit: 'Magic Tool',
-  earth: 'Spirit Treasure',
-  heaven: 'Spirit Treasure',
-  immortal: 'Immortal Treasure',
+const TREASURE_TIERS: Readonly<Record<GradeId, MessageKey>> = {
+  mortal: 'tier.magicTool',
+  spirit: 'tier.magicTool',
+  earth: 'tier.spiritTreasure',
+  heaven: 'tier.spiritTreasure',
+  immortal: 'tier.immortalTreasure',
 };
 
 /** The treasure tier line in an item's details, for weapons only; null for other types. */
 export function treasureTier(item: Item): string | null {
   if (item.slot !== 'weapon' || !Object.hasOwn(TREASURE_TIERS, item.grade)) return null;
-  return TREASURE_TIERS[item.grade];
+  return t(TREASURE_TIERS[item.grade]);
 }
 
 /** A Charm's line in its details, e.g. "Defend Talisman"; null for other types. */
 export function charmLineName(item: Item): string | null {
   const line = charmLine(item);
-  return line ? CHARM_LINES[line].name : null;
+  return line ? tn('charmLine', CHARM_LINES[line].name) : null;
 }
 
 /**
@@ -150,7 +150,11 @@ export function charmLineName(item: Item): string | null {
  */
 export function favouredBy(item: Item, path: PathId): { text: string; match: boolean } | null {
   const lean = itemPath(item);
-  return lean ? { text: `Favoured by: ${PATHS[lean].name}`, match: lean === path } : null;
+  if (!lean) return null;
+  return {
+    text: t('item.favouredBy', { path: tn('path', PATHS[lean].name) }),
+    match: lean === path,
+  };
 }
 
 /**
@@ -162,7 +166,7 @@ export function soulsLine(item: Item, state: GameState): string | null {
   if (!isBanner(item) || !Object.hasOwn(SOUL_CAPS, item.grade)) return null;
   const souls = state.cultivator.equipment.sideArm === item ? state.souls : 0;
   const damage = soulDamage(souls, state.cultivator.stats.spirit);
-  return `Souls: ${souls} / ${SOUL_CAPS[item.grade]} (+${num(damage, 1)} damage per attack)`;
+  return t('item.souls', { souls, cap: SOUL_CAPS[item.grade], damage: num(damage, 1) });
 }
 
 /**
@@ -171,7 +175,8 @@ export function soulsLine(item: Item, state: GameState): string | null {
  */
 export function equipBlock(c: Cultivator, item: Item): string | null {
   if (canEquip(c, item)) return null;
-  return `Requires ${(REALMS[requiredRealm(item)] as (typeof REALMS)[number]).name}`;
+  const realm = (REALMS[requiredRealm(item)] as (typeof REALMS)[number]).name;
+  return t('item.requires', { realm: tn('realm', realm) });
 }
 
 /** The Stats tab's groups of derived numbers, in display order. */
@@ -179,9 +184,9 @@ export const STAT_GROUPS = ['Offence', 'Defence', 'Find'] as const;
 export type StatGroup = (typeof STAT_GROUPS)[number];
 
 interface StatRow {
-  label: string;
+  label: MessageKey;
   /** The label under its group heading, if shorter than `label`. */
-  short?: string;
+  short?: MessageKey;
   group: StatGroup;
   value: (d: Derived) => number;
   format: (v: number) => string;
@@ -191,23 +196,23 @@ interface StatRow {
 
 /** The combat numbers on the character panel, in display order. */
 export const STAT_ROWS: readonly StatRow[] = [
-  { label: 'Max HP', group: 'Defence', value: (d) => d.maxHp, format: (v) => num(v, 0) },
-  { label: 'Damage', group: 'Offence', value: (d) => d.damage, format: (v) => num(v, 1) },
-  { label: 'Defence', group: 'Defence', value: (d) => d.defence, format: (v) => num(v, 1) },
+  { label: 'row.maxHp', group: 'Defence', value: (d) => d.maxHp, format: (v) => num(v, 0) },
+  { label: 'row.damage', group: 'Offence', value: (d) => d.damage, format: (v) => num(v, 1) },
+  { label: 'row.defence', group: 'Defence', value: (d) => d.defence, format: (v) => num(v, 1) },
   {
-    label: 'Attacks/s',
+    label: 'row.attacks',
     group: 'Offence',
     value: (d) => 1 / d.attackInterval,
     format: (v) => num(v, 2),
   },
   {
-    label: 'Crit chance',
+    label: 'row.critChance',
     group: 'Offence',
     value: (d) => d.critChance,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
-    label: 'Crit damage',
+    label: 'row.critDamage',
     group: 'Offence',
     value: (d) => d.critMultiplier,
     format: (v) => `×${num(v, 2)}`,
@@ -215,27 +220,27 @@ export const STAT_ROWS: readonly StatRow[] = [
     delta: (v) => `${num(v * 100, 1)}%`,
   },
   {
-    label: 'Lifesteal',
+    label: 'row.lifesteal',
     group: 'Defence',
     value: (d) => d.lifesteal,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
-    label: 'Qi regen',
+    label: 'row.qiRegen',
     group: 'Defence',
     value: (d) => d.qiRegen,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
-    label: 'Spirit stone find',
-    short: 'Spirit stones',
+    label: 'row.stoneFind',
+    short: 'row.stoneFindShort',
     group: 'Find',
     value: (d) => d.stoneFind,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
-    label: 'Treasure find',
-    short: 'Treasure',
+    label: 'row.treasureFind',
+    short: 'row.treasureFindShort',
     group: 'Find',
     value: (d) => d.treasureFind,
     format: (v) => `${num(v * 100, 1)}%`,
@@ -250,8 +255,8 @@ export function statRows(
   const d = derive(c);
   d.treasureFind += passiveTreasureFind(passives);
   return STAT_ROWS.map((r) => ({
-    label: r.label,
-    short: r.short ?? r.label,
+    label: t(r.label),
+    short: t(r.short ?? r.label),
     group: r.group,
     value: r.format(r.value(d)),
   }));
@@ -263,8 +268,12 @@ export function respecView(
   stones: number,
   nothingToDo = false,
 ): { cost: string; off: boolean; why: string } {
-  const why = nothingToDo ? 'Nothing to reset' : stones < cost ? `Need ${cost - stones} more` : '';
-  return { cost: `${cost} Spirit Stones`, off: why !== '', why };
+  const why = nothingToDo
+    ? t('respec.nothing')
+    : stones < cost
+      ? t('respec.need', { n: cost - stones })
+      : '';
+  return { cost: t('respec.cost', { n: cost }), off: why !== '', why };
 }
 
 /**
@@ -285,14 +294,14 @@ export function compareToEquipped(
     const change = r.value(next) - r.value(now);
     const text = fmt(Math.abs(change));
     if (text === fmt(0)) continue;
-    lines.push({ text: `${signed(change, text)} ${r.label}`, better: change > 0 });
+    lines.push({ text: `${signed(change, text)} ${t(r.label)}`, better: change > 0 });
   }
   return [...lines, ...compareArrays(c.equipment[to], item)];
 }
 
 /** An array's strength in short, e.g. "1.75 s" or "9.5%". */
 function arrayAmount(id: ArrayId, value: number): string {
-  return id === 'binding' ? `${num(value, 2)} s` : `${num(value * 100, 1)}%`;
+  return id === 'binding' ? t('array.seconds', { v: num(value, 2) }) : `${num(value * 100, 1)}%`;
 }
 
 /** How the array changes when `next` replaces `now`: stronger or weaker, or one gained and one lost. */
@@ -303,29 +312,30 @@ function compareArrays(now: Item | undefined, next: Item): { text: string; bette
     const change = will.value - was.value;
     const text = arrayAmount(will.id, Math.abs(change));
     if (text === arrayAmount(will.id, 0)) return [];
-    return [{ text: `${signed(change, text)} ${ARRAYS[will.id].name}`, better: change > 0 }];
+    const name = tn('array', ARRAYS[will.id].name);
+    return [{ text: `${signed(change, text)} ${name}`, better: change > 0 }];
   }
   const lines: { text: string; better: boolean }[] = [];
   if (will) {
     const amount = arrayAmount(will.id, will.value);
-    lines.push({ text: `+${ARRAYS[will.id].name} (${amount})`, better: true });
+    lines.push({ text: `+${tn('array', ARRAYS[will.id].name)} (${amount})`, better: true });
   }
   if (was) {
     const amount = arrayAmount(was.id, was.value);
-    lines.push({ text: `−${ARRAYS[was.id].name} (${amount})`, better: false });
+    lines.push({ text: `−${tn('array', ARRAYS[was.id].name)} (${amount})`, better: false });
   }
   return lines;
 }
 
 /** Where the cultivator is on the floor: "Wave 2 / 3", "Elite", "Boss" or "Tribulation". */
 export function waveLabel(state: GameState): string {
-  if (state.enemies[0]?.kind === 'tribulation') return 'Tribulation';
+  if (state.enemies[0]?.kind === 'tribulation') return t('strip.tribulation');
   const waves = WAVES_PER_FLOOR * DEMONS_PER_WAVE;
   const left = state.enemies.filter((e) => e.kind !== 'tribulation').length;
   const defeated = waves + 2 - left;
   if (defeated < waves)
-    return `Wave ${Math.floor(defeated / DEMONS_PER_WAVE) + 1} / ${WAVES_PER_FLOOR}`;
-  return defeated === waves ? 'Elite' : 'Boss';
+    return t('strip.wave', { n: Math.floor(defeated / DEMONS_PER_WAVE) + 1, of: WAVES_PER_FLOOR });
+  return t(defeated === waves ? 'strip.elite' : 'strip.boss');
 }
 
 /**
@@ -339,13 +349,13 @@ export function xpBar(c: Cultivator): {
   text: string;
   spoken: string;
 } {
-  const level = `Lv ${c.level}`;
+  const level = t('xp.level', { n: c.level });
   if (readyForTribulation(c))
     return {
       level,
       percent: 100,
-      text: 'Tribulation due',
-      spoken: `Level ${c.level}, Tribulation due`,
+      text: t('xp.due'),
+      spoken: t('xp.spokenDue', { n: c.level }),
     };
   const xp = Math.floor(c.xp);
   const next = xpToNext(c.level);
@@ -353,7 +363,7 @@ export function xpBar(c: Cultivator): {
     level,
     percent: Math.max(0, Math.min(100, (xp / next) * 100)),
     text: `${xp} / ${next}`,
-    spoken: `Level ${c.level}, ${xp} of ${next} XP to the next level`,
+    spoken: t('xp.spoken', { n: c.level, xp, next }),
   };
 }
 
@@ -367,7 +377,8 @@ export function tribulationCall(state: GameState): { name: string; next: string 
   const realm = realmOf(state.cultivator.level);
   const name = TRIBULATIONS[realm];
   const next = REALMS[realmOf(state.cultivator.level + 1)];
-  return name === undefined || next === undefined ? null : { name, next: next.name };
+  if (name === undefined || next === undefined) return null;
+  return { name: tn('enemy', name), next: tn('realm', next.name) };
 }
 
 /**
@@ -387,22 +398,25 @@ export function tribulationBanner(prev: GameState, next: GameState): string | nu
   const now = next.enemies[0];
   if (realmOf(next.cultivator.level) > realmOf(prev.cultivator.level)) {
     const realm = REALMS[realmOf(next.cultivator.level)];
-    return realm ? `Breakthrough! ${realm.name}` : null;
+    return realm ? t('trial.breakthrough', { realm: tn('realm', realm.name) }) : null;
   }
   if (before?.kind === 'tribulation' && next.deaths > prev.deaths) {
-    return `${before.name} stands. The floor replays.`;
+    return t('trial.lost', { name: tn('enemy', before.name) });
   }
   if (now?.kind === 'tribulation' && before?.kind !== 'tribulation') {
-    return `Tribulation begins: ${now.name}`;
+    return t('trial.begins', { name: tn('enemy', now.name) });
   }
   const call = tribulationFellDue(prev, next) ? tribulationCall(next) : null;
-  return call ? `Tribulation due: ${call.name}` : null;
+  return call ? t('trial.fellDue', { name: call.name }) : null;
 }
 
 /** The realm, with the job title beside it: "Foundation Establishment · Associate". */
 export function realmLabel(level: number): string {
   const realm = REALMS[realmOf(level)] as (typeof REALMS)[number];
-  return realm.title ? `${realm.name} · ${realm.title}` : realm.name;
+  const name = tn('realm', realm.name);
+  return realm.title
+    ? t('realm.withTitle', { realm: name, title: tn('title', realm.title) })
+    : name;
 }
 
 /** Icons in the summary atlas, in its column order (tools/art/manifest.json "summary"). */
@@ -428,9 +442,9 @@ export function sellBelowLabel(p: {
   highest: GradeId | null;
   stones: number;
 }): string {
-  if (p.count === 0 || p.highest === null) return 'Nothing to sell below that grade.';
-  const items = p.count === 1 ? '1 item' : `${p.count} items`;
-  return `Sell ${items} (highest grade: ${GRADES[p.highest].name}) for ${p.stones} Spirit Stones?`;
+  if (p.count === 0 || p.highest === null) return t('sell.nothing');
+  const grade = tn('grade', GRADES[p.highest].name);
+  return t(p.count === 1 ? 'sell.one' : 'sell.many', { n: p.count, grade, stones: p.stones });
 }
 
 /** Item types in the icon atlas's column order (tools/art/manifest.json "icons"). */
@@ -515,12 +529,12 @@ export function arraySetUp(prev: GameState, next: GameState): string | null {
   const faced = next.enemies[0]?.kind === 'tribulation' && prev.enemies[0]?.kind !== 'tribulation';
   if (next.kills === prev.kills && next.deaths === prev.deaths && !faced) return null;
   const array = equippedArray(next.cultivator.equipment);
-  return array ? `${ARRAYS[array.id].name} set up` : null;
+  return array ? t('array.setUp', { name: tn('array', ARRAYS[array.id].name) }) : null;
 }
 
 /** A grid cell's accessible name: everything its colour, initial and icon show, in words. */
 export function cellLabel(item: Item): string {
-  return `${item.name}, ${itemTag(item)}`;
+  return t('item.cell', { name: tn('item', item.name), tag: itemTag(item) });
 }
 
 /**
@@ -568,30 +582,28 @@ export function bagPage(
 /** A time away, e.g. "45 s", "12 min" or "2 h 5 min". */
 export function durationLabel(seconds: number): string {
   const s = Math.floor(seconds);
-  if (s < 60) return `${s} s`;
+  if (s < 60) return t('time.seconds', { s });
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
-  return h > 0 ? `${h} h ${m} min` : `${m} min`;
+  return h > 0 ? t('time.hours', { h, m }) : t('time.minutes', { m });
 }
 
 /** The Overtime Cultivation summary, one line per count. */
 export function overtimeLines(summary: OvertimeSummary): string[] {
-  const away = `Away ${durationLabel(summary.seconds)}`;
+  const time = durationLabel(summary.seconds);
   const lines = [
-    summary.capped ? `Away more than ${durationLabel(summary.seconds)} (the most replayed)` : away,
-    `Floors climbed: ${summary.floorsClimbed}`,
-    `Levels gained: ${summary.levels}`,
-    `Kills: ${summary.kills}`,
-    `Drops kept: ${summary.dropsKept}`,
+    t(summary.capped ? 'overtime.awayCapped' : 'overtime.away', { time }),
+    t('overtime.floors', { n: summary.floorsClimbed }),
+    t('overtime.levels', { n: summary.levels }),
+    t('overtime.kills', { n: summary.kills }),
+    t('overtime.kept', { n: summary.dropsKept }),
   ];
-  if (summary.dropsSold > 0) lines.push(`Drops sold: ${summary.dropsSold}`);
-  if (summary.dropsSalvaged > 0) lines.push(`Drops salvaged: ${summary.dropsSalvaged}`);
-  lines.push(`Spirit Stones: +${summary.stones}`);
-  if (summary.essence > 0) lines.push(`Spirit Essence: +${summary.essence}`);
+  if (summary.dropsSold > 0) lines.push(t('overtime.sold', { n: summary.dropsSold }));
+  if (summary.dropsSalvaged > 0) lines.push(t('overtime.salvaged', { n: summary.dropsSalvaged }));
+  lines.push(t('overtime.stones', { n: summary.stones }));
+  if (summary.essence > 0) lines.push(t('overtime.essence', { n: summary.essence }));
   // So a lower drop count isn't read as a bug.
-  lines.push(
-    `Items drop at ${Math.round(OFFLINE_DROP_MULTIPLIER * 100)}% of the usual rate while away. Keep the tab open for more loot.`,
-  );
+  lines.push(t('overtime.rate', { percent: Math.round(OFFLINE_DROP_MULTIPLIER * 100) }));
   return lines;
 }
 
@@ -617,45 +629,47 @@ export function passiveRow(passives: Passives, insight: number, id: PassiveId): 
   const rank = passives[id];
   const cost = passiveCost(passives, id);
   const rankText = `${rank}/${p.maxRank}`;
+  const name = tn('passive', p.name);
+  const effect = tn('passiveRank', p.perRankText);
   if (cost === null) {
     return {
-      name: p.name,
+      name,
       rank: rankText,
       state: 'max',
-      buy: 'Max',
-      buyName: `Max: ${p.name} is at rank ${rank} of ${p.maxRank}`,
-      detail: `${p.perRankText} per rank. Max rank.`,
+      buy: t('passive.max'),
+      buyName: t('passive.maxName', { name, rank, max: p.maxRank }),
+      detail: t('passive.maxDetail', { effect }),
     };
   }
   return {
-    name: p.name,
+    name,
     rank: rankText,
     state: insight >= cost ? 'can' : 'cant',
-    buy: `Buy ${cost}`,
-    buyName: `Buy ${cost} Dao Insight: ${p.name} rank ${rank + 1} of ${p.maxRank}`,
-    detail: `${p.perRankText} per rank. Next rank: ${cost} Dao Insight.`,
+    buy: t('passive.buy', { n: cost }),
+    buyName: t('passive.buyName', { n: cost, name, rank: rank + 1, max: p.maxRank }),
+    detail: t('passive.detail', { effect, n: cost }),
   };
 }
 
 /** The Early Retirement button, or why it is off. */
 export function retireLabel(p: RetirePreview): string {
-  return p.insight > 0 ? 'Retire early…' : `Reach floor ${RETIRE_MIN_FLOOR} to retire early`;
+  return p.insight > 0 ? t('retire.button') : t('retire.reach', { n: RETIRE_MIN_FLOOR });
 }
 
 /** The Early Retirement confirmation: what is kept and what is lost, one short line each. */
 export function retireLines(p: RetirePreview): { kept: string[]; lost: string[] } {
   const lost = [
-    `Level ${p.level}, floor ${p.highestFloor}`,
-    p.items === 1 ? '1 item (bag and worn)' : `${p.items} items (bag and worn)`,
-    `${p.stones} Spirit Stones`,
-    `${p.essence} Spirit Essence`,
+    t('retire.lostLevel', { level: p.level, floor: p.highestFloor }),
+    t(p.items === 1 ? 'retire.lostItem' : 'retire.lostItems', { n: p.items }),
+    t('retire.lostStones', { n: p.stones }),
+    t('retire.lostEssence', { n: p.essence }),
   ];
-  if (p.bagCells > 0) lost.push(`${p.bagCells} bought bag slots`);
+  if (p.bagCells > 0) lost.push(t('retire.lostCells', { n: p.bagCells }));
   return {
     kept: [
-      `+${p.insight} Dao Insight (${p.insightAfter} total)`,
-      'Passives',
-      'Path and auto filter',
+      t('retire.keptInsight', { n: p.insight, total: p.insightAfter }),
+      t('retire.keptPassives'),
+      t('retire.keptPath'),
     ],
     lost,
   };
