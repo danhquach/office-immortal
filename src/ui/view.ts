@@ -12,6 +12,7 @@ import {
   PATHS,
   type PathId,
 } from '../core/cultivator.ts';
+import { INVENTORY_SIZE } from '../core/economy.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
   AFFIXES,
@@ -501,6 +502,32 @@ export function gridMove(index: number, key: string, size: number, cols: number)
     End: Math.min(size - 1, index - (index % cols) + cols - 1),
   };
   return moves[key] ?? null;
+}
+
+/** Bag cells per inventory page: the starting bag, so buying slots never grows the grid. */
+export const BAG_PAGE = INVENTORY_SIZE;
+
+/** The number of inventory pages a bag of `size` cells needs (always at least one). */
+export function bagPages(size: number): number {
+  return Math.max(1, Math.ceil(size / BAG_PAGE));
+}
+
+/** The inventory page holding bag cell `index`. */
+export function pageOf(index: number): number {
+  return Math.floor(index / BAG_PAGE);
+}
+
+/**
+ * Page `page` of a bag of `size` cells: its first cell, how many real cells it
+ * shows, how many invisible fillers pad it to a full page, and the page count.
+ */
+export function bagPage(
+  size: number,
+  page: number,
+): { start: number; cells: number; fillers: number; pages: number } {
+  const start = page * BAG_PAGE;
+  const cells = Math.max(0, Math.min(BAG_PAGE, size - start));
+  return { start, cells, fillers: BAG_PAGE - cells, pages: bagPages(size) };
 }
 
 /** A time away, e.g. "45 s", "12 min" or "2 h 5 min". */
