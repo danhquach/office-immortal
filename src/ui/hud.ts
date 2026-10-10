@@ -63,9 +63,12 @@ export function tabTitle(floor: number, unseen: number): string {
   return `F${floor} · ${unseen > 0 ? dropsLabel(unseen) : GAME_TITLE}`;
 }
 
-/** The pop-out's status line, e.g. `F12 · Level 7 · 3 drops`; no count when nothing waits. */
-export function miniStatus(floor: number, level: number, unseen: number): string {
-  const head = `F${floor} · Level ${level}`;
+/**
+ * The pop-out's status line, e.g. `F21 · Golden Core · Manager · 3 drops`, from a
+ * realm label (fixed game text); no count when nothing waits.
+ */
+export function miniStatus(floor: number, realm: string, unseen: number): string {
+  const head = `F${floor} · ${realm}`;
   return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
 }
 

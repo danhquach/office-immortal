@@ -630,7 +630,8 @@ button.primary {
   margin: 0.2rem 0;
 }
 .mini .foe[data-kind='elite'] .sprite,
-.mini .foe[data-kind='boss'] .sprite {
+.mini .foe[data-kind='boss'] .sprite,
+.mini .foe[data-kind='tribulation'] .sprite {
   width: 32px;
   height: 32px;
 }

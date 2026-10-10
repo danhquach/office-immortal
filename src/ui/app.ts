@@ -1004,7 +1004,7 @@ function play(
     const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
     setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
     if (pip) {
-      miniLine.textContent = miniStatus(state.floor, c.level, unseen.count);
+      miniLine.textContent = miniStatus(state.floor, realmLabel(c.level), unseen.count);
       if (pip.document.title !== title) pip.document.title = title;
     }
   }

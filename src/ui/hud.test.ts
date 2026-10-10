@@ -42,10 +42,14 @@ describe('tabTitle', () => {
 });
 
 describe('miniStatus', () => {
-  it('shows floor, level and drops', () => {
-    expect(miniStatus(21, 7, 3)).toBe('F21 · Level 7 · 3 drops');
-    expect(miniStatus(2, 1, 1)).toBe('F2 · Level 1 · 1 drop');
-    expect(miniStatus(2, 1, 0)).toBe('F2 · Level 1');
+  it('shows floor, realm and drops', () => {
+    expect(miniStatus(21, 'Golden Core · Manager', 3)).toBe(
+      'F21 · Golden Core · Manager · 3 drops',
+    );
+    expect(miniStatus(2, 'Qi Condensation · Intern', 1)).toBe(
+      'F2 · Qi Condensation · Intern · 1 drop',
+    );
+    expect(miniStatus(2, 'Qi Condensation · Intern', 0)).toBe('F2 · Qi Condensation · Intern');
   });
 });
 
