@@ -88,6 +88,23 @@ const item = (s: ReturnType<typeof raw>) => (s.state.inventory as J[])[0] as J;
 const enemy = (s: ReturnType<typeof raw>) => (s.state.enemies as J[])[0] as J;
 
 describe('round trip', () => {
+  it('keeps a weapon equipped below its realm (a save from before the gate)', () => {
+    const s = newGame(1, 'sword');
+    s.cultivator.equipment.weapon = {
+      slot: 'weapon',
+      name: 'Heaven-Crushing Seal',
+      level: 1,
+      grade: 'immortal',
+      baseRoll: 0,
+      affixes: (['critChance', 'critDamage', 'attackSpeed', 'lifesteal', 'maxHp'] as const).map(
+        (id) => ({ id, roll: 0 }),
+      ),
+      unique: 'synergy',
+    };
+    const loaded = decodeSave(encodeSave(s, SAVED_AT));
+    expect(loaded?.state.cultivator.equipment.weapon).toEqual(s.cultivator.equipment.weapon);
+  });
+
   it('has gear and drops to round-trip', () => {
     expect(STATE.inventory.length).toBeGreaterThan(0);
     expect(Object.keys(STATE.cultivator.equipment).length).toBeGreaterThan(0);

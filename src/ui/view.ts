@@ -41,7 +41,7 @@ import {
   type Passives,
   type RetirePreview,
 } from '../core/prestige.ts';
-import { canFaceTribulation, type GameState } from '../core/sim.ts';
+import { canEquip, canFaceTribulation, requiredRealm, type GameState } from '../core/sim.ts';
 
 /** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
 export const PATH_BLURBS: Readonly<Record<PathId, string>> = {
@@ -127,6 +127,15 @@ const TREASURE_TIERS: Readonly<Record<GradeId, string>> = {
 export function treasureTier(item: Item): string | null {
   if (item.slot !== 'weapon' || !Object.hasOwn(TREASURE_TIERS, item.grade)) return null;
   return TREASURE_TIERS[item.grade];
+}
+
+/**
+ * Why the cultivator can't equip `item` yet, e.g. "Requires Foundation
+ * Establishment"; null when they can (docs/design.md §6).
+ */
+export function equipBlock(c: Cultivator, item: Item): string | null {
+  if (canEquip(c, item)) return null;
+  return `Requires ${(REALMS[requiredRealm(item)] as (typeof REALMS)[number]).name}`;
 }
 
 /** The Stats tab's groups of derived numbers, in display order. */

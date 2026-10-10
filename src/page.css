@@ -87,7 +87,8 @@ button:hover {
 }
 /* Off but still focusable (see app.ts); muted text still passes 4.5:1. */
 button[aria-disabled='true'],
-button[aria-disabled='true']:hover {
+button[aria-disabled='true']:hover,
+button.primary[aria-disabled='true'] {
   color: var(--muted);
   border-style: dashed;
   border-color: var(--line);

@@ -88,6 +88,7 @@ import {
   arraySetUp,
   cellLabel,
   compareToEquipped,
+  equipBlock,
   freshDrops,
   gridMove,
   itemLines,
@@ -1229,10 +1230,7 @@ function play(
       const b = slotCells[slot];
       fillCell(b, c.equipment[slot], `${EQUIP_SLOTS[slot].name}: empty`);
       // fillCell resets classes; a drag in progress keeps its target slots marked.
-      b.classList.toggle(
-        'target',
-        !!drag?.ghost && state.inventory[drag.index]?.slot === EQUIP_SLOTS[slot].takes,
-      );
+      b.classList.toggle('target', !!drag?.ghost && canDrop(state.inventory[drag.index], slot));
       b.setAttribute(
         'aria-pressed',
         String(!!selected && 'slot' in selected && selected.slot === slot),
@@ -1265,6 +1263,8 @@ function play(
       parts.push(el('p', 'muted', 'Equipped.'));
     } else {
       const index = selected.bag;
+      const blocked = equipBlock(state.cultivator, item);
+      if (blocked) parts.push(el('p', 'down', `${blocked} to equip.`));
       // One comparison and Equip button per position the item fits (two for
       // accessories and charms), the default position first.
       const fits = slotsFor(item.slot);
@@ -1280,6 +1280,11 @@ function play(
         const equipBtn = el('button', 'primary', 'Equip');
         if (fits.length > 1) equipBtn.setAttribute('aria-label', `Equip in ${name}`);
         equipBtn.type = 'button';
+        // aria-disabled, as everywhere here; equipFromBag ignores the click.
+        if (blocked) {
+          equipBtn.setAttribute('aria-disabled', 'true');
+          equipBtn.title = blocked;
+        }
         equipBtn.addEventListener('click', () => equipFromBag(index, to));
         const cmp = el('div', 'cmp');
         cmp.append(
@@ -1333,7 +1338,8 @@ function play(
 
   function equipFromBag(index: number, to?: EquipSlotId): void {
     const item = state.inventory[index];
-    if (!item) return;
+    // A double-click or drop below the item's realm does nothing; Details says why.
+    if (!item || equipBlock(state.cultivator, item)) return;
     // The Equip button is about to be replaced; keep keyboard focus nearby.
     const fromDetails = details.box.contains(document.activeElement);
     const at = to ?? defaultSlot(state.cultivator.equipment, item);
@@ -1409,12 +1415,17 @@ function play(
         ghost.setAttribute('aria-hidden', 'true');
         document.body.append(ghost);
         document.body.classList.add('dragging');
-        for (const p of slotsFor(item.slot)) slotCells[p].classList.add('target');
+        for (const p of slotsFor(item.slot))
+          slotCells[p].classList.toggle('target', canDrop(item, p));
         drag.ghost = ghost;
       }
       drag.ghost.style.left = `${e.clientX}px`;
       drag.ghost.style.top = `${e.clientY}px`;
-      character.box.classList.toggle('drop-ok', overCharacter(e));
+      const dragged = state.inventory[drag.index];
+      character.box.classList.toggle(
+        'drop-ok',
+        overCharacter(e) && !!dragged && !equipBlock(state.cultivator, dragged),
+      );
     },
     { signal },
   );
@@ -1447,6 +1458,11 @@ function play(
       ?.dataset.slot;
     const item = state.inventory[index];
     return item && slotsFor(item.slot).find((p) => p === at);
+  }
+
+  /** A dragged item marks a position as a target only if it fits and its realm is reached. */
+  function canDrop(item: Item | undefined, slot: EquipSlotId): boolean {
+    return item?.slot === EQUIP_SLOTS[slot].takes && !equipBlock(state.cultivator, item);
   }
 
   function overCharacter(e: PointerEvent): boolean {
