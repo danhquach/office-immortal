@@ -51,14 +51,18 @@ import {
   type SlotId,
   type UniqueId,
 } from '../core/loot.ts';
+import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
 import type { GameState } from '../core/sim.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 2;
-/** Older versions that still load: v1 came before currencies, the filter and bag upgrades. */
-const OLD_VERSIONS: readonly number[] = [1];
+export const SAVE_VERSION = 3;
+/**
+ * Older versions that still load: v1 came before currencies, the filter and
+ * bag upgrades; v2 before Early Retirement and Dao Insight.
+ */
+const OLD_VERSIONS: readonly number[] = [1, 2];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -201,9 +205,10 @@ function readSave(v: unknown): Save {
 
 const COUNT = Number.MAX_SAFE_INTEGER;
 
-/** Reads a state of `version`; a v1 state gets the defaults of what it lacks. */
+/** Reads a state of `version`; an older state gets the defaults of what it lacks. */
 function readState(v: unknown, version: number): GameState {
   const v1 = version === 1;
+  const before3 = version < 3;
   const o = obj(v, [
     'time',
     'rng',
@@ -218,6 +223,7 @@ function readState(v: unknown, version: number): GameState {
     ...(v1
       ? ['dropsLost']
       : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
+    ...(before3 ? [] : ['insight', 'passives', 'retirements']),
   ]);
   const time = num(o.time, 0, MAX_TIME);
   const highestFloor = int(o.highestFloor, 1, MAX_FLOOR);
@@ -227,7 +233,8 @@ function readState(v: unknown, version: number): GameState {
   if (v1) int(o.dropsLost, 0, COUNT);
   const bagSize = v1 ? INVENTORY_SIZE : int(o.bagSize, INVENTORY_SIZE, MAX_BAG_SIZE);
   if ((bagSize - INVENTORY_SIZE) % BAG_ROW !== 0) fail('bag size');
-  const cultivator = readCultivator(o.cultivator, time, highestFloor, v1);
+  const passives = before3 ? noPassives() : readPassives(o.passives);
+  const cultivator = readCultivator(o.cultivator, time, highestFloor, v1, bonusPoints(passives));
   const state: GameState = {
     time,
     rng: { s: int(rng.s, 0, 0xffffffff) },
@@ -245,8 +252,18 @@ function readState(v: unknown, version: number): GameState {
     dropsSalvaged: v1 ? 0 : int(o.dropsSalvaged, 0, COUNT),
     kills: int(o.kills, 0, COUNT),
     deaths: int(o.deaths, 0, COUNT),
+    insight: before3 ? 0 : int(o.insight, 0, COUNT),
+    passives,
+    retirements: before3 ? 0 : int(o.retirements, 0, COUNT),
   };
   return state;
+}
+
+function readPassives(v: unknown): Passives {
+  const o = obj(v, PASSIVE_IDS);
+  const passives = noPassives();
+  for (const id of PASSIVE_IDS) passives[id] = int(o[id], 0, PASSIVES[id].maxRank);
+  return passives;
 }
 
 const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];
@@ -263,7 +280,13 @@ function readFilter(v: unknown): LootFilter {
   };
 }
 
-function readCultivator(v: unknown, time: number, highestFloor: number, v1: boolean): Cultivator {
+function readCultivator(
+  v: unknown,
+  time: number,
+  highestFloor: number,
+  v1: boolean,
+  bonus: number,
+): Cultivator {
   const o = obj(v, [
     'path',
     'level',
@@ -280,8 +303,10 @@ function readCultivator(v: unknown, time: number, highestFloor: number, v1: bool
   const s = obj(o.stats, STAT_IDS);
   const stats = { body: 0, agility: 0, spirit: 0 };
   for (const id of STAT_IDS) stats[id] = int(s[id], BASE_STAT, Number.MAX_SAFE_INTEGER);
-  // Every stat point comes from the start or a level-up; none can appear from nowhere.
-  const points = 3 * BASE_STAT + STARTING_PRIMARY_BONUS + STAT_POINTS_PER_LEVEL * (level - 1);
+  // Every stat point comes from the start, a level-up or a Head Start passive;
+  // none can appear from nowhere.
+  const points =
+    3 * BASE_STAT + STARTING_PRIMARY_BONUS + STAT_POINTS_PER_LEVEL * (level - 1) + bonus;
   const unspent = v1 ? 0 : int(o.unspent, 0, points);
   if (stats.body + stats.agility + stats.spirit + unspent !== points) fail('stat points');
   const eq = obj(o.equipment, [], EQUIP_IDS);

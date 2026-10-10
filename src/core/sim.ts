@@ -25,6 +25,15 @@ import {
   type LootFilter,
 } from './economy.ts';
 import { makeFloor, makeTribulation, type Enemy } from './floors.ts';
+import {
+  bonusPoints,
+  canRetire,
+  insightFor,
+  noPassives,
+  passiveTreasureFind,
+  xpMultiplier,
+  type Passives,
+} from './prestige.ts';
 import { defaultSlot, rollDrop, slotsFor, type EquipSlotId, type Item } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
@@ -55,13 +64,25 @@ export interface GameState {
   dropsSalvaged: number;
   kills: number;
   deaths: number;
+  /** Dao Insight held, to spend on passives; kept through Early Retirement. */
+  insight: number;
+  /** Passive ranks bought with Dao Insight; kept through Early Retirement. */
+  passives: Passives;
+  retirements: number;
 }
 
-export function newGame(seed: number, path: PathId): GameState {
+/** What a run carries into the next one through Early Retirement. */
+export type Kept = Pick<GameState, 'insight' | 'passives' | 'retirements' | 'filter'>;
+
+export function newGame(
+  seed: number,
+  path: PathId,
+  kept: Kept = { insight: 0, passives: noPassives(), retirements: 0, filter: defaultFilter() },
+): GameState {
   const state: GameState = {
     time: 0,
     rng: { s: seed >>> 0 },
-    cultivator: newCultivator(path),
+    cultivator: newCultivator(path, bonusPoints(kept.passives)),
     floor: 1,
     highestFloor: 1,
     enemies: [],
@@ -70,11 +91,14 @@ export function newGame(seed: number, path: PathId): GameState {
     bagSize: INVENTORY_SIZE,
     stones: 0,
     essence: 0,
-    filter: defaultFilter(),
+    filter: kept.filter,
     dropsSold: 0,
     dropsSalvaged: 0,
     kills: 0,
     deaths: 0,
+    insight: kept.insight,
+    passives: kept.passives,
+    retirements: kept.retirements,
   };
   startFloor(state, rngFrom(state.rng));
   return state;
@@ -101,6 +125,25 @@ export function tick(state: GameState, dt: number): GameState {
   }
   s.time = end;
   return s;
+}
+
+/**
+ * Early Retirement: a new run at floor 1, level 1 on the same Path, paying Dao
+ * Insight for the highest floor reached. Insight, passives and the auto filter
+ * are kept; level, floors, items, currencies and bag upgrades are not. Returns
+ * the new state; `state` is left untouched.
+ */
+export function retire(state: GameState): GameState {
+  if (!canRetire(state)) throw new RangeError('retire: too little progress to pay any insight');
+  const s = structuredClone(state);
+  // The next run's seed comes from this run's, so a run still replays from one seed.
+  const seed = Math.floor(rngFrom(s.rng)() * 2 ** 32);
+  return newGame(seed, s.cultivator.path, {
+    insight: Math.min(Number.MAX_SAFE_INTEGER, s.insight + insightFor(s.highestFloor)),
+    passives: s.passives,
+    retirements: s.retirements + 1,
+    filter: s.filter,
+  });
 }
 
 /**
@@ -154,9 +197,9 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
 
   s.kills += 1;
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
-  gainXp(c, enemy.xp);
+  gainXp(c, Math.round(enemy.xp * xpMultiplier(s.passives)));
   if (enemy.kind === 'tribulation') breakThrough(c);
-  const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind);
+  const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind + passiveTreasureFind(s.passives));
   if (drop) pickUp(s, drop);
   s.enemies.shift();
   queueTribulation(s);

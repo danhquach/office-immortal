@@ -147,13 +147,29 @@ Retire to restart at floor 1, level 1, keeping Dao Insight (earned from the
 highest floor reached). Insight buys permanent passives: more XP, more
 treasure find, a higher offline cap, more starting stat points.
 
+- **Insight paid:** highest floor² / 50, rounded down; nothing below floor 10,
+  where the Retire button stays off (floor 10 pays 2, 20 pays 8, 50 pays 50).
+- **Kept:** Dao Insight, passives, the Path and the auto filter. **Lost:**
+  level, floors, every item (bag and equipped), Spirit Stones, Spirit Essence
+  and bought bag slots.
+- **Confirmation** lists what is kept and lost before the run ends; the new
+  run is saved at once.
+- **Passives** (any time, apply at once; each rank costs twice the last):
+
+| Passive | Per rank | First rank | Max rank |
+|---|---|---|---|
+| Seniority | +10% XP from kills | 2 | 20 |
+| Expense Account | +5% treasure find | 2 | 20 |
+| Flexible Hours | +1 h Overtime Cultivation cap | 3 | 8 |
+| Head Start | +2 stat points (primary stat), this run and every run after | 3 | 20 |
+
 ## 10. Offline and background play
 
 - **Time-based, not tick-based.** Progress is worked out from elapsed real
   time, because browsers throttle background tabs.
 - **Overtime Cultivation:** on return, the game replays the time away (capped
-  at 8 hours) and shows a summary: floors cleared, levels, drops kept, sold
-  and salvaged, and the currencies earned.
+  at 8 hours, more with Flexible Hours, §9) and shows a summary: floors
+  cleared, levels, drops kept, sold and salvaged, and the currencies earned.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini

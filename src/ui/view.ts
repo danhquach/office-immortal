@@ -27,6 +27,16 @@ import {
   type SlotId,
 } from '../core/loot.ts';
 import type { OvertimeSummary } from '../core/offline.ts';
+import {
+  noPassives,
+  passiveCost,
+  passiveTreasureFind,
+  PASSIVES,
+  RETIRE_MIN_FLOOR,
+  type PassiveId,
+  type Passives,
+  type RetirePreview,
+} from '../core/prestige.ts';
 import type { GameState } from '../core/sim.ts';
 
 /** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
@@ -114,8 +124,13 @@ export const STAT_ROWS: readonly StatRow[] = [
   { label: 'Treasure find', value: (d) => d.treasureFind, format: (v) => `${num(v * 100, 1)}%` },
 ];
 
-export function statRows(c: Cultivator): { label: string; value: string }[] {
+/** The cultivator's numbers, with the passives that change them (treasure find). */
+export function statRows(
+  c: Cultivator,
+  passives: Passives = noPassives(),
+): { label: string; value: string }[] {
   const d = derive(c);
+  d.treasureFind += passiveTreasureFind(passives);
   return STAT_ROWS.map((r) => ({ label: r.label, value: r.format(r.value(d)) }));
 }
 
@@ -238,4 +253,38 @@ export function overtimeLines(summary: OvertimeSummary): string[] {
   lines.push(`Spirit Stones: +${summary.stones}`);
   if (summary.essence > 0) lines.push(`Spirit Essence: +${summary.essence}`);
   return lines;
+}
+
+/** A passive's shop line, e.g. "Seniority 2/20: +10% XP. Next rank: 8 Dao Insight". */
+export function passiveLabel(passives: Passives, id: PassiveId): string {
+  const p = PASSIVES[id];
+  const cost = passiveCost(passives, id);
+  const next = cost === null ? 'Max rank' : `Next rank: ${cost} Dao Insight`;
+  return `${p.name} ${passives[id]}/${p.maxRank}: ${p.perRankText} per rank. ${next}`;
+}
+
+/** The Early Retirement button, or why it is off. */
+export function retireLabel(p: RetirePreview): string {
+  return p.insight > 0
+    ? `Retire early for ${p.insight} Dao Insight…`
+    : `Reach floor ${RETIRE_MIN_FLOOR} to retire early`;
+}
+
+/** The Early Retirement confirmation: what is kept and what is lost. */
+export function retireLines(p: RetirePreview): { kept: string[]; lost: string[] } {
+  const items = p.items === 1 ? '1 item' : `${p.items} items`;
+  const lost = [
+    `Level ${p.level} and floor ${p.highestFloor}: back to level 1, floor 1`,
+    `${items}, in the bag and equipped`,
+    `${p.stones} Spirit Stones and ${p.essence} Spirit Essence`,
+  ];
+  if (p.bagCells > 0) lost.push(`${p.bagCells} bought bag slots`);
+  return {
+    kept: [
+      `Dao Insight: +${p.insight} (${p.insightAfter} to spend)`,
+      'Passives bought with Dao Insight',
+      'Your Path and auto filter',
+    ],
+    lost,
+  };
 }
