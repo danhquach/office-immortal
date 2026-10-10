@@ -201,19 +201,20 @@ Every drop is generated from a seeded roll.
   Talisman of their grade with their stored rolls. A utility affix on one now
   shows at the Talisman range (0.75×).
 
-- **Weapons are a Taoist cultivator's magic tools,** in five families. Each
-  grade drops one of each family, and the material gets richer with the grade
-  (each name has its own icon). Every weapon rolls the same base stat; the
-  family sets the name, the icon and the Path its affixes lean toward
-  (**Path lean**, below).
+- **Weapons are a Taoist cultivator's magic tools,** in six families. Each
+  grade drops one of each family at even odds (one weapon in six per family),
+  and the material gets richer with the grade (each name has its own icon).
+  Every weapon rolls the same base stat and follows the treasure tier and tier
+  gate (below); the family sets the name, the icon and the Path its affixes
+  lean toward (**Path lean**, below).
 
-| Grade | Flying Sword | Horsetail Whisk | Peachwood Sword | Fan | Seal |
-|---|---|---|---|---|---|
-| Mortal | Iron Flying Sword | Hempen Horsetail Whisk | Peachwood Sword | Feather Fan | Stone Mountain Seal |
-| Spirit | Azure Cloud Flying Sword | Azure Silk Whisk | Spirit Peachwood Sword | Azure Wind Fan | Azure Peak Seal |
-| Earth | Jade Serpent Flying Sword | Jade Thread Whisk | Hundred-Year Peachwood Sword | Jade Crane Fan | Jade Mountain Seal |
-| Heaven | Golden Crow Flying Sword | Golden Sun Whisk | Thunderstruck Peachwood Sword | Golden Cloud Fan | Golden Mountain Seal |
-| Immortal | Phoenix Flame Flying Sword | Phoenix Plume Whisk | Thousand-Year Peachwood Sword | Phoenix Flame Fan | Heaven-Crushing Seal |
+| Grade | Flying Sword | Horsetail Whisk | Peachwood Sword | Fan | Seal | Vajra Pestle |
+|---|---|---|---|---|---|---|
+| Mortal | Iron Flying Sword | Hempen Horsetail Whisk | Peachwood Sword | Feather Fan | Stone Mountain Seal | Iron Vajra Pestle |
+| Spirit | Azure Cloud Flying Sword | Azure Silk Whisk | Spirit Peachwood Sword | Azure Wind Fan | Azure Peak Seal | Azure Thunder Vajra Pestle |
+| Earth | Jade Serpent Flying Sword | Jade Thread Whisk | Hundred-Year Peachwood Sword | Jade Crane Fan | Jade Mountain Seal | Jade Demon-Subduing Vajra Pestle |
+| Heaven | Golden Crow Flying Sword | Golden Sun Whisk | Thunderstruck Peachwood Sword | Golden Cloud Fan | Golden Mountain Seal | Golden Vajra Pestle |
+| Immortal | Phoenix Flame Flying Sword | Phoenix Plume Whisk | Thousand-Year Peachwood Sword | Phoenix Flame Fan | Heaven-Crushing Seal | Phoenix Flame Vajra Pestle |
 
 - **Path lean:** each Weapon, Hidden Weapon and Accessory family leans toward
   one Path through its affixes. When a leaning item draws its affixes (still
@@ -230,7 +231,7 @@ Every drop is generated from a seeded roll.
 | Path | Weapon | Hidden Weapon | Accessory | Favoured affixes (weight 3, others 1) |
 |---|---|---|---|---|
 | Sword Cultivator | Flying Sword, Peachwood Sword | Darts | Mirror | crit chance, crit damage, attack speed |
-| Body Refiner | Seal | Binding Rope | Pendant | max HP, defence, lifesteal |
+| Body Refiner | Seal, Vajra Pestle | Binding Rope | Pendant | max HP, defence, lifesteal |
 | Talisman Master | Fan, Horsetail Whisk | (Soul Banner, #52) | Bell | qi regen, crit damage, attack speed |
 
 - **Treasure tier:** a weapon's details show its tier by grade: Mortal and
@@ -244,7 +245,7 @@ Every drop is generated from a seeded roll.
   drag does nothing. The gate applies only when equipping, so a weapon already
   worn (e.g. from a save made before the gate) stays equipped. Other item types
   have no tier and no gate.
-- **Retired names:** a save's weapon with a name from before the five families
+- **Retired names:** a save's weapon with a name from before the weapon families
   (Iron Jian, Bronze Longsword, Tempered Steel Blade; Azure Cloud Jian, Sky
   River Blade, Frost Lotus Sword; Jade Serpent Blade, Verdant Pine Sword,
   Emerald Wind Jian; Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold

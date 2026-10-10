@@ -724,6 +724,7 @@ describe('favouredBy', () => {
     ['weapon', 'Hundred-Year Peachwood Sword', 'Sword Cultivator'],
     ['weapon', 'Jade Crane Fan', 'Talisman Master'],
     ['weapon', 'Jade Mountain Seal', 'Body Refiner'],
+    ['weapon', 'Jade Demon-Subduing Vajra Pestle', 'Body Refiner'],
     ['sideArm', 'Jade Viper Darts', 'Sword Cultivator'],
     ['sideArm', 'Jade Dragon-Binding Chain', 'Body Refiner'],
     ['accessory', 'Jade Dragon Pendant', 'Body Refiner'],

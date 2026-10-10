@@ -1,4 +1,4 @@
-// Weapon icon SVGs: 5 families x 5 grades, drawn on a 64x64 grid, thick dark outline,
+// Weapon icon SVGs: 6 families x 5 grades, drawn on a 64x64 grid, thick dark outline,
 // flat colours. tools/art/render-weapons.mjs renders them for tools/art/build.py.
 const O = '#1a1423';
 const SW = 2.6; // outline width
@@ -547,6 +547,63 @@ function seal(g) {
   );
 }
 
+// ---------- Vajra Pestle: three-pronged head, banded shaft, wrapped grip ----------
+function pestle(g) {
+  const c = G[g];
+  const P = {
+    mortal: { shaft: '#6e6e7a', hi: '#9a9aa6', band: '#4a4a55', grip: '#6b3e26', bolt: null },
+    spirit: { shaft: '#2f5fb3', hi: '#5aa0f0', band: '#c8c8d0', grip: '#1e2f5c', bolt: '#a8d8ff' },
+    earth: { shaft: '#2f8a5a', hi: '#5fd08a', band: '#f5c542', grip: '#1f4d3a', bolt: '#b8f5c8' },
+    heaven: { shaft: '#f2f2f5', hi: '#fff1a8', band: '#f5c542', grip: '#e88a2a', bolt: '#fff1a8' },
+    immortal: {
+      shaft: '#b82e3a',
+      hi: '#f05a5a',
+      band: '#f5c542',
+      grip: '#6e1b25',
+      bolt: '#e88a2a',
+    },
+  }[g];
+  const defs =
+    g === 'immortal'
+      ? glow('vg', '#f5c542', 0.55)
+      : g === 'heaven'
+        ? glow('vg', '#fff1a8', 0.6)
+        : '';
+  const halo =
+    g === 'heaven' || g === 'immortal' ? `<circle cx="32" cy="16" r="20" fill="url(#vg)"/>` : '';
+  // Thunder zigzags beside the head from Spirit up; a third from Heaven up.
+  const bolts = P.bolt
+    ? `<g fill="none" stroke="${P.bolt}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+      <path d="M15 8 l3 4 l-3 3 l3 4"/><path d="M49 8 l-3 4 l3 3 l-3 4"/>${g === 'heaven' || g === 'immortal' ? '<path d="M45 31 l-2 3 l2 2 l-2 3"/>' : ''}</g>`
+    : '';
+  const flame =
+    g === 'immortal'
+      ? `<path d="M32 -3 C28 2 29.5 5 32 6.5 C34.5 5 36 2 32 -3 Z" fill="#f5c542" ${s(1.6)}/>`
+      : '';
+  const gem = c.gem ? `<circle cx="32" cy="48.5" r="2.6" fill="${c.gem}" ${s(1.3)}/>` : '';
+  // Each outer prong is a dark stroke under a coloured one, so it reads as its own bar.
+  const prong = (d) =>
+    `<path d="${d}" fill="none" stroke="${O}" stroke-width="7" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${P.hi}" stroke-width="3.4" stroke-linecap="round"/>`;
+  const body = `
+    ${halo}
+    ${bolts}
+    ${flame}
+    ${prong('M27 23 Q17 14 30 5')}
+    ${prong('M37 23 Q47 14 34 5')}
+    <path d="M32 2 L36 12 L32 24 L28 12 Z" fill="${P.shaft}" ${s()}/>
+    <path d="M32 5 L32 20" stroke="${P.hi}" stroke-width="1.6"/>
+    <rect x="21" y="22" width="22" height="6" rx="3" fill="${P.band}" ${s()}/>
+    <path d="M25 28 L39 28 L37.5 44 L26.5 44 Z" fill="${P.shaft}" ${s()}/>
+    <path d="M29 29.5 L29 42.5" stroke="${P.hi}" stroke-width="2"/>
+    <path d="M25.5 33.5 H38.5 M26 39 H38" stroke="${P.band}" stroke-width="2.4"/>
+    <circle cx="32" cy="48.5" r="6" fill="${P.band}" ${s()}/>
+    ${gem}
+    <rect x="28.5" y="54" width="7" height="8" rx="1.8" fill="${P.grip}" ${s()}/>
+    <path d="M29 57 L35 55.4 M29 60.4 L35 58.8" stroke="${O}" stroke-width="1.1" opacity="0.6"/>
+    <path d="M32 61.5 L35.5 65 L32 68.5 L28.5 65 Z" fill="${P.band}" ${s(1.6)}/>`;
+  return wrap(diag(body), defs);
+}
+
 export const FAMILIES = [
   {
     id: 'flying',
@@ -602,6 +659,17 @@ export const FAMILIES = [
       'Heaven-Crushing Seal',
     ],
     draw: seal,
+  },
+  {
+    id: 'pestle',
+    names: [
+      'Iron Vajra Pestle',
+      'Azure Thunder Vajra Pestle',
+      'Jade Demon-Subduing Vajra Pestle',
+      'Golden Vajra Pestle',
+      'Phoenix Flame Vajra Pestle',
+    ],
+    draw: pestle,
   },
 ];
 export { GRADES };
