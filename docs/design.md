@@ -405,7 +405,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.
 - The summary is a band of one-line chips ("Label value"): Path, Realm with
-  its job title, Spirit Stones and Spirit Essence. Level and XP to the next
+  its job title, Spirit Stones and Spirit Essence. Realm, Spirit Stones and
+  Spirit Essence open with a small icon (decorative, hidden from screen
+  readers); the Realm icon changes at each breakthrough. Level and XP to the next
   level are a yellow progress bar along the foot of the combat strip ("Lv 14"
   at its left end, "37 / 60" inside; full with "Tribulation due" when one is
   due). The strip header shows floor, best floor, wave and kills
@@ -452,6 +454,11 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   to its source art (256 colours picked from the icons themselves, not the
   shared palette). The grade stays on the cell border and its initial, never
   on the icon alone.
+- **Summary icons:** in the item icons' style, 64×64 in one atlas row
+  (`summary.png`), shown at the chip's text size: a glowing cyan spirit stone,
+  an orange essence drop, and one per realm, each grander than the last (qi
+  swirl, jade foundation, golden core, lotus with a spirit flame, azure flying
+  sword, crane over the clouds, crimson and gold sun emblem).
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
