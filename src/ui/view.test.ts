@@ -35,7 +35,7 @@ import {
   tribulationCall,
   tribulationFellDue,
   waveLabel,
-  xpLabel,
+  xpBar,
 } from './view.ts';
 import { makeTribulation } from '../core/floors.ts';
 import { xpToNext } from '../core/cultivator.ts';
@@ -385,16 +385,40 @@ describe('realmLabel', () => {
   });
 });
 
-describe('xpLabel', () => {
-  it('shows XP to the next level, and flags a Tribulation due at a cap', () => {
+describe('xpBar', () => {
+  it('shows the level and XP to the next level', () => {
     const c = newCultivator('sword');
     c.xp = 37;
-    expect(xpLabel(c)).toBe(`37 / ${xpToNext(1)}`);
+    expect(xpBar(c)).toEqual({
+      level: 'Lv 1',
+      percent: (37 / xpToNext(1)) * 100,
+      text: `37 / ${xpToNext(1)}`,
+      spoken: `Level 1, 37 of ${xpToNext(1)} XP to the next level`,
+    });
+  });
+
+  it('is full and says so when a Tribulation is due at a cap', () => {
+    const c = newCultivator('sword');
     c.level = 10;
     c.xp = xpToNext(10) + 80;
-    expect(xpLabel(c)).toBe(`${xpToNext(10) + 80} / ${xpToNext(10)} · Tribulation due`);
-    c.xp = 5;
-    expect(xpLabel(c)).toBe(`5 / ${xpToNext(10)}`);
+    expect(xpBar(c)).toEqual({
+      level: 'Lv 10',
+      percent: 100,
+      text: 'Tribulation due',
+      spoken: 'Level 10, Tribulation due',
+    });
+  });
+
+  it('keeps the bar between empty and full', () => {
+    const c = newCultivator('sword');
+    c.level = 10;
+    c.xp = 5.7;
+    expect(xpBar(c).text).toBe(`5 / ${xpToNext(10)}`);
+    c.level = 11;
+    c.xp = xpToNext(11) * 3;
+    expect(xpBar(c).percent).toBe(100);
+    c.xp = -20;
+    expect(xpBar(c).percent).toBe(0);
   });
 });
 

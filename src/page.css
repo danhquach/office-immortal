@@ -1,7 +1,8 @@
 /* Colours: every text colour here passes 4.5:1 on every surface of its theme
    (checked by src/ui/contrast.test.ts). Text vars: --ink, --muted, --up, --down, --grade-*.
    Surfaces: --bg, --panel, --head (panel headers). --grid is the sheet's cell lines. The combat strip pairs --strip-ink and --strip-hurt with --strip-bg; its text sits on
-   --strip-bg chips over the stage art. */
+   --strip-bg chips over the stage art. The XP bar (one look in both themes)
+   pairs --xp-ink with --xp-fill and --xp-track-ink with --xp-track; fill and track differ by 3:1. */
 :root {
   color-scheme: light;
   --bg: #f3f1ec;
@@ -17,6 +18,10 @@
   --strip-hurt: #ff7a66;
   --hp-you: #3fb56b;
   --hp-foe: #e0533d;
+  --xp-track: #2b2618;
+  --xp-track-ink: #f7eccb;
+  --xp-fill: #f2c94c;
+  --xp-ink: #3d2e00;
   --up: #1d6b2f;
   --down: #b3261e;
   --grade-mortal: #5f6368;
@@ -256,62 +261,59 @@ select {
 }
 
 /* Layout: Full is a grid; Narrow (under 768 px) stacks it, strip first. */
-/* Full: compact, so the strip, KPIs and the three panels fit one screen. */
+/* Full: compact, so the strip, the chips and drops beside it, and the three
+   panels fit one screen. */
 .game {
   display: grid;
   gap: 0.5rem;
 }
+/* Summary chips: "Label value" on one line each. */
 .kpis {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 .kpi {
-  padding: 0.3rem 0.5rem;
+  padding: 0.1rem 0.45rem;
+  border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  background: var(--panel);
+  font-size: 0.85rem;
+  white-space: nowrap;
 }
-/* Full: one row of tiles, each as wide as its value, so none wraps. */
-@media (min-width: 768px) {
-  .kpis {
-    display: flex;
-    flex-wrap: wrap;
-  }
-  .kpi {
-    flex: 1 1 auto;
-  }
-  .kpi .value {
-    white-space: nowrap;
-  }
+.kpi .label {
+  color: var(--muted);
+  margin-right: 0.35rem;
 }
-/* Full: the strip takes the left half, the tiles fill the right half in
-   three columns beside it; everything else spans both. */
+.kpi .value {
+  font-weight: 600;
+}
+/* Full: the strip takes the left half; the chips and Recent drops share the
+   right half beside it; everything else spans both. */
 @media (min-width: 1100px) {
   .game:not(.side) {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .game:not(.side) > :not(.strip, .kpis) {
+  .game:not(.side) > :not(.strip, .beside) {
     grid-column: 1 / -1;
   }
-  .kpis {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Drops fill what the chips leave beside the strip (at least 6rem) and
+     scroll inside. */
+  .beside > .log {
+    flex: 1 1 0;
+    min-height: 6rem;
+    overflow-y: auto;
   }
-  .kpi .value {
-    white-space: normal;
-  }
 }
-/* The realm and its job title are the longest value; give it room. */
-.kpi.realm {
-  grid-column: span 2;
+.beside {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
 }
-.kpi .label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.8rem;
-}
-.kpi .value {
-  font-size: 1.15rem;
-  font-weight: 600;
+.log p {
+  margin: 0;
 }
 /* Fixed column widths, so switching a tab never resizes a panel: the
    character fits the paper doll, the bag fits eight cells, details and drops
@@ -333,7 +335,7 @@ select {
     overflow-y: auto;
   }
   .columns > .side {
-    grid-template-rows: minmax(0, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr);
   }
   /* The bag's tabs share one cell, so the panel is as tall as the tallest
      tab and the row never changes height with the open tab. */
@@ -350,15 +352,6 @@ select {
   }
   .side > .details {
     overflow-y: auto;
-  }
-  /* A fixed height, so new drops never squeeze the details. */
-  .side > .log {
-    box-sizing: border-box;
-    height: 4.75rem;
-    overflow-y: auto;
-  }
-  .side > .log p {
-    margin: 0;
   }
 }
 .columns > .character {
@@ -1345,6 +1338,41 @@ button.primary {
   list-style: none;
   margin: 0;
   padding: 0;
+  line-height: 1.5;
+}
+/* XP bar along the strip's foot: the level at its left end, XP in the middle.
+   The fill is a copy of the bar in yellow with dark text, clipped to --xp
+   (set by app.ts), so the text reads on both the fill and the dark track. */
+.xp {
+  position: relative;
+  height: 1.1rem;
+  background: var(--xp-track);
+  color: var(--xp-track-ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.1rem;
+  overflow: hidden;
+}
+.xp-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--xp-fill);
+  color: var(--xp-ink);
+  clip-path: inset(0 calc(100% - var(--xp, 0%)) 0 0);
+}
+.xp-level {
+  position: absolute;
+  left: 0.5rem;
+}
+.xp-text {
+  position: absolute;
+  left: 0;
+  right: 0;
+  text-align: center;
+}
+/* The pop-out has no room for it. */
+.mini .xp {
+  display: none;
 }
 
 /* Mini view: the pop-out window (about 480x160), docs/design.md §14 */

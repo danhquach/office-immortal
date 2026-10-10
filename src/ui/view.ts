@@ -328,10 +328,33 @@ export function waveLabel(state: GameState): string {
   return defeated === waves ? 'Elite' : 'Boss';
 }
 
-/** XP towards the next level, e.g. "37 / 60"; at a realm cap, "480 / 400 · Tribulation due". */
-export function xpLabel(c: Cultivator): string {
-  const xp = `${Math.floor(c.xp)} / ${xpToNext(c.level)}`;
-  return readyForTribulation(c) ? `${xp} · Tribulation due` : xp;
+/**
+ * The XP bar on the combat strip: the level, how full the bar is (0-100), the
+ * text inside it ("37 / 60") and the same in words for screen readers. At a
+ * realm cap the bar is full and says "Tribulation due".
+ */
+export function xpBar(c: Cultivator): {
+  level: string;
+  percent: number;
+  text: string;
+  spoken: string;
+} {
+  const level = `Lv ${c.level}`;
+  if (readyForTribulation(c))
+    return {
+      level,
+      percent: 100,
+      text: 'Tribulation due',
+      spoken: `Level ${c.level}, Tribulation due`,
+    };
+  const xp = Math.floor(c.xp);
+  const next = xpToNext(c.level);
+  return {
+    level,
+    percent: Math.max(0, Math.min(100, (xp / next) * 100)),
+    text: `${xp} / ${next}`,
+    spoken: `Level ${c.level}, ${xp} of ${next} XP to the next level`,
+  };
 }
 
 /**

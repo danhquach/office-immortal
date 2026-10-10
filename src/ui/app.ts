@@ -1,6 +1,7 @@
 // The page: a saved run (after its Overtime Cultivation catch-up) or the
-// first-run Path choice, then the combat strip, KPI tiles, character panel,
-// inventory grid with its auto filter, item details and recent drops
+// first-run Path choice, then the combat strip with its XP bar, the summary
+// chips and recent drops beside it, character panel, inventory grid with its
+// auto filter and item details
 // (docs/design.md §5–§8, §10, §14). Text reaches the page only through
 // textContent. The sim decides everything; this file only shows state, passes
 // the player's choices (equip, sell, salvage, filter, spending) back in and
@@ -121,7 +122,7 @@ import {
   tribulationCall,
   tribulationFellDue,
   waveLabel,
-  xpLabel,
+  xpBar,
 } from './view.ts';
 
 const TICK_MS = 200;
@@ -366,7 +367,7 @@ function setIcon(icon: HTMLElement, item: Item | undefined): void {
 }
 
 function kpi(label: string): { box: HTMLElement; value: HTMLElement } {
-  const box = el('div', 'panel kpi');
+  const box = el('div', 'kpi');
   const value = el('span', 'value');
   box.append(el('span', 'label', label), value);
   return { box, value };
@@ -556,21 +557,32 @@ function play(
   arrayMark.setAttribute('aria-hidden', 'true');
   let arrayTimer = 0;
   stage.append(arrayMark);
-  strip.append(where, trialCall, stage, fighters);
+  // XP to the next level, with the level at its left end. The text is drawn
+  // twice: light on the dark track, and dark on the yellow fill, which is
+  // clipped to the XP so far. Screen readers get aria-valuetext instead.
+  const xp = el('div', 'xp');
+  xp.setAttribute('role', 'progressbar');
+  xp.setAttribute('aria-label', 'Experience');
+  xp.setAttribute('aria-valuemin', '0');
+  xp.setAttribute('aria-valuemax', '100');
+  const xpLevel = el('span', 'xp-level');
+  const xpText = el('span', 'xp-text');
+  const xpFill = el('span', 'xp-fill');
+  const xpFillLevel = el('span', 'xp-level');
+  const xpFillText = el('span', 'xp-text');
+  xpFill.append(xpFillLevel, xpFillText);
+  xp.append(xpLevel, xpText, xpFill);
+  strip.append(where, trialCall, stage, fighters, xp);
   let zone = '';
 
-  // KPI tiles
+  // Summary chips, one line each
   const kpis = el('section', 'kpis');
   kpis.setAttribute('aria-label', 'Summary');
   const kPath = kpi('Path');
   const kRealm = kpi('Realm');
-  kRealm.box.classList.add('realm');
-  const kLevel = kpi('Level');
-  const kFloor = kpi('Floor');
-  const kXp = kpi('XP to next level');
   const kStones = kpi('Spirit Stones');
   const kEssence = kpi('Spirit Essence');
-  kpis.append(kPath.box, kRealm.box, kLevel.box, kFloor.box, kXp.box, kStones.box, kEssence.box);
+  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
   const character = panel('character', 'Character');
@@ -973,12 +985,15 @@ function play(
 
   const columns = el('div', 'columns');
   const mainCol = el('div', 'game side');
-  mainCol.append(details.box, log.box);
+  mainCol.append(details.box);
   columns.append(character.box, inventory.box, mainCol);
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
-  game.append(strip, kpis, columns);
+  // Beside the strip: the summary chips over Recent drops.
+  const beside = el('div', 'beside');
+  beside.append(kpis, log.box);
+  game.append(strip, beside, columns);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);
@@ -1108,7 +1123,7 @@ function play(
   function drawStrip(prev: GameState | null): void {
     const c = state.cultivator;
     const enemy = state.enemies[0];
-    floorText.textContent = `Floor ${state.floor} · ${waveLabel(state)}`;
+    floorText.textContent = `Floor ${state.floor} (best ${state.highestFloor}) · ${waveLabel(state)}`;
     killText.textContent = `Kills ${state.kills}`;
     setFighter(you, PATHS[c.path].name, c.hp, derive(c).maxHp);
     if (enemy) {
@@ -1230,9 +1245,12 @@ function play(
     const c = state.cultivator;
     kPath.value.textContent = PATHS[c.path].name;
     kRealm.value.textContent = realmLabel(c.level);
-    kLevel.value.textContent = String(c.level);
-    kFloor.value.textContent = `${state.floor} (best ${state.highestFloor})`;
-    kXp.value.textContent = xpLabel(c);
+    const bar = xpBar(c);
+    xp.style.setProperty('--xp', `${bar.percent}%`);
+    for (const n of [xpLevel, xpFillLevel]) setText(n, bar.level);
+    for (const n of [xpText, xpFillText]) setText(n, bar.text);
+    xp.setAttribute('aria-valuenow', String(Math.round(bar.percent)));
+    xp.setAttribute('aria-valuetext', bar.spoken);
     for (const [id] of STAT_NAMES) setText(baseValues[id], String(c.stats[id]));
     const rows = statRows(c, state.passives);
     // Built once, then only the values change, so selecting text doesn't flicker.
@@ -1674,9 +1692,9 @@ function play(
     if (noted.notify) notices.show(immortalNotice(state.floor));
   }
 
-  /** Puts the strip back above the KPI tiles, unless this run has ended. */
+  /** Puts the strip back above the summary chips, unless this run has ended. */
   function restoreStrip(): void {
-    if (!signal.aborted && !game.contains(strip)) kpis.before(strip);
+    if (!signal.aborted && !game.contains(strip)) beside.before(strip);
   }
 
   async function togglePopOut(): Promise<void> {
