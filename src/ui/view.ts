@@ -96,6 +96,21 @@ export function itemTag(item: Item): string {
   return `${GRADES[item.grade].name} · ${SLOTS[item.slot].name} · Lv ${item.level} · ${quality(item)}%`;
 }
 
+/** A weapon's treasure tier by grade (docs/design.md §6): what kind of magic tool it is. */
+const TREASURE_TIERS: Readonly<Record<GradeId, string>> = {
+  mortal: 'Magic Tool',
+  spirit: 'Magic Tool',
+  earth: 'Spirit Treasure',
+  heaven: 'Spirit Treasure',
+  immortal: 'Immortal Treasure',
+};
+
+/** The treasure tier line in an item's details, for weapons only; null for other types. */
+export function treasureTier(item: Item): string | null {
+  if (item.slot !== 'weapon' || !Object.hasOwn(TREASURE_TIERS, item.grade)) return null;
+  return TREASURE_TIERS[item.grade];
+}
+
 interface StatRow {
   label: string;
   value: (d: Derived) => number;

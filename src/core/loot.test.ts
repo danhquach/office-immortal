@@ -11,6 +11,7 @@ import {
   namesFor,
   quality,
   rangeAt,
+  renamed,
   rollDrop,
   rollItem,
   SLOTS,
@@ -114,19 +115,59 @@ describe('rollItem', () => {
     for (const g of GRADE_IDS) expect([...(counts.get(g) ?? [])].sort()).toEqual(design[g]);
   });
 
-  it('names weapons by grade: three names each, no name shared between grades', () => {
+  it('names weapons by grade: five names each, no name shared between grades', () => {
     const all = GRADE_IDS.flatMap((g) => namesFor('weapon', g));
-    for (const g of GRADE_IDS) expect(namesFor('weapon', g)).toHaveLength(3);
-    expect(new Set(all).size).toBe(15);
+    for (const g of GRADE_IDS) expect(namesFor('weapon', g)).toHaveLength(5);
+    expect(new Set(all).size).toBe(25);
     // Atlas rows follow SLOTS.names, so it lists them in grade order.
     expect(SLOTS.weapon.names).toEqual(all);
+    // Seeded: every grade rolls every one of its names, and only those.
     for (const g of GRADE_IDS) {
       const seen = new Set(
         MANY.filter((i) => i.slot === 'weapon' && i.grade === g).map((i) => i.name),
       );
-      expect(seen.size, g).toBeGreaterThan(0);
-      for (const n of seen) expect(namesFor('weapon', g)).toContain(n);
+      expect(seen, g).toEqual(new Set(namesFor('weapon', g)));
     }
+  });
+
+  it('gives each grade one weapon of each family, in family order', () => {
+    const families = [/ Flying Sword$/, / Whisk$/, /Peachwood Sword$/, / Fan$/, / Seal$/];
+    for (const g of GRADE_IDS) {
+      const names = namesFor('weapon', g);
+      families.forEach((family, i) => expect(names[i], `${g} ${i}`).toMatch(family));
+    }
+    // The Flying Sword family must not also catch the Peachwood Sword.
+    expect(namesFor('weapon', 'mortal')[2]).not.toMatch(/Flying/);
+    expect(namesFor('weapon', 'immortal')).toEqual([
+      'Phoenix Flame Flying Sword',
+      'Phoenix Plume Whisk',
+      'Thousand-Year Peachwood Sword',
+      'Phoenix Flame Fan',
+      'Heaven-Crushing Seal',
+    ]);
+  });
+
+  it('renames each retired blade to the first weapon name of its own grade only', () => {
+    const blades: Record<GradeId, string[]> = {
+      mortal: ['Iron Jian', 'Bronze Longsword', 'Tempered Steel Blade'],
+      spirit: ['Azure Cloud Jian', 'Sky River Blade', 'Frost Lotus Sword'],
+      earth: ['Jade Serpent Blade', 'Verdant Pine Sword', 'Emerald Wind Jian'],
+      heaven: ['Golden Crow Sword', 'Sunlit Phoenix Blade', 'Imperial Gold Sabre'],
+      immortal: ['Vermilion Bird Blade', 'Heart Flame Jian', 'Nine Suns Sabre'],
+    };
+    for (const g of GRADE_IDS) {
+      for (const old of blades[g]) {
+        expect(renamed('weapon', g, old)).toBe(namesFor('weapon', g)[0]);
+        // On another grade it is left as is, so the save check rejects it.
+        const other = g === 'mortal' ? 'spirit' : 'mortal';
+        expect(renamed('weapon', other, old)).toBe(old);
+        expect(renamed('head', g, old)).toBe(old);
+      }
+    }
+    expect(renamed('weapon', 'heaven', '__proto__')).toBe('__proto__');
+    expect(renamed('weapon', 'heaven', 'Golden Crow Flying Sword')).toBe(
+      'Golden Crow Flying Sword',
+    );
   });
 
   it('names robes and boots by grade: one name each, in grade order', () => {
@@ -190,7 +231,7 @@ describe('rollItem', () => {
   it('shows 100% only when every roll is a maximum', () => {
     const item: Item = {
       slot: 'weapon',
-      name: 'Iron Jian',
+      name: 'Iron Flying Sword',
       level: 10,
       grade: 'mortal',
       baseRoll: 0.99,
@@ -204,7 +245,7 @@ describe('rollItem', () => {
   it('averages quality over the base roll and every affix roll', () => {
     const item: Item = {
       slot: 'weapon',
-      name: 'Iron Jian',
+      name: 'Iron Flying Sword',
       level: 10,
       grade: 'spirit',
       baseRoll: 1,
@@ -306,7 +347,7 @@ describe('equipmentBonuses', () => {
   it('sums base stats, affixes and unique effects across slots', () => {
     const weapon: Item = {
       slot: 'weapon',
-      name: 'Iron Jian',
+      name: 'Iron Flying Sword',
       level: 10,
       grade: 'immortal',
       baseRoll: 1,

@@ -11,6 +11,7 @@ import {
   gridMove,
   itemLines,
   itemTag,
+  treasureTier,
   overtimeLines,
   passiveLabel,
   realmLabel,
@@ -30,7 +31,7 @@ import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
 const stapler: Item = {
   slot: 'weapon',
-  name: 'Iron Jian',
+  name: 'Golden Crow Flying Sword',
   level: 10,
   grade: 'heaven',
   baseRoll: 1,
@@ -66,6 +67,35 @@ describe('items', () => {
 
   it('tags grade, slot, level and quality in text', () => {
     expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10 · 66%');
+  });
+
+  it.each([
+    ['mortal', 'Magic Tool'],
+    ['spirit', 'Magic Tool'],
+    ['earth', 'Spirit Treasure'],
+    ['heaven', 'Spirit Treasure'],
+    ['immortal', 'Immortal Treasure'],
+  ] as const)('names a %s weapon a %s', (grade, tier) => {
+    expect(treasureTier({ ...stapler, grade })).toBe(tier);
+  });
+
+  it('gives no treasure tier to other item types', () => {
+    for (const slot of [
+      'head',
+      'chest',
+      'boots',
+      'attachment',
+      'sideArm',
+      'accessory',
+      'charm',
+    ] as const) {
+      expect(treasureTier({ ...stapler, slot, grade: 'immortal' })).toBeNull();
+    }
+  });
+
+  it('gives no treasure tier for a grade it does not know', () => {
+    expect(treasureTier({ ...stapler, grade: '__proto__' as Item['grade'] })).toBeNull();
+    expect(treasureTier({ ...stapler, grade: 'toString' as Item['grade'] })).toBeNull();
   });
 });
 
@@ -369,7 +399,7 @@ describe('freshDrops', () => {
 
 describe('cellLabel', () => {
   it('names the item with its grade, slot, level and quality in words', () => {
-    expect(cellLabel(stapler)).toBe('Iron Jian, Heaven · Weapon · Lv 10 · 66%');
+    expect(cellLabel(stapler)).toBe('Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · 66%');
   });
 });
 

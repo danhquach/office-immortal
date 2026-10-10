@@ -302,14 +302,14 @@ describe('rejects', () => {
 
   describe('text', () => {
     const names: [string, string][] = [
-      ['an oversized name', 'Iron Jian'.repeat(10_000)],
+      ['an oversized name', 'Iron Flying Sword'.repeat(10_000)],
       ['a made-up name', 'Sword of Admin'],
       ['markup', '<img src=x onerror=alert(1)>'],
-      ['a bidi override', 'Iron \u202eJian'],
-      ['a zero-width space', 'Iron\u200bJian'],
-      ['a zero-width joiner at the end', 'Iron Jian\u200d'],
-      ['a Cyrillic look-alike', 'Ir\u043en Jian'],
-      ['padding', ' Iron Jian'],
+      ['a bidi override', 'Iron \u202eFlying Sword'],
+      ['a zero-width space', 'Iron\u200bFlying Sword'],
+      ['a zero-width joiner at the end', 'Iron Flying Sword\u200d'],
+      ['a Cyrillic look-alike', 'Ir\u043en Flying Sword'],
+      ['padding', ' Iron Flying Sword'],
     ];
 
     it.each(names)('rejects %s as an item name', (_, name) => {
@@ -321,7 +321,7 @@ describe('rejects', () => {
     });
 
     it('rejects a real name from another slot', () => {
-      const other = item(raw()).slot === 'weapon' ? 'Thinking Cap' : 'Iron Jian';
+      const other = item(raw()).slot === 'weapon' ? 'Thinking Cap' : 'Iron Flying Sword';
       expect(tampered((s) => void (item(s).name = other))).toBeNull();
     });
   });
@@ -331,7 +331,8 @@ describe('rejects', () => {
       Object.assign(item(s), { slot: 'weapon', grade, name, affixes: [] });
 
     it('rejects a weapon name from another grade', () => {
-      expect(tampered((s) => void weapon(s, 'mortal', 'Nine Suns Sabre'))).toBeNull();
+      expect(tampered((s) => void weapon(s, 'mortal', 'Heaven-Crushing Seal'))).toBeNull();
+      expect(tampered((s) => void weapon(s, 'mortal', 'Azure Silk Whisk'))).toBeNull();
     });
 
     it('rejects a retired weapon name on another type', () => {
@@ -346,7 +347,7 @@ describe('rejects', () => {
         const save = raw();
         weapon(save, 'mortal', old);
         const loaded = decodeSave(JSON.stringify(save));
-        expect(loaded?.state.inventory[0]?.name).toBe('Iron Jian');
+        expect(loaded?.state.inventory[0]?.name).toBe('Iron Flying Sword');
       },
     );
 
@@ -385,7 +386,113 @@ describe('rejects', () => {
           { id: 'qiRegen', roll: 0.5 },
         ],
       });
-      expect(decodeSave(JSON.stringify(save))?.state.inventory[0]?.name).toBe('Golden Crow Sword');
+      expect(decodeSave(JSON.stringify(save))?.state.inventory[0]?.name).toBe(
+        'Golden Crow Flying Sword',
+      );
+    });
+  });
+
+  describe('retired blade names', () => {
+    // The blades each grade rolled before weapons became magic tools.
+    const BLADES: [string, string, string][] = [
+      ['mortal', 'Iron Jian', 'Iron Flying Sword'],
+      ['mortal', 'Bronze Longsword', 'Iron Flying Sword'],
+      ['mortal', 'Tempered Steel Blade', 'Iron Flying Sword'],
+      ['spirit', 'Azure Cloud Jian', 'Azure Cloud Flying Sword'],
+      ['spirit', 'Sky River Blade', 'Azure Cloud Flying Sword'],
+      ['spirit', 'Frost Lotus Sword', 'Azure Cloud Flying Sword'],
+      ['earth', 'Jade Serpent Blade', 'Jade Serpent Flying Sword'],
+      ['earth', 'Verdant Pine Sword', 'Jade Serpent Flying Sword'],
+      ['earth', 'Emerald Wind Jian', 'Jade Serpent Flying Sword'],
+      ['heaven', 'Golden Crow Sword', 'Golden Crow Flying Sword'],
+      ['heaven', 'Sunlit Phoenix Blade', 'Golden Crow Flying Sword'],
+      ['heaven', 'Imperial Gold Sabre', 'Golden Crow Flying Sword'],
+      ['immortal', 'Vermilion Bird Blade', 'Phoenix Flame Flying Sword'],
+      ['immortal', 'Heart Flame Jian', 'Phoenix Flame Flying Sword'],
+      ['immortal', 'Nine Suns Sabre', 'Phoenix Flame Flying Sword'],
+    ];
+    const AFFIX_COUNT: Record<string, number> = {
+      mortal: 0,
+      spirit: 1,
+      earth: 3,
+      heaven: 4,
+      immortal: 5,
+    };
+    const IDS = ['critChance', 'maxHp', 'defence', 'qiRegen', 'lifesteal'];
+
+    /** A weapon of `grade` named `name` that is otherwise a legal drop. */
+    function blade(grade: string, name: string): J {
+      const w: J = {
+        slot: 'weapon',
+        name,
+        level: 1,
+        grade,
+        baseRoll: 0.5,
+        affixes: IDS.slice(0, AFFIX_COUNT[grade]).map((id) => ({ id, roll: 0.5 })),
+      };
+      if (grade === 'immortal') w.unique = 'synergy';
+      return w;
+    }
+    const withBlade = (grade: string, name: string) => {
+      const save = raw();
+      (save.state.inventory as J[])[0] = blade(grade, name);
+      return save;
+    };
+
+    it.each(BLADES)('renames a %s %s in the bag to %s', (grade, old, now) => {
+      const loaded = decodeSave(JSON.stringify(withBlade(grade, old)));
+      expect(loaded?.state.inventory[0]).toMatchObject({ slot: 'weapon', grade, name: now });
+    });
+
+    it.each(BLADES)('renames an equipped %s %s to %s', (grade, old, now) => {
+      const save = raw();
+      (cult(save).equipment as J).weapon = blade(grade, old);
+      const loaded = decodeSave(JSON.stringify(save));
+      expect(loaded?.state.cultivator.equipment.weapon?.name).toBe(now);
+    });
+
+    it('renames them in a save from before Boots (v3)', () => {
+      const save = withPants(withBlade('earth', 'Verdant Pine Sword'));
+      save.v = 3;
+      expect(decodeSave(JSON.stringify(save))?.state.inventory[0]?.name).toBe(
+        'Jade Serpent Flying Sword',
+      );
+    });
+
+    it('keeps the stats of a renamed blade: only the name changes', () => {
+      const loaded = decodeSave(JSON.stringify(withBlade('heaven', 'Imperial Gold Sabre')));
+      expect(loaded?.state.inventory[0]).toEqual(blade('heaven', 'Golden Crow Flying Sword'));
+    });
+
+    it.each([
+      ['a blade from another grade', 'mortal', 'Nine Suns Sabre'],
+      ['a blade from a lower grade', 'immortal', 'Iron Jian'],
+      ['a blade on another type', 'head', 'Iron Jian'],
+      ['a Cyrillic look-alike', 'mortal', 'Ir\u043en Jian'],
+      ['a Latin look-alike (l for I)', 'mortal', 'lron Jian'],
+      ['a zero-width space', 'mortal', 'Iron\u200bJian'],
+      ['a zero-width joiner at the end', 'mortal', 'Iron Jian\u200d'],
+      ['a bidi override', 'mortal', 'Iron \u202eJian'],
+      ['a bidi isolate', 'mortal', '\u2066Iron Jian\u2069'],
+      ['other casing', 'mortal', 'iron jian'],
+      ['padding', 'mortal', 'Iron Jian '],
+      ['an oversized name', 'mortal', 'Iron Jian'.repeat(100_000)],
+      ['a prototype key', 'mortal', '__proto__'],
+      ['an object key', 'mortal', 'constructor'],
+      ['a method name', 'mortal', 'hasOwnProperty'],
+      ['a grade key', 'mortal', 'mortal'],
+      ['an unknown name', 'mortal', 'Excalibur Prime'],
+    ])('rejects %s', (_, grade, name) => {
+      const save = withBlade(grade === 'head' ? 'mortal' : grade, name);
+      if (grade === 'head') ((save.state.inventory as J[])[0] as J).slot = 'head';
+      expect(decodeSave(JSON.stringify(save))).toBeNull();
+    });
+
+    it.each(['__proto__', 'constructor', 'toString'])('rejects %s as a grade', (grade) => {
+      const save = withBlade('mortal', 'Iron Jian');
+      ((save.state.inventory as J[])[0] as J).grade = grade;
+      expect(decodeSave(JSON.stringify(save))).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
     });
   });
 

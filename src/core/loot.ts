@@ -74,13 +74,47 @@ interface RangeDef {
   readonly hi: number;
 }
 
-/** Weapon names by grade: a better grade drops a better-looking blade. */
+/**
+ * Weapon names by grade: a Taoist cultivator's magic tools in five families,
+ * always listed Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal. The
+ * material gets richer with each grade.
+ */
 const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
-  mortal: ['Iron Jian', 'Bronze Longsword', 'Tempered Steel Blade'],
-  spirit: ['Azure Cloud Jian', 'Sky River Blade', 'Frost Lotus Sword'],
-  earth: ['Jade Serpent Blade', 'Verdant Pine Sword', 'Emerald Wind Jian'],
-  heaven: ['Golden Crow Sword', 'Sunlit Phoenix Blade', 'Imperial Gold Sabre'],
-  immortal: ['Vermilion Bird Blade', 'Heart Flame Jian', 'Nine Suns Sabre'],
+  mortal: [
+    'Iron Flying Sword',
+    'Hempen Horsetail Whisk',
+    'Peachwood Sword',
+    'Feather Fan',
+    'Stone Mountain Seal',
+  ],
+  spirit: [
+    'Azure Cloud Flying Sword',
+    'Azure Silk Whisk',
+    'Spirit Peachwood Sword',
+    'Azure Wind Fan',
+    'Azure Peak Seal',
+  ],
+  earth: [
+    'Jade Serpent Flying Sword',
+    'Jade Thread Whisk',
+    'Hundred-Year Peachwood Sword',
+    'Jade Crane Fan',
+    'Jade Mountain Seal',
+  ],
+  heaven: [
+    'Golden Crow Flying Sword',
+    'Golden Sun Whisk',
+    'Thunderstruck Peachwood Sword',
+    'Golden Cloud Fan',
+    'Golden Mountain Seal',
+  ],
+  immortal: [
+    'Phoenix Flame Flying Sword',
+    'Phoenix Plume Whisk',
+    'Thousand-Year Peachwood Sword',
+    'Phoenix Flame Fan',
+    'Heaven-Crushing Seal',
+  ],
 };
 
 /** Robe names by grade: from a novice's hemp to an immortal's phoenix silk. */
@@ -138,7 +172,7 @@ export const SLOTS: Readonly<
     base: { stat: 'lifesteal', scale: 'share', lo: 0.01, hi: 0.02 },
     names: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
   },
-  // An Iron Jian rolls 8–14 damage at item level 10.
+  // An Iron Flying Sword rolls 8–14 damage at item level 10.
   weapon: {
     name: 'Weapon',
     base: { stat: 'damage', scale: 'flat', lo: 0.8, hi: 1.4 },
@@ -167,7 +201,7 @@ export function namesFor(slot: SlotId, grade: GradeId): readonly string[] {
   return SLOTS[slot].byGrade?.[grade] ?? SLOTS[slot].names;
 }
 
-/** Names earlier versions rolled, per type; a loaded save renames them. */
+/** Names earlier versions rolled on any grade, per type; a loaded save renames them. */
 const RETIRED_NAMES: Partial<Record<SlotId, readonly string[]>> = {
   chest: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
   // Boots replaced Pants; a save's pants arrive here as boots.
@@ -175,9 +209,25 @@ const RETIRED_NAMES: Partial<Record<SlotId, readonly string[]>> = {
   weapon: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
 };
 
+/**
+ * Names earlier versions rolled by grade, per type. Each is renamed only on the
+ * grade that could roll it: on any other grade it was never a real drop.
+ */
+const RETIRED_BY_GRADE: Partial<Record<SlotId, Readonly<Record<GradeId, readonly string[]>>>> = {
+  // The blades weapons rolled before they became magic tools.
+  weapon: {
+    mortal: ['Iron Jian', 'Bronze Longsword', 'Tempered Steel Blade'],
+    spirit: ['Azure Cloud Jian', 'Sky River Blade', 'Frost Lotus Sword'],
+    earth: ['Jade Serpent Blade', 'Verdant Pine Sword', 'Emerald Wind Jian'],
+    heaven: ['Golden Crow Sword', 'Sunlit Phoenix Blade', 'Imperial Gold Sabre'],
+    immortal: ['Vermilion Bird Blade', 'Heart Flame Jian', 'Nine Suns Sabre'],
+  },
+};
+
 /** A retired name becomes the first name of its type and grade; any other value is returned as is. */
 export function renamed(slot: SlotId, grade: GradeId, name: unknown): unknown {
-  return RETIRED_NAMES[slot]?.some((n) => n === name) ? namesFor(slot, grade)[0] : name;
+  const retired = [...(RETIRED_NAMES[slot] ?? []), ...(RETIRED_BY_GRADE[slot]?.[grade] ?? [])];
+  return retired.some((n) => n === name) ? namesFor(slot, grade)[0] : name;
 }
 
 /** Every equipment position and the item type it takes, in display order. */

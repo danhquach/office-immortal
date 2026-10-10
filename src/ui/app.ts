@@ -106,6 +106,7 @@ import {
   SPRITE_SIZE,
   statRows,
   stripEvents,
+  treasureTier,
   tribulationBanner,
   tribulationCall,
   tribulationFellDue,
@@ -1121,6 +1122,8 @@ function play(
       el('div', `title grade-${item.grade}`, item.name),
       el('div', `tag grade-${item.grade}`, itemTag(item)),
     );
+    const tier = treasureTier(item);
+    if (tier) name.append(el('div', 'muted', tier));
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {

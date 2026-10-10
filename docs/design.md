@@ -109,18 +109,42 @@ Every drop is generated from a seeded roll.
   over ten positions. An item fills its first free position; a player can
   choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
-- **Base stat:** each item type rolls in a range (e.g. an Iron Jian weapon
-  rolls 8–14 damage at item level 10).
-- **Weapon, robe and boot names follow the grade,** so a better drop looks
-  better (each name has its own icon, coloured like its grade):
+- **Base stat:** each item type rolls in a range (e.g. an Iron Flying Sword
+  weapon rolls 8–14 damage at item level 10).
+- **Robe and boot names follow the grade,** so a better drop looks better
+  (each name has its own icon, coloured like its grade):
 
-| Grade | Weapon names | Chest | Boots |
-|---|---|---|---|
-| Mortal | Iron Jian, Bronze Longsword, Tempered Steel Blade | Hempen Novice Robe | Hempen Cloth Boots |
-| Spirit | Azure Cloud Jian, Sky River Blade, Frost Lotus Sword | Azure Disciple Robe | Azure Cloud Boots |
-| Earth | Jade Serpent Blade, Verdant Pine Sword, Emerald Wind Jian | Jade Crane Robe | Jade Step Boots |
-| Heaven | Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold Sabre | Golden Elder Robe | Golden Cloud Boots |
-| Immortal | Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre | Phoenix Flame Robe | Phoenix Flame Boots |
+| Grade | Chest | Boots |
+|---|---|---|
+| Mortal | Hempen Novice Robe | Hempen Cloth Boots |
+| Spirit | Azure Disciple Robe | Azure Cloud Boots |
+| Earth | Jade Crane Robe | Jade Step Boots |
+| Heaven | Golden Elder Robe | Golden Cloud Boots |
+| Immortal | Phoenix Flame Robe | Phoenix Flame Boots |
+
+- **Weapons are a Taoist cultivator's magic tools,** in five families. Each
+  grade drops one of each family, and the material gets richer with the grade
+  (each name has its own icon). The family only changes the name and icon:
+  every weapon rolls the same base stat and affixes.
+
+| Grade | Flying Sword | Horsetail Whisk | Peachwood Sword | Fan | Seal |
+|---|---|---|---|---|---|
+| Mortal | Iron Flying Sword | Hempen Horsetail Whisk | Peachwood Sword | Feather Fan | Stone Mountain Seal |
+| Spirit | Azure Cloud Flying Sword | Azure Silk Whisk | Spirit Peachwood Sword | Azure Wind Fan | Azure Peak Seal |
+| Earth | Jade Serpent Flying Sword | Jade Thread Whisk | Hundred-Year Peachwood Sword | Jade Crane Fan | Jade Mountain Seal |
+| Heaven | Golden Crow Flying Sword | Golden Sun Whisk | Thunderstruck Peachwood Sword | Golden Cloud Fan | Golden Mountain Seal |
+| Immortal | Phoenix Flame Flying Sword | Phoenix Plume Whisk | Thousand-Year Peachwood Sword | Phoenix Flame Fan | Heaven-Crushing Seal |
+
+- **Treasure tier:** a weapon's details show its tier by grade: Mortal and
+  Spirit are a **Magic Tool**, Earth and Heaven a **Spirit Treasure**, Immortal
+  an **Immortal Treasure**.
+- **Retired names:** a save's weapon with a name from before the five families
+  (Iron Jian, Bronze Longsword, Tempered Steel Blade; Azure Cloud Jian, Sky
+  River Blade, Frost Lotus Sword; Jade Serpent Blade, Verdant Pine Sword,
+  Emerald Wind Jian; Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold
+  Sabre; Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre, by grade)
+  loads as the Flying Sword of its grade. The same name on another grade is
+  rejected.
 
 - **Grades (rarity) and affix count:**
 
@@ -273,9 +297,11 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   props in pixel form: filing cabinets, cubicles, water cooler, KPI whiteboard,
   city windows at night, a boardroom above the clouds. Dimmed so the fighters
   stay the brightest thing in the strip.
-- **Item icons:** one drawn icon per item type, 32×32; each item name has its
-  own material (a colour swap of the type's icon). The grade stays on the cell
-  border and its initial, never on the icon alone.
+- **Item icons:** one atlas cell per item name, 64×64, shown at 32×32 (sharp
+  on high-density screens). Weapons, robes and boots have their own drawn icon
+  for each name; the other types have one drawn icon each, and each name is a
+  colour swap of it. The grade stays on the cell border and its initial, never
+  on the icon alone.
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
@@ -327,3 +353,9 @@ Grade is also written as text, never shown by colour alone.
   `tools/art/manifest.json`; the generated sources are not committed). No
   commercial characters, logos or brand marks in any asset. All of it is
   served from the site itself and stays under 1 MB.
+- Weapon icons are drawn by hand as SVG in `tools/art/weapons.mjs`, so their
+  editable sources are committed. `node tools/art/render-weapons.mjs` renders
+  them to transparent PNGs in `art-src/weapons/`, and
+  `python3 tools/art/build.py icons:weapon` fits them into the atlas's weapon
+  column, copying every other column from the shipped atlas unchanged (their
+  sources are not always at hand).
