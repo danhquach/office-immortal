@@ -146,7 +146,7 @@ describe('mitigate', () => {
 });
 
 function weapon(level: number, baseRoll: number): Item {
-  return { slot: 'weapon', name: 'Jade Stapler', level, grade: 'mortal', baseRoll, affixes: [] };
+  return { slot: 'weapon', name: 'Iron Jian', level, grade: 'mortal', baseRoll, affixes: [] };
 }
 
 function withBag(state: GameState, items: Item[]): GameState {

@@ -8,6 +8,7 @@ import {
   EQUIP_SLOTS,
   equipmentBonuses,
   GRADES,
+  namesFor,
   quality,
   rangeAt,
   rollDrop,
@@ -105,10 +106,34 @@ describe('rollItem', () => {
       if ((item.unique !== undefined) !== (item.grade === 'immortal')) {
         bad.push(`item ${i}: unique on ${item.grade}`);
       }
-      if (!SLOTS[item.slot].names.includes(item.name)) bad.push(`item ${i}: name ${item.name}`);
+      if (!namesFor(item.slot, item.grade).includes(item.name)) {
+        bad.push(`item ${i}: name ${item.name} on ${item.grade} ${item.slot}`);
+      }
     });
     expect(bad.slice(0, 10)).toEqual([]);
     for (const g of GRADE_IDS) expect([...(counts.get(g) ?? [])].sort()).toEqual(design[g]);
+  });
+
+  it('names weapons by grade: three names each, no name shared between grades', () => {
+    const all = GRADE_IDS.flatMap((g) => namesFor('weapon', g));
+    for (const g of GRADE_IDS) expect(namesFor('weapon', g)).toHaveLength(3);
+    expect(new Set(all).size).toBe(15);
+    // Atlas rows follow SLOTS.names, so it lists them in grade order.
+    expect(SLOTS.weapon.names).toEqual(all);
+    for (const g of GRADE_IDS) {
+      const seen = new Set(
+        MANY.filter((i) => i.slot === 'weapon' && i.grade === g).map((i) => i.name),
+      );
+      expect(seen.size, g).toBeGreaterThan(0);
+      for (const n of seen) expect(namesFor('weapon', g)).toContain(n);
+    }
+  });
+
+  it('keeps one name list for the types without grade names', () => {
+    for (const s of Object.keys(SLOTS) as (keyof typeof SLOTS)[]) {
+      if (s === 'weapon') continue;
+      for (const g of GRADE_IDS) expect(namesFor(s, g)).toBe(SLOTS[s].names);
+    }
   });
 
   it('rolls every slot, affix and unique effect', () => {
@@ -153,7 +178,7 @@ describe('rollItem', () => {
   it('shows 100% only when every roll is a maximum', () => {
     const item: Item = {
       slot: 'weapon',
-      name: 'Jade Stapler',
+      name: 'Iron Jian',
       level: 10,
       grade: 'mortal',
       baseRoll: 0.99,
@@ -167,7 +192,7 @@ describe('rollItem', () => {
   it('averages quality over the base roll and every affix roll', () => {
     const item: Item = {
       slot: 'weapon',
-      name: 'Jade Stapler',
+      name: 'Iron Jian',
       level: 10,
       grade: 'spirit',
       baseRoll: 1,
@@ -269,7 +294,7 @@ describe('equipmentBonuses', () => {
   it('sums base stats, affixes and unique effects across slots', () => {
     const weapon: Item = {
       slot: 'weapon',
-      name: 'Jade Stapler',
+      name: 'Iron Jian',
       level: 10,
       grade: 'immortal',
       baseRoll: 1,

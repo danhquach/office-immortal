@@ -87,6 +87,8 @@ import {
   passiveLabel,
   PATH_BLURBS,
   enemySprite,
+  ICON_COLUMNS,
+  ICON_ROWS,
   iconCell,
   realmLabel,
   retireLabel,
@@ -321,7 +323,7 @@ function setIcon(icon: HTMLElement, item: Item | undefined): void {
   const px = ICON_PX;
   const s = icon.style;
   s.backgroundImage = cssUrl(artUrl('icons'));
-  s.backgroundSize = `${px * 8}px ${px * 3}px`;
+  s.backgroundSize = `${px * ICON_COLUMNS.length}px ${px * ICON_ROWS}px`;
   s.backgroundPosition = `${-col * px}px ${-row * px}px`;
 }
 

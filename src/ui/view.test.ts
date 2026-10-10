@@ -27,7 +27,7 @@ import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
 const stapler: Item = {
   slot: 'weapon',
-  name: 'Jade Stapler',
+  name: 'Iron Jian',
   level: 10,
   grade: 'heaven',
   baseRoll: 1,
@@ -274,7 +274,7 @@ describe('freshDrops', () => {
 
 describe('cellLabel', () => {
   it('names the item with its grade, slot, level and quality in words', () => {
-    expect(cellLabel(stapler)).toBe('Jade Stapler, Heaven · Weapon · Lv 10 · 66%');
+    expect(cellLabel(stapler)).toBe('Iron Jian, Heaven · Weapon · Lv 10 · 66%');
   });
 });
 

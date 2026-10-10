@@ -14,7 +14,7 @@ import {
   tabTitle,
 } from './hud.ts';
 
-const item = (grade: GradeId, name = 'Jade Stapler'): Item => ({
+const item = (grade: GradeId, name = 'Jade Serpent Blade'): Item => ({
   slot: 'weapon',
   name,
   level: 1,
@@ -143,7 +143,7 @@ describe('immortalNotice', () => {
 
 describe('dropToast', () => {
   it('shows name, grade and quality', () => {
-    expect(dropToast(item('earth'))).toMatch(/^Jade Stapler · Earth · \d+%$/);
+    expect(dropToast(item('earth'))).toMatch(/^Jade Serpent Blade · Earth · \d+%$/);
   });
 });
 

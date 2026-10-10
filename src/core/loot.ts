@@ -74,8 +74,29 @@ interface RangeDef {
   readonly hi: number;
 }
 
+/** Weapon names by grade: a better grade drops a better-looking blade. */
+const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Iron Jian', 'Bronze Longsword', 'Tempered Steel Blade'],
+  spirit: ['Azure Cloud Jian', 'Sky River Blade', 'Frost Lotus Sword'],
+  earth: ['Jade Serpent Blade', 'Verdant Pine Sword', 'Emerald Wind Jian'],
+  heaven: ['Golden Crow Sword', 'Sunlit Phoenix Blade', 'Imperial Gold Sabre'],
+  immortal: ['Vermilion Bird Blade', 'Heart Flame Jian', 'Nine Suns Sabre'],
+};
+
+/**
+ * Item types. `names` lists every name the type can have, in icon-atlas row
+ * order; a type with `byGrade` rolls its name from the item's grade instead.
+ */
 export const SLOTS: Readonly<
-  Record<SlotId, { name: string; base: RangeDef; names: readonly string[] }>
+  Record<
+    SlotId,
+    {
+      name: string;
+      base: RangeDef;
+      names: readonly string[];
+      byGrade?: Readonly<Record<GradeId, readonly string[]>>;
+    }
+  >
 > = {
   head: {
     name: 'Head',
@@ -97,11 +118,12 @@ export const SLOTS: Readonly<
     base: { stat: 'lifesteal', scale: 'share', lo: 0.01, hi: 0.02 },
     names: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
   },
-  // A Jade Stapler rolls 8–14 damage at item level 10.
+  // An Iron Jian rolls 8–14 damage at item level 10.
   weapon: {
     name: 'Weapon',
     base: { stat: 'damage', scale: 'flat', lo: 0.8, hi: 1.4 },
-    names: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
+    names: Object.values(WEAPON_NAMES).flat(),
+    byGrade: WEAPON_NAMES,
   },
   sideArm: {
     name: 'Side arm',
@@ -119,6 +141,21 @@ export const SLOTS: Readonly<
     names: ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm'],
   },
 };
+
+/** The names an item of this type and grade can roll. */
+export function namesFor(slot: SlotId, grade: GradeId): readonly string[] {
+  return SLOTS[slot].byGrade?.[grade] ?? SLOTS[slot].names;
+}
+
+/** Names earlier versions rolled, per type; a loaded save renames them. */
+const RETIRED_NAMES: Partial<Record<SlotId, readonly string[]>> = {
+  weapon: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
+};
+
+/** A retired name becomes the first name of its type and grade; any other value is returned as is. */
+export function renamed(slot: SlotId, grade: GradeId, name: unknown): unknown {
+  return RETIRED_NAMES[slot]?.some((n) => n === name) ? namesFor(slot, grade)[0] : name;
+}
 
 /** Every equipment position and the item type it takes, in display order. */
 export const EQUIP_SLOTS: Readonly<Record<EquipSlotId, { name: string; takes: SlotId }>> = {
@@ -249,7 +286,7 @@ export function rollItem(rng: Rng, level: number): Item {
   const grade = rollGrade(rng);
   const item: Item = {
     slot,
-    name: pick(rng, SLOTS[slot].names),
+    name: pick(rng, namesFor(slot, grade)),
     level,
     grade,
     baseRoll: roll(rng),
