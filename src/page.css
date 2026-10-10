@@ -1039,6 +1039,19 @@ button.primary {
 .field select {
   color: var(--ink);
 }
+/* The bag's sort: label, select and direction on one line above the grid. */
+.sort-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.field.sort {
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 0.4rem;
+}
 .cell.filler {
   visibility: hidden;
 }
