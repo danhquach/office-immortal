@@ -17,6 +17,8 @@ import {
   realmLabel,
   retireLabel,
   retireLines,
+  respecView,
+  STAT_GROUPS,
   sellBelowLabel,
   statRows,
   tribulationBanner,
@@ -178,6 +180,35 @@ describe('statRows', () => {
       )?.value;
     expect(label(0)).toBe('0%');
     expect(label(3)).toBe('15%');
+  });
+
+  it('puts every row in a group, in group order, with short labels under Find', () => {
+    const rows = statRows(newCultivator('sword'));
+    const by = (g: string) => rows.filter((r) => r.group === g).map((r) => r.short);
+    expect(by('Offence')).toEqual(['Damage', 'Attacks/s', 'Crit chance', 'Crit damage']);
+    expect(by('Defence')).toEqual(['Max HP', 'Defence', 'Lifesteal', 'Qi regen']);
+    expect(by('Find')).toEqual(['Spirit stones', 'Treasure']);
+    expect(rows.every((r) => (STAT_GROUPS as readonly string[]).includes(r.group))).toBe(true);
+    expect(rows.find((r) => r.short === 'Treasure')?.label).toBe('Treasure find');
+  });
+});
+
+describe('respecView', () => {
+  it('is on with the cost shown when it can be paid', () => {
+    expect(respecView(3000, 3000)).toEqual({ cost: '3000 Spirit Stones', off: false, why: '' });
+  });
+
+  it('says how many more Spirit Stones are needed', () => {
+    expect(respecView(3000, 900)).toEqual({
+      cost: '3000 Spirit Stones',
+      off: true,
+      why: 'Need 2100 more',
+    });
+  });
+
+  it('says there is nothing to reset before anything about cost', () => {
+    expect(respecView(3000, 0, true)).toMatchObject({ off: true, why: 'Nothing to reset' });
+    expect(respecView(3000, 9999, true)).toMatchObject({ off: true, why: 'Nothing to reset' });
   });
 });
 

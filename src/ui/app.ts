@@ -103,7 +103,10 @@ import {
   retireLines,
   sellBelowLabel,
   SPRITE_SIZE,
+  respecView,
+  STAT_GROUPS,
   statRows,
+  type StatGroup,
   stripEvents,
   treasureTier,
   tribulationBanner,
@@ -565,29 +568,91 @@ function play(
     box.append(b, el('span', 'slot-name', EQUIP_SLOTS[slot].name));
     slots.append(box);
   }
-  const stats = el('dl', 'stats');
-  // Spending stat points taken back by a reset: one row per stat.
-  const points = el('div', 'points');
-  const pointsText = el('p');
-  points.append(pointsText);
+  // Stats: base stats with their spend buttons on the same row, the derived
+  // numbers in groups, then Respec (stat reset and Path change).
+  const base = el('section', 'base');
+  const baseHead = el('div', 'head');
+  const baseTitle = el('h3', '', 'Base stats');
+  baseTitle.id = 'base-stats';
+  baseTitle.tabIndex = -1;
+  const unspentText = el('span', 'unspent');
+  baseHead.append(baseTitle, unspentText);
+  const baseList = el('ul', 'base-list');
+  baseList.setAttribute('aria-labelledby', 'base-stats');
+  const baseValues = {} as Record<StatId, HTMLElement>;
   for (const [id, name] of STAT_NAMES) {
-    const row = el('div', 'row');
-    const one = button(`+1 ${name}`, '', () => spend(id, 1));
-    const all = button(`All to ${name}`, '', () => spend(id, state.cultivator.unspent));
-    row.append(one, all);
-    points.append(row);
+    const row = el('li');
+    const value = el('b', 'value');
+    baseValues[id] = value;
+    // Hidden (not off) with no points to spend; the words name the stat.
+    const one = button('+1', 'spend', () => spend(id, 1));
+    one.setAttribute('aria-label', `+1 ${name}`);
+    const all = button('All', 'spend', () => spend(id, state.cultivator.unspent));
+    all.setAttribute('aria-label', `All to ${name}`);
+    row.append(el('span', 'name', name), value, one, all);
+    baseList.append(row);
   }
-  const resetBtn = button('', '', () => act(resetStats(state)));
-  const pathPick = choice('New Path', []);
-  const pathBtn = button('', '', () => {
-    const to = pathPick.select.value as PathId;
+  base.append(baseHead, baseList);
+
+  const derived = el('div', 'derived');
+  const derivedLists = {} as Record<StatGroup, HTMLElement>;
+  const derivedValues: HTMLElement[] = [];
+  for (const group of STAT_GROUPS) {
+    const head = el('h3', '', group);
+    const list = el('dl');
+    derivedLists[group] = list;
+    derived.append(head, list);
+  }
+
+  const respec = el('section', 'respec');
+  const respecHead = el('div', 'head');
+  const respecInfo = el('button', 'info', '?');
+  respecInfo.type = 'button';
+  // The name starts with the visible "?", so voice control can say it.
+  respecInfo.setAttribute('aria-label', '? How Respec works');
+  respecInfo.setAttribute('aria-expanded', 'false');
+  respecInfo.setAttribute('aria-controls', 'respec-info');
+  const respecNote = el(
+    'p',
+    'muted hint',
+    'Reset takes back every stat point to spend as you choose. A Path change puts them all ' +
+      'into the new Path’s primary stat.',
+  );
+  respecNote.id = 'respec-info';
+  respecNote.hidden = true;
+  respecInfo.addEventListener('click', () => {
+    respecNote.hidden = !respecNote.hidden;
+    respecInfo.setAttribute('aria-expanded', String(!respecNote.hidden));
+  });
+  respecHead.append(el('h3', '', 'Respec'), respecInfo);
+  /** A Respec line: the controls, then the cost and why it is off; the button is described by both. */
+  function respecLine(key: string, ...controls: HTMLElement[]) {
+    const line = el('div', 'line');
+    const cost = el('span', 'cost');
+    cost.id = `${key}-cost`;
+    const why = el('span', 'why');
+    why.id = `${key}-why`;
+    const meta = el('small', 'meta');
+    meta.append(cost, why);
+    line.append(...controls, meta);
+    return { line, cost, why };
+  }
+  const resetBtn = button('Reset stats', '', () => act(resetStats(state)));
+  resetBtn.setAttribute('aria-describedby', 'reset-cost reset-why');
+  const resetLine = respecLine('reset', resetBtn);
+  // The button beside it says what the choice is for; the name says it too.
+  const pathPick = el('select');
+  pathPick.setAttribute('aria-label', 'New Path');
+  const pathBtn = button('Change Path', '', () => {
+    const to = pathPick.value as PathId;
     if (to) act(changePath(state, to));
   });
-  const shopNote = el('p', 'muted hint');
-  const statsBody = el('div');
-  const pathRow = el('div', 'row');
-  pathRow.append(pathPick.box, pathBtn);
-  statsBody.append(stats, points, resetBtn, pathRow, shopNote);
+  pathBtn.setAttribute('aria-describedby', 'path-cost path-why');
+  const pathLine = respecLine('path', pathPick, pathBtn);
+  respec.append(respecHead, respecNote, resetLine.line, pathLine.line);
+
+  const statsBody = el('div', 'statstab');
+  statsBody.append(base, derived, respec);
 
   // Early Retirement: the Dao Insight total, the passive shop (one line per
   // passive, its effect on expand), then the retire box with its confirmation.
@@ -1092,19 +1157,22 @@ function play(
     kLevel.value.textContent = String(c.level);
     kFloor.value.textContent = `${state.floor} (best ${state.highestFloor})`;
     kXp.value.textContent = xpLabel(c);
-    const rows = [
-      { label: 'Body', value: String(c.stats.body) },
-      { label: 'Agility', value: String(c.stats.agility) },
-      { label: 'Spirit', value: String(c.stats.spirit) },
-      ...statRows(c, state.passives),
-    ];
+    for (const [id] of STAT_NAMES) setText(baseValues[id], String(c.stats[id]));
+    const rows = statRows(c, state.passives);
     // Built once, then only the values change, so selecting text doesn't flicker.
-    if (!stats.firstChild) {
-      stats.append(...rows.flatMap((r) => [el('dt', '', r.label), el('dd')]));
+    if (derivedValues.length === 0) {
+      for (const r of rows) {
+        const dd = el('dd', '', r.value);
+        const dt = el('dt', '', r.short);
+        // The full name where the group shortens it ("Treasure" under Find).
+        if (r.short !== r.label) dt.title = r.label;
+        derivedLists[r.group].append(dt, dd);
+        derivedValues.push(dd);
+      }
     }
-    stats.querySelectorAll('dd').forEach((dd, i) => {
-      const value = rows[i]?.value ?? '';
-      if (dd.textContent !== value) dd.textContent = value;
+    rows.forEach((r, i) => {
+      const dd = derivedValues[i];
+      if (dd) setText(dd, r.value);
     });
   }
 
@@ -1285,7 +1353,9 @@ function play(
     if (n < 1) return;
     act(spendPoints(state, stat, n));
     // The point buttons hide once every point is spent; keep focus in the panel.
-    if (state.cultivator.unspent === 0 && points.contains(document.activeElement)) resetBtn.focus();
+    if (state.cultivator.unspent === 0 && baseList.contains(document.activeElement)) {
+      baseTitle.focus();
+    }
   }
 
   // Drag to equip, for mouse and pen. Touch has tap to select and the Equip
@@ -1387,17 +1457,15 @@ function play(
       bag === null || state.stones < bag,
     );
 
-    const reset = statResetCost(c);
-    setButton(
-      resetBtn,
-      `Reset stat points: ${reset} Spirit Stones`,
-      state.stones < reset || !canResetStats(c),
-    );
+    const reset = respecView(statResetCost(c), state.stones, !canResetStats(c));
+    setButton(resetBtn, 'Reset stats', reset.off);
+    setText(resetLine.cost, reset.cost);
+    setText(resetLine.why, reset.why);
     const others = (Object.keys(PATHS) as PathId[]).filter((p) => p !== c.path);
     const pathKey = others.join();
-    if (pathPick.select.dataset.paths !== pathKey) {
-      pathPick.select.dataset.paths = pathKey;
-      pathPick.select.replaceChildren(
+    if (pathPick.dataset.paths !== pathKey) {
+      pathPick.dataset.paths = pathKey;
+      pathPick.replaceChildren(
         ...others.map((p) => {
           const o = el('option', '', PATHS[p].name);
           o.value = p;
@@ -1405,11 +1473,10 @@ function play(
         }),
       );
     }
-    const change = pathChangeCost(c);
-    setButton(pathBtn, `Change Path: ${change} Spirit Stones`, state.stones < change);
-    shopNote.textContent =
-      'A Path change puts every stat point into the new Path’s primary stat. A reset takes ' +
-      'them back to spend as you choose.';
+    const change = respecView(pathChangeCost(c), state.stones);
+    setButton(pathBtn, 'Change Path', change.off);
+    setText(pathLine.cost, change.cost);
+    setText(pathLine.why, change.why);
 
     setText(insightCount, String(state.insight));
     setText(retiredText, `Retirements: ${state.retirements}`);
@@ -1436,8 +1503,10 @@ function play(
     setButton(retireBtn, retireLabel(preview), !canRetire(state));
     drawRetire();
 
-    points.hidden = c.unspent === 0;
-    pointsText.textContent = `Unspent stat points: ${c.unspent}`;
+    // Shown once, highlighted while there are points to spend.
+    const none = c.unspent === 0;
+    if (base.classList.contains('none') !== none) base.classList.toggle('none', none);
+    setText(unspentText, none ? 'No unspent points' : `${c.unspent} unspent`);
 
     // The form shows the saved filter; the player's own change already matches it.
     const f = state.filter;
