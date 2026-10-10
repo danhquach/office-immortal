@@ -4,8 +4,9 @@ import { makeTribulation, type Enemy } from '../core/floors.ts';
 import type { Item } from '../core/loot.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
-import { equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
+import { ENEMY_ARRIVAL, equip, newGame, retire, tick, type GameState } from '../core/sim.ts';
 import {
+  clearSave,
   decodeSave,
   encodeSave,
   loadSave,
@@ -33,6 +34,7 @@ function memory(): SaveStorage & { data: Map<string, string> } {
     data,
     getItem: (k) => data.get(k) ?? null,
     setItem: (k, v) => void data.set(k, v),
+    removeItem: (k) => void data.delete(k),
   };
 }
 
@@ -109,6 +111,22 @@ describe('round trip', () => {
     expect(store.data.has(REJECTED_KEY)).toBe(false);
   });
 
+  it('clears the save and a rejected one, leaving other keys', () => {
+    const storage = memory();
+    writeSave(storage, STATE, SAVED_AT);
+    storage.setItem(REJECTED_KEY, 'old');
+    storage.setItem('other', 'kept');
+    expect(clearSave(storage)).toBe(true);
+    expect(loadSave(storage)).toBeNull();
+    expect([...storage.data.keys()]).toEqual(['other']);
+  });
+
+  it('loads a save made in the pause between two fights', () => {
+    let s = newGame(9, 'sword');
+    while (s.kills === 0) s = tick(s, 0.01);
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+  });
+
   it('has nothing to load from empty storage', () => {
     expect(loadSave(memory())).toBeNull();
   });
@@ -121,9 +139,13 @@ describe('round trip', () => {
       setItem: () => {
         throw new Error('QuotaExceededError');
       },
+      removeItem: () => {
+        throw new Error('SecurityError');
+      },
     };
     expect(loadSave(broken)).toBeNull();
     expect(writeSave(broken, STATE, SAVED_AT)).toBe(false);
+    expect(clearSave(broken)).toBe(false);
   });
 });
 
@@ -211,6 +233,11 @@ describe('rejects', () => {
       ['HP of 0', (s: ReturnType<typeof raw>) => void (cult(s).hp = 0)],
       ['a far-off attack', (s: ReturnType<typeof raw>) => void (cult(s).nextAttackAt = 1e12)],
       ['an attack in the past', (s: ReturnType<typeof raw>) => void (cult(s).nextAttackAt = -1)],
+      [
+        'an attack just past the longest interval and the pause',
+        (s: ReturnType<typeof raw>) =>
+          void (cult(s).nextAttackAt = (s.state.time as number) + 2 + ENEMY_ARRIVAL + 0.01),
+      ],
       [
         'a far-off enemy attack',
         (s: ReturnType<typeof raw>) => void (s.state.enemyNextAttackAt = 1e300),

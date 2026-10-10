@@ -39,6 +39,11 @@ import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
 /** Defence that halves incoming damage. */
 export const DEFENCE_HALVES_AT = 50;
+/**
+ * Seconds between one fight ending (a kill or a loss) and the next starting:
+ * neither side attacks meanwhile, so the fallen one's death plays out first.
+ */
+export const ENEMY_ARRIVAL = 1.2;
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -100,7 +105,7 @@ export function newGame(
     passives: kept.passives,
     retirements: kept.retirements,
   };
-  startFloor(state, rngFrom(state.rng));
+  startFloor(state, rngFrom(state.rng), 0);
   return state;
 }
 
@@ -204,12 +209,13 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   s.enemies.shift();
   queueTribulation(s);
   if (s.enemies.length > 0) {
-    s.enemyNextAttackAt = s.time + currentEnemy(s).attackInterval;
+    c.nextAttackAt = s.time + ENEMY_ARRIVAL + d.attackInterval;
+    s.enemyNextAttackAt = s.time + ENEMY_ARRIVAL + currentEnemy(s).attackInterval;
     return;
   }
   s.floor += 1;
   s.highestFloor = Math.max(s.highestFloor, s.floor);
-  startFloor(s, rng);
+  startFloor(s, rng, ENEMY_ARRIVAL);
 }
 
 function enemyAttacks(s: GameState, rng: Rng): void {
@@ -223,7 +229,7 @@ function enemyAttacks(s: GameState, rng: Rng): void {
   // stuck. Losing to a Tribulation costs nothing: the floor is played again.
   s.deaths += 1;
   if (enemy.kind !== 'tribulation') s.floor = Math.max(1, s.floor - 1);
-  startFloor(s, rng);
+  startFloor(s, rng, ENEMY_ARRIVAL);
 }
 
 /**
@@ -237,13 +243,13 @@ function queueTribulation(s: GameState): void {
   s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
 }
 
-/** Fresh enemies and full HP; both sides start their attack timers from now. */
-function startFloor(s: GameState, rng: Rng): void {
+/** Fresh enemies and full HP; both sides start their attack timers `delay` seconds from now. */
+function startFloor(s: GameState, rng: Rng, delay: number): void {
   const c = s.cultivator;
   s.enemies = makeFloor(rng, s.floor);
   queueTribulation(s);
   c.hp = derive(c).maxHp;
   c.attackCount = 0;
-  c.nextAttackAt = s.time + derive(c).attackInterval;
-  s.enemyNextAttackAt = s.time + currentEnemy(s).attackInterval;
+  c.nextAttackAt = s.time + delay + derive(c).attackInterval;
+  s.enemyNextAttackAt = s.time + delay + currentEnemy(s).attackInterval;
 }

@@ -3,7 +3,7 @@ import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cul
 import { TRIBULATIONS } from './floors.ts';
 import { slotsFor, type Item } from './loot.ts';
 import { INVENTORY_SIZE, sellPrice } from './economy.ts';
-import { equip, mitigate, newGame, tick, type GameState } from './sim.ts';
+import { ENEMY_ARRIVAL, equip, mitigate, newGame, tick, type GameState } from './sim.ts';
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
@@ -96,6 +96,41 @@ describe('floors', () => {
     let s = newGame(8, 'body');
     while (s.highestFloor < 3) s = tick(s, 1);
     expect(s.enemies[0]?.hp).toBe(s.enemies[0]?.maxHp);
+  });
+});
+
+describe('enemy arrival', () => {
+  /** Ticks in small steps until `done`, returning the state at that step. */
+  function until(state: GameState, done: (s: GameState) => boolean): GameState {
+    for (let i = 0; i < 100_000 && !done(state); i++) state = tick(state, 0.01);
+    expect(done(state)).toBe(true);
+    return state;
+  }
+
+  it('pauses both sides after a kill, then the next enemy fights', () => {
+    const start = newGame(5, 'sword');
+    const s = until(start, (x) => x.kills > start.kills);
+    const killedAt = s.time;
+    expect(s.cultivator.nextAttackAt).toBeGreaterThan(killedAt + ENEMY_ARRIVAL - 0.01);
+    expect(s.enemyNextAttackAt).toBeGreaterThan(killedAt + ENEMY_ARRIVAL - 0.01);
+    // Nothing happens during the pause.
+    const paused = tick(s, ENEMY_ARRIVAL - 0.02);
+    expect(paused.enemies).toEqual(s.enemies);
+    expect(paused.cultivator.hp).toBe(s.cultivator.hp);
+    expect(paused.cultivator.attackCount).toBe(s.cultivator.attackCount);
+  });
+
+  it('pauses both sides after a loss too', () => {
+    let s = newGame(5, 'sword');
+    s.cultivator.hp = 1;
+    s = until(s, (x) => x.deaths > 0);
+    expect(s.cultivator.nextAttackAt).toBeGreaterThan(s.time + ENEMY_ARRIVAL - 0.01);
+    expect(s.enemyNextAttackAt).toBeGreaterThan(s.time + ENEMY_ARRIVAL - 0.01);
+  });
+
+  it('starts a new game with no pause', () => {
+    const s = newGame(5, 'sword');
+    expect(s.cultivator.nextAttackAt).toBe(derive(s.cultivator).attackInterval);
   });
 });
 
