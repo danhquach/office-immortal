@@ -1,0 +1,511 @@
+{
+  "style": {
+    "sprite": "pixel art game sprite, single character, full body, side view, chunky pixels, limited palette, bold dark outline, centered, plain flat solid magenta background #FF00FF, no text, no letters, no shadow, no ground",
+    "icon": "pixel art inventory icon, single object, centered, chunky pixels, limited palette, bold dark outline, plain flat solid magenta background #FF00FF, no text, no letters, no shadow"
+  },
+  "sprites": [
+    {
+      "id": "path-sword",
+      "size": 128,
+      "face": "right",
+      "seed": 3501,
+      "prompt": "facing right, deep forward lunge attack stance: front knee bent, back leg stretched straight behind, torso leaning forward, both hands gripping a glowing jade green sword thrust forward and slightly up, a young office worker sword cultivator with messy spiky black hair, white dress shirt with rolled sleeves, dark blue necktie flying back, black trousers, black shoes, determined face",
+      "poses": {
+        "idle": "path-sword.jpg",
+        "attack": [
+          "poses/sword-attack1.jpg",
+          "poses/sword-attack2b.jpg",
+          "poses/sword-attack3.jpg"
+        ],
+        "hit": ["poses/sword-hitb.jpg"],
+        "death": [
+          "poses/sword-death1.jpg",
+          "poses/sword-death2.jpg",
+          "poses/sword-death2b.jpg",
+          "poses/sword-death3.jpg"
+        ]
+      },
+      "lift": {
+        "poses/sword-attack2b.jpg": 0.18,
+        "poses/sword-death2b.jpg": 0.06
+      }
+    },
+    {
+      "id": "path-body",
+      "size": 128,
+      "face": "right",
+      "seed": 3701,
+      "prompt": "edit of path-sword as style reference: a DIFFERENT character, a muscular body refiner from the facilities team, broad shoulders, navy blue work coveralls with sleeves rolled up, red headband, short black hair, both fists glowing with orange qi, wide martial arts fighting stance, side view facing right, front fist forward, rear fist chambered at the hip",
+      "poses": {
+        "idle": "path-body.jpg",
+        "attack": ["poses/body-attack1.jpg", "poses/body-attack2.jpg", "poses/body-attack3.jpg"],
+        "hit": ["poses/body-hit.jpg"],
+        "death": [
+          "poses/body-death1.jpg",
+          "poses/body-death2.jpg",
+          "poses/body-death3.jpg",
+          "poses/body-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/body-attack2.jpg": 0.15,
+        "poses/body-death3.jpg": 0.06
+      }
+    },
+    {
+      "id": "path-talisman",
+      "size": 128,
+      "face": "right",
+      "seed": 3841,
+      "prompt": "edit of path-sword as style reference: a DIFFERENT character, a talisman master girl from the IT support team, slim young woman, grey hoodie with the hood down, round glasses, ID lanyard around the neck, long black hair in a high ponytail, black leggings and sneakers, casting stance side view facing right, front hand thrust forward holding a fan of three yellow paper talismans glowing blue, rear hand raised in a two-finger spell sign near the chest, knees bent; then edited: leggings replaced with a dark navy pleated skirt just above the knee, black tights",
+      "poses": {
+        "idle": "path-talisman.jpg",
+        "attack": ["poses/tals-attack1.jpg", "poses/tals-attack2.jpg", "poses/tals-attack3.jpg"],
+        "hit": ["poses/tals-hit.jpg"],
+        "death": [
+          "poses/tals-death1.jpg",
+          "poses/tals-death2.jpg",
+          "poses/tals-death3.jpg",
+          "poses/tals-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/tals-attack2.jpg": 0.12,
+        "poses/tals-death3.jpg": 0.06
+      },
+      "keep": 0.02
+    },
+    {
+      "id": "demon-deadline-fiend",
+      "size": 128,
+      "face": "left",
+      "seed": 3903,
+      "prompt": "a small red horned imp demon with a round clock face set into its belly, wings made of torn calendar pages, long pointed tail, clawed hands raised menacingly, grinning fanged mouth, glowing yellow eyes, hunched hovering fighting stance, side view facing LEFT",
+      "poses": {
+        "idle": "demon-deadline-fiend.jpg",
+        "attack": ["poses/fiend-attack1.jpg", "poses/fiend-attack2.jpg", "poses/fiend-attack3.jpg"],
+        "hit": ["poses/fiend-hit.jpg"],
+        "death": [
+          "poses/fiend-death1.jpg",
+          "poses/fiendb-death2.jpg",
+          "poses/fiendb-death3.jpg",
+          "poses/fiendb-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/fiend-attack2.jpg": 0.1,
+        "poses/fiendb-death3.jpg": 0.04
+      }
+    },
+    {
+      "id": "demon-inbox-hydra",
+      "size": 128,
+      "face": "left",
+      "seed": 4003,
+      "prompt": "edit of path-sword as style reference: the Inbox Hydra, a monster built from a heap of white paper envelopes with red wax seals, three long serpent necks made of stacked envelopes rising from the heap, each head a fanged envelope with a gaping red mouth and glowing red eyes, all facing LEFT, wisps of purple smoke at the base",
+      "poses": {
+        "idle": "demon-inbox-hydra.jpg",
+        "attack": [
+          "poses/hydrab-attack1.jpg",
+          "poses/hydra-attack2.jpg",
+          "poses/hydra-attack3.jpg"
+        ],
+        "hit": ["poses/hydra-hit.jpg"],
+        "death": [
+          "poses/hydra-death1.jpg",
+          "poses/hydra-death2.jpg",
+          "poses/hydra-death3.jpg",
+          "poses/hydra-death4.jpg"
+        ]
+      }
+    },
+    {
+      "id": "demon-meeting-wraith",
+      "size": 128,
+      "face": "left",
+      "seed": 4102,
+      "prompt": "edit of path-sword as style reference: the Meeting Wraith, a pale blue-grey skull-faced ghoul in a loose dark grey suit and red tie, glowing cyan eyes, wispy tail, holding a steaming coffee mug, chains of name badges on its arms (generated facing right; mirrored by the build)",
+      "flip": true,
+      "poses": {
+        "idle": "demon-meeting-wraith.jpg",
+        "attack": [
+          "poses/wraith-attack1.jpg",
+          "poses/wraith-attack2.jpg",
+          "poses/wraith-attack3.jpg"
+        ],
+        "hit": ["poses/wraith-hit.jpg"],
+        "death": [
+          "poses/wraith-death1.jpg",
+          "poses/wraith-death2.jpg",
+          "poses/wraith-death3.jpg",
+          "poses/wraith-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/wraith-attack2.jpg": 0.08,
+        "poses/wraith-death3.jpg": 0.05
+      }
+    },
+    {
+      "id": "demon-printer-golem",
+      "size": 128,
+      "face": "left",
+      "seed": 4201,
+      "prompt": "edit of path-sword as style reference: the Printer Golem, a hulking boxy monster built from a beige office photocopier, paper slot mouth with jagged teeth and a sheet of paper as a tongue, glowing red eyes on its control panel, stone-grey arms with block fists, stubby legs, trailing cables, facing LEFT",
+      "poses": {
+        "idle": "demon-printer-golem.jpg",
+        "attack": ["poses/golem-attack1.jpg", "poses/golem-attack2.jpg", "poses/golem-attack3.jpg"],
+        "hit": ["poses/golem-hit.jpg"],
+        "death": [
+          "poses/golem-death1.jpg",
+          "poses/golem-death2.jpg",
+          "poses/golem-death3.jpg",
+          "poses/golem-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/golem-attack2.jpg": 0.06
+      },
+      "crop": true,
+      "extra": ["e6dcb8", "bfb08a", "8c7f62"],
+      "recolor": {
+        "f1c7a1": "e6dcb8",
+        "e8a08a": "bfb08a",
+        "d9a06f": "bfb08a",
+        "fff1a8": "e6dcb8"
+      }
+    },
+    {
+      "id": "demon-reply-all-swarm",
+      "size": 128,
+      "face": "left",
+      "seed": 4302,
+      "prompt": "edit of path-sword as style reference: the Reply-All Swarm, a tight cluster of seven small flying white envelope bugs with translucent blue insect wings, red angry eyes and tiny fangs, the biggest in front, all flying LEFT",
+      "keep": 0.03,
+      "poses": {
+        "idle": "demon-reply-all-swarm.jpg",
+        "attack": ["poses/swarm-attack1.jpg", "poses/swarm-attack2.jpg", "poses/swarm-attack3.jpg"],
+        "hit": ["poses/swarm-hit.jpg"],
+        "death": [
+          "poses/swarm-death1.jpg",
+          "poses/swarm-death2.jpg",
+          "poses/swarm-death3.jpg",
+          "poses/swarm-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/swarm-attack2.jpg": 0.15,
+        "poses/swarm-death2.jpg": 0.1
+      }
+    },
+    {
+      "id": "elite-deadline-fiend",
+      "size": 160,
+      "base": "demon-deadline-fiend",
+      "aura": "b07ae0",
+      "recolor": {
+        "b82e3a": "6a3fa0",
+        "f05a5a": "b07ae0",
+        "6e1b25": "3b2d4a",
+        "f5c542": "f05a5a"
+      }
+    },
+    {
+      "id": "elite-inbox-hydra",
+      "size": 160,
+      "base": "demon-inbox-hydra",
+      "aura": "b07ae0",
+      "recolor": {
+        "f2f2f5": "b07ae0",
+        "c8c8d0": "6a3fa0",
+        "9a9aa6": "5d4a6e",
+        "b82e3a": "f5c542",
+        "f05a5a": "fff1a8"
+      }
+    },
+    {
+      "id": "elite-meeting-wraith",
+      "size": 160,
+      "base": "demon-meeting-wraith",
+      "aura": "b07ae0",
+      "recolor": {
+        "4a4a55": "1a1423",
+        "6e6e7a": "3b2d4a",
+        "2b2b33": "1a1423",
+        "b82e3a": "f5c542",
+        "a8d8ff": "f05a5a",
+        "5aa0f0": "b82e3a"
+      }
+    },
+    {
+      "id": "elite-printer-golem",
+      "size": 160,
+      "base": "demon-printer-golem",
+      "aura": "b07ae0",
+      "recolor": {
+        "e6dcb8": "9a9aa6",
+        "bfb08a": "6e6e7a",
+        "8c7f62": "4a4a55",
+        "f05a5a": "5fd08a",
+        "b82e3a": "2f8a5a"
+      }
+    },
+    {
+      "id": "elite-reply-all-swarm",
+      "size": 160,
+      "base": "demon-reply-all-swarm",
+      "aura": "b07ae0",
+      "recolor": {
+        "a8d8ff": "f5c542",
+        "5aa0f0": "e88a2a",
+        "2f5fb3": "b82e3a",
+        "f05a5a": "5fd08a",
+        "b82e3a": "2f8a5a"
+      }
+    },
+    {
+      "id": "boss-quarterly-review",
+      "size": 192,
+      "face": "left",
+      "seed": 4402,
+      "prompt": "edit of path-sword as style reference: the Quarterly Review, a huge boss golem built from stacked red and gold bar chart columns, blocky head with angry glowing yellow eyes, one arm wielding a red downward-arrow axe, the other a gold pie chart fist, facing LEFT",
+      "crop": ["poses/qr-attack3.jpg"],
+      "keep": 0.05,
+      "poses": {
+        "idle": "boss-quarterly-review.jpg",
+        "attack": ["poses/qr-attack1.jpg", "poses/qr-attack2.jpg", "poses/qr-attack3.jpg"],
+        "hit": ["poses/qr-hit.jpg"],
+        "death": [
+          "poses/qr-death1.jpg",
+          "poses/qr-death2.jpg",
+          "poses/qr-death3.jpg",
+          "poses/qr-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/qr-attack2.jpg": 0.08,
+        "poses/qr-death3.jpg": 0.04
+      }
+    },
+    {
+      "id": "boss-the-auditor",
+      "size": 192,
+      "face": "left",
+      "seed": 4501,
+      "prompt": "edit of path-sword as style reference: The Auditor, a tall gaunt boss in a black three-piece suit, pale grey skin, slicked black hair, glowing magnifying-glass monocle, a thick ledger in one hand and a giant red fountain pen like a spear in the other (generated facing right; mirrored by the build)",
+      "flip": true,
+      "keep": 0.05,
+      "poses": {
+        "idle": "boss-the-auditor.jpg",
+        "attack": ["poses/aud-attack1.jpg", "poses/aud-attack2.jpg", "poses/aud-attack3.jpg"],
+        "hit": ["poses/aud-hit.jpg"],
+        "death": [
+          "poses/aud-death1.jpg",
+          "poses/aud-death2.jpg",
+          "poses/aud-death3.jpg",
+          "poses/aud-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/aud-death3.jpg": 0.04
+      },
+      "shadow": true
+    },
+    {
+      "id": "boss-middle-manager",
+      "size": 192,
+      "face": "left",
+      "seed": 4603,
+      "prompt": "edit of path-sword as style reference: the Middle Manager, a hulking four-armed boss in a grey suit and loosened blue tie, balding head with a phone headset, red glowing eyes, gritted teeth, two extra arms sprouting from his upper back, every hand holding a brown clipboard, facing LEFT",
+      "keep": 0.05,
+      "poses": {
+        "idle": "boss-middle-manager.jpg",
+        "attack": ["poses/mm-attack1.jpg", "poses/mm-attack2.jpg", "poses/mm-attack3.jpg"],
+        "hit": ["poses/mm-hit.jpg"],
+        "death": [
+          "poses/mm-death1.jpg",
+          "poses/mm-death2.jpg",
+          "poses/mm-death3.jpg",
+          "poses/mm-death4.jpg"
+        ]
+      },
+      "lift": {
+        "poses/mm-death3.jpg": 0.04
+      },
+      "border": 20
+    },
+    {
+      "id": "tribulation-probation-review",
+      "size": 192,
+      "base": "boss-quarterly-review",
+      "aura": "5fd08a",
+      "recolor": {
+        "6e1b25": "1f4d3a",
+        "b82e3a": "2f8a5a",
+        "f05a5a": "5fd08a"
+      }
+    },
+    {
+      "id": "tribulation-annual-appraisal",
+      "size": 192,
+      "base": "boss-the-auditor",
+      "aura": "f5c542",
+      "recolor": {
+        "2b2b33": "1e2f5c",
+        "3b2d4a": "2f5fb3",
+        "b82e3a": "f5c542",
+        "6e1b25": "e88a2a"
+      }
+    },
+    {
+      "id": "tribulation-restructuring",
+      "size": 192,
+      "base": "boss-middle-manager",
+      "aura": "e88a2a",
+      "recolor": {
+        "4a4a55": "6e1b25",
+        "6e6e7a": "b82e3a",
+        "9a9aa6": "f05a5a",
+        "2f5fb3": "f5c542",
+        "1e2f5c": "e88a2a"
+      }
+    },
+    {
+      "id": "tribulation-hostile-takeover",
+      "size": 192,
+      "base": "boss-quarterly-review",
+      "aura": "f05a5a",
+      "recolor": {
+        "6e1b25": "3b2d4a",
+        "b82e3a": "6a3fa0",
+        "f05a5a": "b07ae0",
+        "f5c542": "9a9aa6",
+        "e88a2a": "6e6e7a",
+        "fff1a8": "c8c8d0"
+      }
+    },
+    {
+      "id": "tribulation-board-inquiry",
+      "size": 192,
+      "base": "boss-the-auditor",
+      "aura": "5aa0f0",
+      "recolor": {
+        "2b2b33": "6e1b25",
+        "3b2d4a": "b82e3a",
+        "b82e3a": "5fd08a",
+        "6e1b25": "2f8a5a"
+      }
+    },
+    {
+      "id": "tribulation-heavenly-audit",
+      "size": 192,
+      "base": "boss-middle-manager",
+      "aura": "fff1a8",
+      "recolor": {
+        "4a4a55": "9a9aa6",
+        "6e6e7a": "c8c8d0",
+        "9a9aa6": "f2f2f5",
+        "2f5fb3": "f5c542",
+        "1e2f5c": "e88a2a"
+      }
+    }
+  ],
+  "icons": [
+    {
+      "id": "head",
+      "seed": 5101,
+      "prompt": "edit of the weapon icon as style reference: a small ornate jade green Daoist hair crown, a rounded cap-shaped crown with a gold band and a gold hairpin through it",
+      "family": "green",
+      "materials": ["grey", "blue", "green"]
+    },
+    {
+      "id": "chest",
+      "seed": 1542,
+      "prompt": "a pinstripe navy daoist robe jacket, folded collar",
+      "family": "blue",
+      "materials": ["red", "blue", "green"]
+    },
+    {
+      "id": "pants",
+      "seed": 1543,
+      "prompt": "a pair of grey pleated trousers",
+      "family": "grey",
+      "materials": ["grey", "brown", "gold"]
+    },
+    {
+      "id": "attachment",
+      "seed": 1544,
+      "prompt": "a brown calabash gourd bottle with a cork, steam rising",
+      "family": "brown",
+      "materials": ["brown", "grey", "green"]
+    },
+    {
+      "id": "weapon",
+      "seed": 1545,
+      "prompt": "a jade letter-opener sword pointing up diagonally",
+      "family": "green",
+      "materials": ["green", "grey", "gold"]
+    },
+    {
+      "id": "sideArm",
+      "seed": 1546,
+      "prompt": "a small red office stapler",
+      "family": "red",
+      "materials": ["red", "purple", "grey"]
+    },
+    {
+      "id": "accessory",
+      "seed": 1547,
+      "prompt": "a blue lanyard with a white key card pendant",
+      "family": "blue",
+      "materials": ["blue", "red", "gold"]
+    },
+    {
+      "id": "charm",
+      "seed": 1548,
+      "prompt": "a yellow sticky note talisman with a red seal stamp",
+      "family": "gold",
+      "materials": ["gold", "blue", "green"]
+    }
+  ],
+  "backgrounds": [
+    {
+      "id": "basement-archives",
+      "seed": 4701,
+      "prompt": "edit of path-sword as style reference, background only: a dim office basement archive room, flat side view, rows of grey metal filing cabinets, stacked cardboard archive boxes, exposed pipes on the ceiling, bare hanging bulbs, concrete floor walkway, muted colours, seamless tileable horizontally, no people, no text",
+      "height": 208
+    },
+    {
+      "id": "open-plan",
+      "seed": 4801,
+      "prompt": "edit of path-sword as style reference, background only: an open-plan office floor in daytime, flat side view, grey cubicles with desks, monitors and chairs, a blue water cooler, a whiteboard with a rising bar chart, potted plants, fluorescent ceiling panels, windows with pale sky, carpet walkway, muted colours, seamless tileable horizontally, no people, no text",
+      "height": 208,
+      "dim": 0.92,
+      "extra": ["c4dbe6", "a3c3d4"]
+    },
+    {
+      "id": "executive-suite",
+      "seed": 4901,
+      "prompt": "pixel art side-scrolling game background, 16-bit pixel art style: a luxurious executive suite at night, flat side view, dark wood panelled walls, tall windows with a lit city skyline at night, a leather armchair, a potted palm, a wooden desk with a lamp, deep red carpet walkway, seamless tileable horizontally, no people, no text",
+      "height": 208,
+      "dim": 1.0,
+      "extra": ["18203a", "26365e", "4a1420", "3a2418", "5a3822", "2a1a14"],
+      "trim_top": 30
+    },
+    {
+      "id": "heavenly-boardroom",
+      "seed": 5002,
+      "prompt": "pixel art side-scrolling game background, 16-bit pixel art style: a heavenly boardroom above the clouds, a long white marble conference table with empty chairs, tall golden pillars at regular intervals, bright sky with soft clouds, clouds covering the floor as a walkway, golden light rays, seamless tileable horizontally, no people, no text",
+      "height": 208,
+      "dim": 0.92,
+      "extra": ["6cb8e0", "9ccfea", "d4e2ee", "b8c4d4", "c9a43a", "3a9ad8", "2f80c0", "e0b850"]
+    }
+  ],
+  "doll": {
+    "id": "paperdoll",
+    "seed": 5201,
+    "size": [64, 80],
+    "prompt": "pixel art game sprite, a plain featureless grey mannequin figure, full body, straight front view, arms slightly away from the body with open hands level with the hips, legs slightly apart, no face, no clothes, bold dark outline, magenta background"
+  },
+  "icon_size": 32
+}

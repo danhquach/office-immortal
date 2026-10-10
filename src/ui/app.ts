@@ -41,6 +41,7 @@ import {
   type Item,
   type SlotId,
 } from '../core/loot.ts';
+import { zoneOf } from '../core/floors.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
 import {
   buyPassive,
@@ -63,7 +64,9 @@ import {
   tabTitle,
   type Unseen,
 } from './hud.ts';
+import { artUrl } from './art.ts';
 import { autosave, runs } from './run.ts';
+import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
   cellLabel,
@@ -75,18 +78,28 @@ import {
   overtimeLines,
   passiveLabel,
   PATH_BLURBS,
+  enemySprite,
+  iconCell,
   realmLabel,
   retireLabel,
   retireLines,
   sellBelowLabel,
-  SLOT_CODES,
+  SPRITE_SIZE,
   statRows,
+  stripEvents,
   waveLabel,
   xpLabel,
 } from './view.ts';
 
 const TICK_MS = 200;
 const SAVE_MS = 10_000;
+/** How often the strip's sprites move to their next frame. */
+const FRAME_TICK_MS = 50;
+/** Damage numbers on the stage at once, and how long each shows. */
+const MAX_DAMAGE_NUMBERS = 6;
+const DAMAGE_NUMBER_MS = 900;
+/** Item icon frame in the atlas, in px. */
+const ICON_PX = 32;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
 const SUMMARY_MIN_SECONDS = 60;
 const RECENT_DROPS = 8;
@@ -201,10 +214,26 @@ function pathChoice(onPick: (path: PathId) => void): HTMLElement {
   return box;
 }
 
-interface Fighter {
+/** A sprite on the stage: a frame of a sheet (tools/art/build.py). */
+interface StageSprite {
+  sprite: HTMLElement;
+  /** The sheet shown, its frame size, what it is playing and the frame last drawn. */
+  sheet: string;
+  size: number;
+  playing: Playing;
+  drawn: string;
+}
+
+function stageSprite(className: string): StageSprite {
+  const sprite = el('div', `sprite ${className}`);
+  sprite.setAttribute('aria-hidden', 'true');
+  return { sprite, sheet: '', size: 0, playing: { action: 'idle', start: 0 }, drawn: '' };
+}
+
+interface Fighter extends StageSprite {
+  /** Name, HP bar and HP text, under the stage. */
   box: HTMLElement;
   name: HTMLElement;
-  sprite: HTMLElement;
   bar: HTMLElement;
   hp: HTMLElement;
 }
@@ -212,15 +241,43 @@ interface Fighter {
 function fighter(side: 'you' | 'foe'): Fighter {
   const box = el('div', `fighter ${side}`);
   const name = el('div', 'name');
-  const sprite = el('div', 'sprite');
-  sprite.setAttribute('aria-hidden', 'true');
   const track = el('div', 'bar');
   track.setAttribute('aria-hidden', 'true');
   const bar = el('span');
   track.append(bar);
   const hp = el('div', 'hp');
-  box.append(name, sprite, track, hp);
-  return { box, name, sprite, bar, hp };
+  box.append(name, track, hp);
+  return { box, name, bar, hp, ...stageSprite(side) };
+}
+
+/** A CSS url() for art, or none when there is no such file (never url(""), which loads the page). */
+function cssUrl(url: string): string {
+  return url ? `url("${url}")` : '';
+}
+
+/** Puts sheet `name` (frames `size` px square) on a fighter's sprite, if it changed. */
+function useSheet(f: StageSprite, name: string, size: number): void {
+  if (f.sheet === name) return;
+  f.sheet = name;
+  f.size = size;
+  const s = f.sprite.style;
+  s.width = s.height = `${size}px`;
+  s.backgroundImage = cssUrl(artUrl(name));
+  s.backgroundSize = `${size * 4}px ${size * 4}px`;
+}
+
+/** An item's icon from the atlas, at `scale` (1 in a cell, 2 in the details panel). */
+function setIcon(icon: HTMLElement, item: Item | undefined, scale = 1): void {
+  if (!item) {
+    icon.style.backgroundImage = '';
+    return;
+  }
+  const { col, row } = iconCell(item);
+  const px = ICON_PX * scale;
+  const s = icon.style;
+  s.backgroundImage = cssUrl(artUrl('icons'));
+  s.backgroundSize = `${px * 8}px ${px * 3}px`;
+  s.backgroundPosition = `${-col * px}px ${-row * px}px`;
 }
 
 function kpi(label: string): { box: HTMLElement; value: HTMLElement } {
@@ -242,16 +299,18 @@ function panel(className: string, title: string): { box: HTMLElement; heading: H
 function cell(): HTMLButtonElement {
   const b = el('button', 'cell');
   b.type = 'button';
-  b.append(el('span', 'grade'), el('span', 'code'), el('span', 'q'));
+  const icon = el('span', 'icon');
+  icon.setAttribute('aria-hidden', 'true');
+  b.append(el('span', 'grade'), icon, el('span', 'q'));
   return b;
 }
 
 /** Shows `item` in a cell, or an empty cell with `emptyText` as its name. */
 function fillCell(b: HTMLButtonElement, item: Item | undefined, emptyText: string): void {
-  const [grade, code, q] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
+  const [grade, icon, q] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
   b.className = item ? `cell grade-${item.grade}` : 'cell empty';
   grade.textContent = item ? (GRADES[item.grade].name[0] as string) : '';
-  code.textContent = item ? SLOT_CODES[item.slot] : '';
+  setIcon(icon, item);
   q.textContent = item ? `${quality(item)}%` : '';
   b.setAttribute('aria-label', item ? cellLabel(item) : emptyText);
 }
@@ -311,42 +370,19 @@ function tabs(list: { id: string; label: string; body: HTMLElement }[]): {
   return { bar, panels, show };
 }
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-/** The figure behind the equipment slots: head and body, drawn in code (no art asset). */
-function silhouette(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, 'svg');
-  svg.setAttribute('class', 'figure');
-  svg.setAttribute('viewBox', '0 0 100 125');
-  svg.setAttribute('aria-hidden', 'true');
-  const head = document.createElementNS(SVG_NS, 'circle');
-  head.setAttribute('cx', '50');
-  head.setAttribute('cy', '15');
-  head.setAttribute('r', '9');
-  const body = document.createElementNS(SVG_NS, 'path');
-  // Shoulders, arms out to the hands, torso, legs.
-  body.setAttribute(
-    'd',
-    'M50 26C40 26 30 27 27 31L16 62L23 65L33 41L34 72L36 121L46 121L49 82L51 82L54 121L64 121' +
-      'L66 72L67 41L77 65L84 62L73 31C70 27 60 26 50 26Z',
-  );
-  svg.append(head, body);
-  return svg;
+/** The figure behind the equipment slots: pixel art at 4x, slots placed over it in %. */
+function figure(): HTMLImageElement {
+  const img = el('img', 'figure');
+  img.src = artUrl('paperdoll');
+  img.alt = '';
+  img.width = 256;
+  img.height = 320;
+  return img;
 }
 
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 /** A mouse or pen: the input that can double-click and drag. */
 const finePointer = matchMedia('(pointer: fine)');
-
-/** A short shake on a sprite that just took damage. */
-function flash(sprite: HTMLElement): void {
-  // The strip may be in the pop-out, whose document stays visible while the tab hides.
-  if (reducedMotion.matches || sprite.ownerDocument.hidden) return;
-  sprite.animate(
-    [{ transform: 'none' }, { transform: 'translateX(3px)', opacity: 0.4 }, { transform: 'none' }],
-    { duration: 250, easing: 'steps(2)' },
-  );
-}
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
@@ -393,9 +429,16 @@ function play(
   where.append(floorText, killText);
   const you = fighter('you');
   const foe = fighter('foe');
+  // The stage: the zone's tiling background with both sprites on its floor.
+  const stage = el('div', 'stage');
+  // The enemy that just died plays its death here, behind the next one.
+  const corpse = stageSprite('corpse');
+  corpse.sprite.hidden = true;
+  stage.append(you.sprite, corpse.sprite, foe.sprite);
   const fighters = el('div', 'fighters');
   fighters.append(you.box, el('span', 'vs', 'vs'), foe.box);
-  strip.append(where, fighters);
+  strip.append(where, stage, fighters);
+  let zone = '';
 
   // KPI tiles
   const kpis = el('section', 'kpis');
@@ -415,7 +458,7 @@ function play(
   const slots = el('div', 'doll');
   slots.setAttribute('role', 'group');
   slots.setAttribute('aria-label', 'Equipped');
-  slots.append(silhouette());
+  slots.append(figure());
   const slotCells = {} as Record<EquipSlotId, HTMLButtonElement>;
   for (const slot of SLOT_IDS) {
     const box = el('div', `slot slot-${slot}`);
@@ -724,13 +767,75 @@ function play(
       foe.box.dataset.kind = enemy.kind;
       setFighter(foe, enemy.name, enemy.hp, enemy.maxHp);
     }
-    if (!prev) return;
-    // Only replays what the sim decided: a flash where HP went down.
-    const before = prev.enemies[0];
-    if (enemy && before && prev.enemies.length === state.enemies.length && enemy.hp < before.hp) {
-      flash(foe.sprite);
-    } else if (state.kills > prev.kills) flash(foe.sprite);
-    if (c.hp < prev.cultivator.hp && state.deaths === prev.deaths) flash(you.sprite);
+    const z = zoneOf(state.floor);
+    if (z !== zone) {
+      zone = z;
+      stage.style.backgroundImage = cssUrl(artUrl(`bg-${z}`));
+    }
+    useSheet(you, `path-${c.path}`, SPRITE_SIZE.path);
+    if (prev) {
+      // Only replays what the sim decided between the two states.
+      const e = stripEvents(prev, state);
+      const now = performance.now();
+      const before = prev.enemies[0];
+      if (e.youDied) playAction(you, 'death', now);
+      else if (e.youHit) playAction(you, 'hit', now);
+      else if (e.youAttack) playAction(you, 'attack', now);
+      if (e.foeDied && !reducedMotion.matches) {
+        // The one that died falls behind the next, which is already in front.
+        useSheet(corpse, enemySprite(e.foeDied.kind, e.foeDied.name), SPRITE_SIZE[e.foeDied.kind]);
+        corpse.playing = { action: 'death', start: now };
+        corpse.sprite.hidden = false;
+        foe.playing = { action: 'idle', start: now };
+      } else if (e.foeHit) playAction(foe, 'hit', now);
+      else if (e.foeAttack) playAction(foe, 'attack', now);
+      // HP lost, net of lifesteal; the killing blow shows what was left.
+      if (e.youHit) damageNumber(you, prev.cultivator.hp - c.hp);
+      if (e.youDied) damageNumber(you, prev.cultivator.hp);
+      if (before && (e.foeHit || e.foeDied)) {
+        damageNumber(foe, before.hp - (e.foeDied ? 0 : (enemy?.hp ?? 0)));
+      }
+    }
+    showEnemy();
+    drawSprites();
+  }
+
+  function playAction(f: StageSprite, action: Action, now: number): void {
+    f.playing = request(f.playing, action, now);
+  }
+
+  /** The enemy in front, on the foe's sprite. */
+  function showEnemy(): void {
+    const enemy = state.enemies[0];
+    if (enemy) useSheet(foe, enemySprite(enemy.kind, enemy.name), SPRITE_SIZE[enemy.kind]);
+  }
+
+  /** Each sprite's current frame (sprite.ts decides it); a finished corpse goes. */
+  function drawSprites(): void {
+    const now = performance.now();
+    const reduced = reducedMotion.matches;
+    for (const f of [you, foe, corpse]) {
+      if (f.sprite.hidden) continue;
+      const step = advance(f.playing, now, reduced, f === corpse);
+      f.playing = step.playing;
+      if (step.gone) {
+        f.sprite.hidden = true;
+        continue;
+      }
+      const pos = `${-step.col * f.size}px ${-step.row * f.size}px`;
+      if (pos !== f.drawn) f.sprite.style.backgroundPosition = f.drawn = pos;
+    }
+  }
+
+  /** Damage drawn in code (never baked into a sprite), rising off the one who took it. */
+  function damageNumber(f: Fighter, amount: number): void {
+    if (!(amount >= 1) || stage.querySelectorAll('.dmg').length >= MAX_DAMAGE_NUMBERS) return;
+    const n = el('span', `dmg ${f === you ? 'you' : 'foe'}`, String(Math.round(amount)));
+    n.setAttribute('aria-hidden', 'true');
+    n.style.left = `${f.sprite.offsetLeft + f.size / 2}px`;
+    n.style.bottom = `${Math.round(f.size * 0.75)}px`;
+    stage.append(n);
+    setTimeout(() => n.remove(), DAMAGE_NUMBER_MS);
   }
 
   function drawSummary(): void {
@@ -806,11 +911,12 @@ function play(
     }
     const lines = el('ul', 'lines');
     for (const line of itemLines(item)) lines.append(el('li', '', line));
-    const parts: HTMLElement[] = [
-      el('div', `title grade-${item.grade}`, item.name),
-      el('div', `tag grade-${item.grade}`, itemTag(item)),
-      lines,
-    ];
+    const head = el('div', 'item-head');
+    const icon = el('span', 'icon big');
+    icon.setAttribute('aria-hidden', 'true');
+    setIcon(icon, item, 2);
+    head.append(icon, el('div', `title grade-${item.grade}`, item.name));
+    const parts: HTMLElement[] = [head, el('div', `tag grade-${item.grade}`, itemTag(item)), lines];
     if ('slot' in selected) {
       parts.push(el('p', 'muted', 'Equipped.'));
     } else {
@@ -1213,5 +1319,6 @@ function play(
   }
 
   scope.every(TICK_MS, step);
+  scope.every(FRAME_TICK_MS, drawSprites);
   autosave(scope, save, { doc: document, win: window }, SAVE_MS);
 }

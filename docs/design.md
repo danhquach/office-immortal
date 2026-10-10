@@ -78,8 +78,9 @@ The realm name is primary; the job title is shown beside it.
 
 ## 5. Floors and combat
 
-- **The tower:** floors climb from Basement Archives through the open-plan
-  floors to the Executive Suite and the Heavenly Boardroom.
+- **The tower:** floors climb through four zones: Basement Archives (floors
+  1–10), the open-plan floors (11–40), the Executive Suite (41–70) and the
+  Heavenly Boardroom (71 up).
 - **A floor** is waves of office demons → an elite → a floor boss. Clearing it
   unlocks the next floor.
 - **Losing** sends the cultivator back one floor to farm (a lost
@@ -223,16 +224,31 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 
 ### Combat strip (pixel art)
 
-- Crisp pixel art scaled by whole numbers (`image-rendering: pixelated`), on a
+- Crisp pixel art shown at 1× (whole pixels, `image-rendering: pixelated`), on a
   limited palette.
-- **Sprites:** cultivator 32×32 per frame, regular demons 32×32, elites and
-  Tribulation bosses 48×48 or 64×64. Frames: idle 4, attack 4, hit 2, death 4.
-- **Backgrounds:** one wide tiling layer per tower zone (Basement Archives,
-  open-plan floors, Executive Suite, Heavenly Boardroom), with office props in
-  pixel form: cubicles, water cooler, KPI whiteboard, city windows at night.
-- Damage numbers, crit text and qi effects are drawn in code, not baked into
-  sprites.
-- The sim decides every outcome; the strip only plays it back.
+- **Sprites:** frames are 128×128 for the cultivator and regular demons,
+  160×160 for elites and 192×192 for bosses: the detail the art is drawn at,
+  not shrunk to fit. Frames: idle 4, attack 4, hit 2, death 4. Each action is
+  its own drawn pose: attack swings or leaps, hit knocks back in a white flash,
+  death falls slowly until flat.
+- **Elites and Tribulations are variants:** an elite reuses its demon's poses
+  and a Tribulation a boss's, rebuilt at its own size with a colour swap and a
+  glow drawn around it. No art of their own.
+- **Backgrounds:** one tiling layer per tower zone, 208 px tall, with office
+  props in pixel form: filing cabinets, cubicles, water cooler, KPI whiteboard,
+  city windows at night, a boardroom above the clouds. Dimmed so the fighters
+  stay the brightest thing in the strip.
+- **Item icons:** one drawn icon per item type, 32×32; each item name has its
+  own material (a colour swap of the type's icon). The grade stays on the cell
+  border and its initial, never on the icon alone.
+- **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
+  are worn.
+- Damage numbers are drawn in code, not baked into sprites. An enemy that dies
+  falls behind the next one, so the enemy in front is always the one fighting.
+- The sim decides every outcome; the strip only plays it back. Reduced motion
+  shows a still pose.
+- The Mini view shows the whole stage at 3/8 so it fits its 160 px window: the
+  one place the art is not at whole pixels.
 
 ### Grade colours
 
@@ -266,6 +282,8 @@ Grade is also written as text, never shown by colour alone.
 
 - Concept art is generated with an image model to explore direction; it is
   reference only and never shipped.
-- Shipped sprites and backgrounds are made per-asset at their final pixel
-  size, then cleaned to the palette. No commercial characters, logos or brand
-  marks in any asset.
+- Shipped art is generated per asset, then cleaned to its final pixel size and
+  the shared palette by `tools/art/build.py` (prompts and seeds in
+  `tools/art/manifest.json`; the generated sources are not committed). No
+  commercial characters, logos or brand marks in any asset. All of it is
+  served from the site itself and stays under 1 MB.

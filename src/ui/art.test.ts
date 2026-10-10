@@ -1,0 +1,178 @@
+import { describe, expect, it } from 'vitest';
+import manifestText from '../../tools/art/manifest.json?raw';
+import { PATHS, type PathId } from '../core/cultivator.ts';
+import { BOSSES, DEMONS, makeFloor, TRIBULATIONS, ZONES, type Enemy } from '../core/floors.ts';
+import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
+import { createRng } from '../core/rng.ts';
+import { newGame, type GameState } from '../core/sim.ts';
+import { artUrl } from './art.ts';
+import { enemySprite, ICON_COLUMNS, iconCell, SPRITE_SIZE, stripEvents } from './view.ts';
+
+/** Every shipped art file as a base64 data URL, to weigh them. */
+const INLINE = import.meta.glob<string>('../assets/art/*.png', {
+  eager: true,
+  query: '?inline',
+  import: 'default',
+});
+const exists = (name: string) => artUrl(name) !== '';
+const manifest = JSON.parse(manifestText) as {
+  icons: { id: SlotId; materials: string[] }[];
+  sprites: { id: string; size?: number; base?: string }[];
+};
+
+describe('shipped art', () => {
+  it('has a sheet for every Path, demon, elite, boss and Tribulation, and a background per zone', () => {
+    const sheets = [
+      ...(Object.keys(PATHS) as PathId[]).map((p) => `path-${p}`),
+      ...DEMONS.flatMap((d) => [enemySprite('demon', d), enemySprite('elite', `Elite ${d}`)]),
+      ...BOSSES.map((b) => enemySprite('boss', b)),
+      ...TRIBULATIONS.map((b) => enemySprite('tribulation', b)),
+      ...ZONES.map((z) => `bg-${z.id}`),
+      'icons',
+      'paperdoll',
+    ];
+    for (const name of sheets) expect(exists(name), name).toBe(true);
+  });
+
+  it('builds each sheet at the frame size the strip draws it at', () => {
+    for (const s of manifest.sprites) {
+      const kind = s.id.split('-')[0] as keyof typeof SPRITE_SIZE;
+      const size = s.size ?? manifest.sprites.find((b) => b.id === s.base)?.size;
+      expect(size, s.id).toBe(SPRITE_SIZE[kind]);
+    }
+  });
+
+  it('stays under 1 MB in total', () => {
+    const files = Object.values(INLINE);
+    expect(files.length).toBeGreaterThan(20);
+    const bytes = files.reduce((sum, url) => sum + (url.length - url.indexOf(',') - 1) * 0.75, 0);
+    expect(bytes).toBeLessThan(1024 * 1024);
+  });
+});
+
+describe('enemySprite', () => {
+  it('names sheets after the enemy, elites after their demon', () => {
+    expect(enemySprite('demon', 'Reply-All Swarm')).toBe('demon-reply-all-swarm');
+    expect(enemySprite('elite', 'Elite Inbox Hydra')).toBe('elite-inbox-hydra');
+    expect(enemySprite('boss', 'The Auditor')).toBe('boss-the-auditor');
+  });
+
+  it('finds art for every enemy a floor can make', () => {
+    for (let floor = 1; floor <= 5; floor++) {
+      for (const e of makeFloor(createRng(floor), floor)) {
+        expect(exists(enemySprite(e.kind, e.name)), e.name).toBe(true);
+      }
+    }
+  });
+
+  it('has no art for a name it does not know (shown as nothing, never a broken URL)', () => {
+    expect(artUrl(enemySprite('boss', 'Nobody'))).toBe('');
+  });
+
+  it.each([
+    ['a quote breaking out of url()', 'x") ; background:url(//evil'],
+    ['a path climbing out of the art folder', '../../index'],
+    ['an object key', '__proto__'],
+    ['bidi and zero-width characters', 'The\u202e Audi\u200btor'],
+    ['an oversized name', 'A'.repeat(100_000)],
+  ])('finds no art for %s', (_, name) => {
+    for (const kind of ['demon', 'elite', 'boss', 'tribulation'] as const) {
+      expect(artUrl(enemySprite(kind, name))).toBe('');
+    }
+  });
+
+  it('keeps an odd name from a save to a plain, harmless file name', () => {
+    expect(enemySprite('demon', '"); background:url(x) <b>')).toMatch(/^demon-[a-z0-9-]*$/);
+  });
+});
+
+describe('iconCell', () => {
+  it('uses the atlas columns in the manifest order', () => {
+    expect(manifest.icons.map((i) => i.id)).toEqual(ICON_COLUMNS);
+  });
+
+  it('gives every item name its own icon, one material row per name', () => {
+    const cells = new Set<string>();
+    for (const slot of ICON_COLUMNS) {
+      expect(manifest.icons.find((i) => i.id === slot)?.materials).toHaveLength(
+        SLOTS[slot].names.length,
+      );
+      for (const name of SLOTS[slot].names) {
+        const { col, row } = iconCell({ slot, name } as Item);
+        cells.add(`${col},${row}`);
+      }
+    }
+    expect(cells.size).toBe(ICON_COLUMNS.reduce((n, s) => n + SLOTS[s].names.length, 0));
+  });
+
+  it('falls back to the first material for a name it does not know', () => {
+    expect(iconCell({ slot: 'weapon', name: 'Mystery' } as Item)).toEqual({ col: 4, row: 0 });
+    expect(iconCell({ slot: 'weapon', name: '__proto__' } as Item)).toEqual({ col: 4, row: 0 });
+  });
+
+  it('stays inside the atlas for a type it does not know', () => {
+    const cell = iconCell({ slot: 'cape' as SlotId, name: 'x' } as Item);
+    expect(cell).toEqual({ col: 0, row: 0 });
+  });
+});
+
+describe('stripEvents', () => {
+  const base = (): GameState => newGame(7, 'sword');
+  const front = (s: GameState): Enemy => s.enemies[0] as Enemy;
+
+  it('sees an attack and a hit when the cultivator lands a blow', () => {
+    const prev = base();
+    const next = structuredClone(prev);
+    next.cultivator.nextAttackAt += 1;
+    front(next).hp -= 3;
+    expect(stripEvents(prev, next)).toMatchObject({
+      youAttack: true,
+      foeHit: true,
+      foeAttack: false,
+      youHit: false,
+      foeDied: null,
+    });
+  });
+
+  it('sees the enemy attack and the cultivator hit', () => {
+    const prev = base();
+    const next = structuredClone(prev);
+    next.enemyNextAttackAt += 2;
+    next.cultivator.hp -= 4;
+    expect(stripEvents(prev, next)).toMatchObject({ foeAttack: true, youHit: true });
+  });
+
+  it('reports which enemy died, not the next one, and no foe attack from the timer reset', () => {
+    const prev = base();
+    const next = structuredClone(prev);
+    const dead = next.enemies.shift() as Enemy;
+    next.kills += 1;
+    next.cultivator.nextAttackAt += 1;
+    next.enemyNextAttackAt += 2;
+    const e = stripEvents(prev, next);
+    expect(e.foeDied).toEqual({ kind: dead.kind, name: dead.name });
+    expect(e.foeAttack).toBe(false);
+    expect(e.foeHit).toBe(false);
+  });
+
+  it('on a death reports only the death, not the attacks the restart looks like', () => {
+    const prev = base();
+    const next = structuredClone(prev);
+    next.deaths += 1;
+    next.cultivator.nextAttackAt += 5;
+    next.enemyNextAttackAt += 5;
+    expect(stripEvents(prev, next)).toEqual({
+      youAttack: false,
+      foeAttack: false,
+      youHit: false,
+      foeHit: false,
+      youDied: true,
+      foeDied: null,
+    });
+  });
+
+  it('sees nothing when nothing happened', () => {
+    const prev = base();
+    expect(Object.values(stripEvents(prev, structuredClone(prev))).some(Boolean)).toBe(false);
+  });
+});
