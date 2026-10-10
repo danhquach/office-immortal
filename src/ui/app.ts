@@ -83,6 +83,18 @@ import {
 import { artUrl } from './art.ts';
 import { autosave, runs } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
+import {
+  BAG_SORT_DIRS,
+  BAG_SORT_NAMES,
+  BAG_SORTS,
+  bagOrder,
+  type BagSort,
+  pickBagSort,
+  readBagReverse,
+  readBagSort,
+  writeBagReverse,
+  writeBagSort,
+} from './sort.ts';
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
@@ -491,6 +503,9 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const osDark = matchMedia('(prefers-color-scheme: dark)');
 /** The theme picked this visit: kept across runs even where storage is blocked. */
 let pickedTheme: Theme | null = null;
+/** The bag sort picked this visit: kept across runs even where storage is blocked. */
+let pickedSort: BagSort | null = null;
+let pickedReverse: boolean | null = null;
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
@@ -523,6 +538,10 @@ function play(
   let cursor = 0;
   /** The inventory page shown; a run always starts on the first. */
   let page = 0;
+  /** How the bag is ordered, and the inventory index shown in each cell. */
+  let sort = pickedSort ?? readBagSort(storage);
+  let reverse = pickedReverse ?? readBagReverse(storage);
+  let order: number[] = [];
   /** Bumped by every equip, so gear redraws only when it changes. */
   let gearVersion = 0;
   let drawnGear = '';
@@ -840,11 +859,13 @@ function play(
       b.tabIndex = i === 0 ? 0 : -1;
       b.addEventListener('click', () => {
         setCursor(i);
-        select(state.inventory[i] ? { bag: i } : null);
+        const index = order[i];
+        select(index === undefined ? null : { bag: index });
         if (selected) revealDetails();
       });
       b.addEventListener('dblclick', () => {
-        if (state.inventory[i]) equipFromBag(i);
+        const index = order[i];
+        if (index !== undefined) equipFromBag(index);
       });
       b.addEventListener('pointerdown', (e) => startPress(e, i));
       bagCells.push(b);
@@ -874,7 +895,9 @@ function play(
   /** Turns to page `to`; a bag selection left on another page is cleared. */
   function showPage(to: number): void {
     page = to;
-    if (selected && 'bag' in selected && pageOf(selected.bag) !== page) selected = null;
+    if (selected && 'bag' in selected && pageOf(order.indexOf(selected.bag)) !== page) {
+      selected = null;
+    }
     setCursor(page * BAG_PAGE);
     draw(null);
   }
@@ -952,8 +975,33 @@ function play(
   const bagBtn = button('', '', () => act(buyBagSpace(state)));
   const bagTools = el('div', 'tools');
   bagTools.append(bulkRow, confirmBox, bagBtn);
+  // Sorting reorders the cells only: the bag itself stays in drop order.
+  const sortPick = choice(
+    'Sort by',
+    BAG_SORTS.map((s) => [s, BAG_SORT_NAMES[s]] as const),
+  );
+  sortPick.box.classList.add('sort');
+  sortPick.select.value = sort;
+  sortPick.select.addEventListener('change', () => {
+    sort = pickedSort = pickBagSort(sortPick.select.value);
+    writeBagSort(storage, sort);
+    draw(null);
+  });
+  // Flips the sort's direction; its text names the direction shown.
+  const sortDir = button('', '', () => {
+    reverse = pickedReverse = !reverse;
+    writeBagReverse(storage, reverse);
+    draw(null);
+  });
+  // The arrow is decorative; the words name the direction.
+  const sortArrow = el('span');
+  sortArrow.setAttribute('aria-hidden', 'true');
+  const sortDirText = el('span');
+  sortDir.append(sortArrow, sortDirText);
+  const sortRow = el('div', 'sort-row');
+  sortRow.append(sortPick.box, sortDir);
   const bagBody = el('div');
-  bagBody.append(grid, pager, bagTools);
+  bagBody.append(sortRow, grid, pager, bagTools);
 
   // Auto filter: a minimum grade, the item types kept, and what happens to the rest.
   const minGrade = choice(
@@ -1317,16 +1365,23 @@ function play(
     }
     const item = selectedItem();
     if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
-    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}`;
+    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}|${sort}|${reverse}`;
     if (key === drawnGear) return;
     drawnGear = key;
+    order = bagOrder(state.inventory, sort, reverse);
+    setText(sortArrow, reverse ? '↑ ' : '↓ ');
+    setText(sortDirText, BAG_SORT_DIRS[sort][reverse ? 1 : 0]);
 
     growBag();
     drawPage();
     inventory.heading.textContent = `Inventory (${state.inventory.length} / ${state.bagSize})`;
     bagCells.forEach((b, i) => {
-      fillCell(b, state.inventory[i], `Empty slot ${i + 1}`);
-      b.setAttribute('aria-pressed', String(!!selected && 'bag' in selected && selected.bag === i));
+      const index = order[i];
+      fillCell(b, index === undefined ? undefined : state.inventory[index], `Empty slot ${i + 1}`);
+      b.setAttribute(
+        'aria-pressed',
+        String(index !== undefined && !!selected && 'bag' in selected && selected.bag === index),
+      );
     });
     for (const slot of SLOT_IDS) {
       const b = slotCells[slot];
@@ -1475,19 +1530,21 @@ function play(
   }
 
   /**
-   * Sells or salvages the bag item at `index`. The selection stays on that
+   * Sells or salvages the bag item at `index`. The selection stays on its
    * cell, so the next item can be handled straight away; focus stays on the
    * same button, or goes to the cell when the bag has nothing left there.
    */
   function dispose(index: number, action: 'sell' | 'salvage'): void {
+    const at = order.indexOf(index);
     const next = (action === 'sell' ? sell : salvage)(state, index);
-    selected = next.inventory[index] ? { bag: index } : null;
+    const now = bagOrder(next.inventory, sort, reverse)[at];
+    selected = now === undefined ? null : { bag: now };
     act(next);
     const again = detailBody.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
     if (again) again.focus();
     else {
-      setCursor(index);
-      bagCells[index]?.focus();
+      setCursor(at);
+      bagCells[at]?.focus();
     }
   }
 
@@ -1503,8 +1560,9 @@ function play(
   // Drag to equip, for mouse and pen. Touch has tap to select and the Equip
   // button instead, so swiping over the grid still scrolls the page.
 
-  function startPress(e: PointerEvent, index: number): void {
-    if (e.pointerType === 'touch' || e.button !== 0 || !state.inventory[index]) return;
+  function startPress(e: PointerEvent, cell: number): void {
+    const index = order[cell];
+    if (e.pointerType === 'touch' || e.button !== 0 || index === undefined) return;
     drag = { index, x: e.clientX, y: e.clientY, ghost: null };
   }
 
@@ -1524,7 +1582,8 @@ function play(
         if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START_PX) return;
         const item = state.inventory[drag.index];
         if (!item) return endDrag();
-        const ghost = bagCells[drag.index]?.cloneNode(true) as HTMLElement;
+        // A drop since the press may have re-sorted the bag: clone the item's cell now.
+        const ghost = bagCells[order.indexOf(drag.index)]?.cloneNode(true) as HTMLElement;
         ghost.classList.add('ghost');
         ghost.setAttribute('aria-hidden', 'true');
         document.body.append(ghost);
