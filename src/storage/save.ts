@@ -7,7 +7,10 @@
 import {
   BASE_STAT,
   derive,
+  isRealmCap,
   PATHS,
+  readyForTribulation,
+  realmOf,
   STARTING_PRIMARY_BONUS,
   STAT_POINTS_PER_LEVEL,
   xpToNext,
@@ -28,6 +31,7 @@ import {
   DEMONS,
   DEMONS_PER_WAVE,
   makeEnemy,
+  makeTribulation,
   WAVES_PER_FLOOR,
   type Enemy,
   type EnemyKind,
@@ -223,13 +227,14 @@ function readState(v: unknown, version: number): GameState {
   if (v1) int(o.dropsLost, 0, COUNT);
   const bagSize = v1 ? INVENTORY_SIZE : int(o.bagSize, INVENTORY_SIZE, MAX_BAG_SIZE);
   if ((bagSize - INVENTORY_SIZE) % BAG_ROW !== 0) fail('bag size');
+  const cultivator = readCultivator(o.cultivator, time, highestFloor, v1);
   const state: GameState = {
     time,
     rng: { s: int(rng.s, 0, 0xffffffff) },
-    cultivator: readCultivator(o.cultivator, time, highestFloor, v1),
+    cultivator,
     floor,
     highestFloor,
-    enemies: readEnemies(o.enemies, floor),
+    enemies: readEnemies(o.enemies, floor, cultivator),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL),
     inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor)),
     bagSize,
@@ -290,7 +295,8 @@ function readCultivator(v: unknown, time: number, highestFloor: number, v1: bool
   const c: Cultivator = {
     path,
     level,
-    xp: int(o.xp, 0, xpToNext(level) - 1),
+    // XP past a realm cap is held until the Tribulation is won.
+    xp: int(o.xp, 0, isRealmCap(level) ? COUNT : xpToNext(level) - 1),
     stats,
     unspent,
     equipment,
@@ -309,23 +315,32 @@ const FLOOR_KINDS: readonly EnemyKind[] = [
   'elite',
   'boss',
 ];
-const NAMES: Readonly<Record<EnemyKind, readonly string[]>> = {
+const NAMES: Readonly<Record<Exclude<EnemyKind, 'tribulation'>, readonly string[]>> = {
   demon: DEMONS,
   elite: DEMONS.map((d) => `Elite ${d}`),
   boss: BOSSES,
 };
 
-function readEnemies(v: unknown, floor: number): Enemy[] {
-  const list = arr(v, FLOOR_KINDS.length);
+function readEnemies(v: unknown, floor: number, c: Cultivator): Enemy[] {
+  // A cultivator held at a cap has the realm's Tribulation at the end of the
+  // floor, and only then.
+  const ready = readyForTribulation(c);
+  const order: readonly EnemyKind[] = ready ? [...FLOOR_KINDS, 'tribulation'] : FLOOR_KINDS;
+  const list = arr(v, order.length);
   // A floor always has an enemy until it is cleared, and clearing starts the next one.
   if (list.length === 0) fail('no enemies');
-  const kinds = FLOOR_KINDS.slice(FLOOR_KINDS.length - list.length);
+  const kinds = order.slice(order.length - list.length);
   return list.map((e, i) => {
     const o = obj(e, ['name', 'kind', 'maxHp', 'hp', 'damage', 'defence', 'attackInterval', 'xp']);
     const kind = kinds[i] as EnemyKind;
     if (o.kind !== kind) fail('enemy order');
     // Rebuilt from the floor, so every number is the sim's own, not the save's.
-    const enemy = makeEnemy(floor, kind, oneOf(o.name, NAMES[kind]));
+    const enemy =
+      kind === 'tribulation'
+        ? makeTribulation(floor, realmOf(c.level))
+        : makeEnemy(floor, kind, oneOf(o.name, NAMES[kind]));
+    // The realm fixes the Tribulation's name; for the others oneOf already checked it.
+    if (o.name !== enemy.name) fail('enemy name');
     for (const k of ['maxHp', 'damage', 'defence', 'attackInterval', 'xp'] as const) {
       if (o[k] !== enemy[k]) fail(`enemy ${k}`);
     }

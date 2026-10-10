@@ -151,8 +151,12 @@ select {
 }
 .kpis {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 0.75rem;
+}
+/* The realm and its job title are the longest value; give it room. */
+.kpi.realm {
+  grid-column: span 2;
 }
 .kpi .label {
   display: block;
@@ -261,7 +265,8 @@ select {
   width: 48px;
   height: 48px;
 }
-.foe[data-kind='boss'] .sprite {
+.foe[data-kind='boss'] .sprite,
+.foe[data-kind='tribulation'] .sprite {
   width: 64px;
   height: 64px;
 }

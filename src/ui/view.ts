@@ -3,6 +3,9 @@
 
 import {
   derive,
+  readyForTribulation,
+  realmOf,
+  REALMS,
   xpToNext,
   type Cultivator,
   type Derived,
@@ -139,18 +142,27 @@ export function compareToEquipped(
   return lines;
 }
 
-/** Where the cultivator is on the floor: "Wave 2 / 3", "Elite" or "Boss". */
+/** Where the cultivator is on the floor: "Wave 2 / 3", "Elite", "Boss" or "Tribulation". */
 export function waveLabel(state: GameState): string {
+  if (state.enemies[0]?.kind === 'tribulation') return 'Tribulation';
   const waves = WAVES_PER_FLOOR * DEMONS_PER_WAVE;
-  const defeated = waves + 2 - state.enemies.length;
+  const left = state.enemies.filter((e) => e.kind !== 'tribulation').length;
+  const defeated = waves + 2 - left;
   if (defeated < waves)
     return `Wave ${Math.floor(defeated / DEMONS_PER_WAVE) + 1} / ${WAVES_PER_FLOOR}`;
   return defeated === waves ? 'Elite' : 'Boss';
 }
 
-/** XP towards the next level, e.g. "37 / 60". */
+/** XP towards the next level, e.g. "37 / 60"; at a realm cap, "480 / 400 · Tribulation due". */
 export function xpLabel(c: Cultivator): string {
-  return `${Math.floor(c.xp)} / ${xpToNext(c.level)}`;
+  const xp = `${Math.floor(c.xp)} / ${xpToNext(c.level)}`;
+  return readyForTribulation(c) ? `${xp} · Tribulation due` : xp;
+}
+
+/** The realm, with the job title beside it: "Foundation Establishment · Associate". */
+export function realmLabel(level: number): string {
+  const realm = REALMS[realmOf(level)] as (typeof REALMS)[number];
+  return realm.title ? `${realm.name} · ${realm.title}` : realm.name;
 }
 
 /** Items `tick` picked up between two states, newest first. tick() only appends to the bag. */

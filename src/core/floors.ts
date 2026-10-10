@@ -3,7 +3,7 @@
 
 import { pick, type Rng } from './rng.ts';
 
-export type EnemyKind = 'demon' | 'elite' | 'boss';
+export type EnemyKind = 'demon' | 'elite' | 'boss' | 'tribulation';
 
 export interface Enemy {
   name: string;
@@ -27,6 +27,16 @@ export const DEMONS = [
 
 export const BOSSES = ['Quarterly Review', 'The Auditor', 'Middle Manager'] as const;
 
+/** The Tribulation that closes each realm, by realm index (docs/design.md §4). */
+export const TRIBULATIONS = [
+  'Probation Review',
+  'Annual Appraisal',
+  'Restructuring',
+  'Hostile Takeover',
+  'Board Inquiry',
+  'Heavenly Audit',
+] as const;
+
 export const WAVES_PER_FLOOR = 3;
 export const DEMONS_PER_WAVE = 3;
 
@@ -39,6 +49,8 @@ const KINDS: Readonly<Record<EnemyKind, { hp: number; damage: number; xp: number
   demon: { hp: 1, damage: 1, xp: 1 },
   elite: { hp: 3, damage: 1.5, xp: 3 },
   boss: { hp: 6, damage: 2, xp: 8 },
+  // The reward is the breakthrough; XP would only be held at the cap anyway.
+  tribulation: { hp: 8, damage: 2.5, xp: 0 },
 };
 
 export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
@@ -55,6 +67,14 @@ export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
     attackInterval: 2,
     xp: Math.round(5 * XP_GROWTH ** (floor - 1) * k.xp),
   };
+}
+
+/** The Tribulation that closes realm `realm` (an index into REALMS below Immortal), on `floor`. */
+export function makeTribulation(floor: number, realm: number): Enemy {
+  const name = TRIBULATIONS[realm];
+  if (name === undefined)
+    throw new RangeError(`makeTribulation: no Tribulation for realm ${realm}`);
+  return makeEnemy(floor, 'tribulation', name);
 }
 
 /** Every enemy on a floor, in fighting order: the waves, then the elite, then the boss. */
