@@ -111,8 +111,15 @@ export function treasureTier(item: Item): string | null {
   return TREASURE_TIERS[item.grade];
 }
 
+/** The Stats tab's groups of derived numbers, in display order. */
+export const STAT_GROUPS = ['Offence', 'Defence', 'Find'] as const;
+export type StatGroup = (typeof STAT_GROUPS)[number];
+
 interface StatRow {
   label: string;
+  /** The label under its group heading, if shorter than `label`. */
+  short?: string;
+  group: StatGroup;
   value: (d: Derived) => number;
   format: (v: number) => string;
   /** How a change in this stat reads, if not the same as `format`. */
@@ -121,32 +128,80 @@ interface StatRow {
 
 /** The combat numbers on the character panel, in display order. */
 export const STAT_ROWS: readonly StatRow[] = [
-  { label: 'Max HP', value: (d) => d.maxHp, format: (v) => num(v, 0) },
-  { label: 'Damage', value: (d) => d.damage, format: (v) => num(v, 1) },
-  { label: 'Defence', value: (d) => d.defence, format: (v) => num(v, 1) },
-  { label: 'Attacks/s', value: (d) => 1 / d.attackInterval, format: (v) => num(v, 2) },
-  { label: 'Crit chance', value: (d) => d.critChance, format: (v) => `${num(v * 100, 1)}%` },
+  { label: 'Max HP', group: 'Defence', value: (d) => d.maxHp, format: (v) => num(v, 0) },
+  { label: 'Damage', group: 'Offence', value: (d) => d.damage, format: (v) => num(v, 1) },
+  { label: 'Defence', group: 'Defence', value: (d) => d.defence, format: (v) => num(v, 1) },
+  {
+    label: 'Attacks/s',
+    group: 'Offence',
+    value: (d) => 1 / d.attackInterval,
+    format: (v) => num(v, 2),
+  },
+  {
+    label: 'Crit chance',
+    group: 'Offence',
+    value: (d) => d.critChance,
+    format: (v) => `${num(v * 100, 1)}%`,
+  },
   {
     label: 'Crit damage',
+    group: 'Offence',
     value: (d) => d.critMultiplier,
     format: (v) => `×${num(v, 2)}`,
     // Matches the item card: a +0.15 multiplier reads "+15% Crit damage".
     delta: (v) => `${num(v * 100, 1)}%`,
   },
-  { label: 'Lifesteal', value: (d) => d.lifesteal, format: (v) => `${num(v * 100, 1)}%` },
-  { label: 'Qi regen', value: (d) => d.qiRegen, format: (v) => `${num(v * 100, 1)}%` },
-  { label: 'Spirit stone find', value: (d) => d.stoneFind, format: (v) => `${num(v * 100, 1)}%` },
-  { label: 'Treasure find', value: (d) => d.treasureFind, format: (v) => `${num(v * 100, 1)}%` },
+  {
+    label: 'Lifesteal',
+    group: 'Defence',
+    value: (d) => d.lifesteal,
+    format: (v) => `${num(v * 100, 1)}%`,
+  },
+  {
+    label: 'Qi regen',
+    group: 'Defence',
+    value: (d) => d.qiRegen,
+    format: (v) => `${num(v * 100, 1)}%`,
+  },
+  {
+    label: 'Spirit stone find',
+    short: 'Spirit stones',
+    group: 'Find',
+    value: (d) => d.stoneFind,
+    format: (v) => `${num(v * 100, 1)}%`,
+  },
+  {
+    label: 'Treasure find',
+    short: 'Treasure',
+    group: 'Find',
+    value: (d) => d.treasureFind,
+    format: (v) => `${num(v * 100, 1)}%`,
+  },
 ];
 
 /** The cultivator's numbers, with the passives that change them (treasure find). */
 export function statRows(
   c: Cultivator,
   passives: Passives = noPassives(),
-): { label: string; value: string }[] {
+): { label: string; short: string; group: StatGroup; value: string }[] {
   const d = derive(c);
   d.treasureFind += passiveTreasureFind(passives);
-  return STAT_ROWS.map((r) => ({ label: r.label, value: r.format(r.value(d)) }));
+  return STAT_ROWS.map((r) => ({
+    label: r.label,
+    short: r.short ?? r.label,
+    group: r.group,
+    value: r.format(r.value(d)),
+  }));
+}
+
+/** A Respec action (stat reset, Path change): its cost, whether it is off, and why. */
+export function respecView(
+  cost: number,
+  stones: number,
+  nothingToDo = false,
+): { cost: string; off: boolean; why: string } {
+  const why = nothingToDo ? 'Nothing to reset' : stones < cost ? `Need ${cost - stones} more` : '';
+  return { cost: `${cost} Spirit Stones`, off: why !== '', why };
 }
 
 /**

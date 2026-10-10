@@ -712,21 +712,7 @@ select {
   background: var(--hp-foe);
   margin-left: auto;
 }
-/* Stats and items */
-.stats {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.15rem 1rem;
-  margin: 0 0 0.75rem;
-}
-.stats dt {
-  color: var(--muted);
-}
-.stats dd {
-  margin: 0;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
+/* Items */
 /* Item cells: the bag grid and the equipment slots. The grade shows three
    ways: border colour, grade initial and (in the accessible name) the word. */
 .bag {
@@ -1185,9 +1171,118 @@ button.primary {
   color: var(--muted);
   font-size: 0.85rem;
 }
-.points p {
-  margin: 0.5rem 0 0;
+/* Stats tab: base stats with their spend buttons, the derived numbers in
+   groups, then Respec */
+.statstab h3 {
+  font-size: 0.9rem;
+}
+.statstab .head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0 0.4rem;
+}
+.unspent {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.base:not(.none) .unspent {
+  padding: 0 0.45rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
   font-weight: 600;
+}
+.base-list {
+  list-style: none;
+  margin: 0.2rem 0 0;
+  padding: 0;
+}
+.base-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.base-list .value {
+  min-width: 2.5rem;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.base-list .spend {
+  padding: 0 0.45rem;
+  font-size: 0.85rem;
+}
+/* No points: the buttons leave the tab order but keep their space. */
+.base.none .spend {
+  visibility: hidden;
+}
+.derived h3 {
+  margin: 0.5rem 0 0.1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.derived dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  gap: 0.05rem 0.5rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+.derived dt {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.derived dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.respec {
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.45rem;
+  margin-top: 0.6rem;
+}
+.respec .info {
+  padding: 0 0.4rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+.respec .hint {
+  margin: 0.2rem 0 0;
+}
+.respec .line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  margin-top: 0.4rem;
+}
+.respec select {
+  flex: 1 1 6rem;
+  min-width: 0;
+}
+.respec .meta {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.4rem;
+  font-size: 0.8rem;
+}
+.respec .cost {
+  font-weight: 600;
+}
+.respec .why {
+  color: var(--down);
 }
 .drops {
   list-style: none;
