@@ -18,6 +18,9 @@ import {
   OFFLINE_DROP_MULTIPLIER,
   equipmentBonuses,
   equippedArray,
+  favouredAffixes,
+  itemPath,
+  PATH_FAVOURS,
   isDisc,
   GRADES,
   namesFor,
@@ -37,6 +40,7 @@ import {
 } from './loot.ts';
 import { createRng, type Rng } from './rng.ts';
 import { makeFloor } from './floors.ts';
+import type { PathId } from './cultivator.ts';
 
 const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
@@ -704,7 +708,7 @@ describe('Charm lines', () => {
       const rng = createRng(77);
       const seen = new Map<AffixId, number>();
       for (let i = 0; i < N; i++) {
-        const [a] = drawAffixes(rng, 1, line);
+        const [a] = drawAffixes(rng, 1, CHARM_LINES[line].favours);
         seen.set(a?.id as AffixId, (seen.get(a?.id as AffixId) ?? 0) + 1);
       }
       for (const id of AFFIX_IDS) {
@@ -718,7 +722,7 @@ describe('Charm lines', () => {
   it('never repeats an affix, and can still roll every affix on every line', () => {
     const rng = createRng(5);
     for (const line of LINE_IDS) {
-      const all = drawAffixes(rng, AFFIX_IDS.length, line).map((a) => a.id);
+      const all = drawAffixes(rng, AFFIX_IDS.length, CHARM_LINES[line].favours).map((a) => a.id);
       expect(new Set(all).size).toBe(AFFIX_IDS.length);
     }
     for (const line of LINE_IDS) {
@@ -750,7 +754,7 @@ describe('Charm lines', () => {
       return out;
     };
     for (let seed = 1; seed <= 200; seed++) {
-      expect(drawAffixes(createRng(seed), 1 + (seed % 5), null)).toEqual(
+      expect(drawAffixes(createRng(seed), 1 + (seed % 5), [])).toEqual(
         legacy(createRng(seed), 1 + (seed % 5)),
       );
     }
@@ -823,5 +827,126 @@ describe('Charm lines', () => {
     }
     const base = LINE_IDS.map((_, line) => baseValue(charm('earth', line)));
     expect(new Set(base).size).toBe(1);
+  });
+});
+
+describe('Path lean', () => {
+  // Each family by type, in names order, and the Path it leans to (docs/design.md §6).
+  const LEANS: Partial<Record<SlotId, readonly (PathId | null)[]>> = {
+    weapon: ['sword', 'talisman', 'sword', 'talisman', 'body'],
+    sideArm: ['sword', 'body'],
+    accessory: ['body', 'talisman', 'sword'],
+  };
+  const NEUTRAL: SlotId[] = ['head', 'chest', 'boots', 'attachment', 'charm'];
+
+  it('matches the docs/design.md favoured affixes per Path', () => {
+    expect(PATH_FAVOURS).toEqual({
+      sword: ['critChance', 'critDamage', 'attackSpeed'],
+      body: ['maxHp', 'defence', 'lifesteal'],
+      talisman: ['qiRegen', 'critDamage', 'attackSpeed'],
+    });
+  });
+
+  it('gives every leaning family of every grade its Path, and neutral types none', () => {
+    for (const g of GRADE_IDS) {
+      for (const [slot, paths] of Object.entries(LEANS) as [SlotId, PathId[]][]) {
+        namesFor(slot, g).forEach((name, i) =>
+          expect(itemPath({ slot, name, grade: g }), `${g} ${name}`).toBe(paths[i]),
+        );
+      }
+      for (const slot of NEUTRAL) {
+        for (const name of namesFor(slot, g)) {
+          expect(itemPath({ slot, name, grade: g }), `${g} ${name}`).toBeNull();
+        }
+      }
+    }
+  });
+
+  it('leans no unknown name, wrong-grade name or hostile key', () => {
+    expect(itemPath({ slot: 'weapon', name: 'Iron Flying Sword ', grade: 'mortal' })).toBeNull();
+    expect(itemPath({ slot: 'weapon', name: 'Heaven-Crushing Seal', grade: 'mortal' })).toBeNull();
+    expect(itemPath({ slot: 'weapon', name: '__proto__', grade: 'mortal' })).toBeNull();
+    expect(
+      itemPath({ slot: 'weapon', name: 'Iron Flying Sword', grade: '__proto__' as GradeId }),
+    ).toBeNull();
+    expect(
+      itemPath({ slot: 'constructor' as SlotId, name: 'Iron Flying Sword', grade: 'mortal' }),
+    ).toBeNull();
+    expect(itemPath({ slot: 'head', name: 'Iron Flying Sword', grade: 'mortal' })).toBeNull();
+  });
+
+  it("favours a leaning family's Path affixes and a Charm's line affixes", () => {
+    expect(favouredAffixes({ slot: 'weapon', name: 'Feather Fan', grade: 'mortal' })).toEqual(
+      PATH_FAVOURS.talisman,
+    );
+    expect(
+      favouredAffixes({ slot: 'charm', name: 'Paper Body-Guard Talisman', grade: 'mortal' }),
+    ).toEqual(CHARM_LINES.defend.favours);
+    expect(favouredAffixes({ slot: 'head', name: 'Hempen Scholar Cap', grade: 'mortal' })).toEqual(
+      [],
+    );
+  });
+
+  it("draws a leaning family's favoured affixes at the designed rate over 100k drops", () => {
+    // First affix of each seeded drop: three of nine weigh 3, so a favoured one
+    // comes up 3/15 of the time and any other 1/15.
+    for (const [slot, paths] of Object.entries(LEANS) as [SlotId, PathId[]][]) {
+      for (const path of new Set(paths)) {
+        const first = MANY.filter(
+          (i) => i.slot === slot && itemPath(i) === path && i.affixes.length,
+        ).map((i) => (i.affixes[0] as { id: AffixId }).id);
+        // Enough that 5 sd at 3/15 (under 0.071) can't reach the even 1/9: a lost lean fails.
+        expect(first.length, `${slot} ${path}`).toBeGreaterThan(800);
+        for (const id of AFFIX_IDS) {
+          const p = PATH_FAVOURS[path].includes(id) ? 3 / 15 : 1 / 15;
+          const got = first.filter((a) => a === id).length / first.length;
+          const sd = Math.sqrt((p * (1 - p)) / first.length);
+          expect(Math.abs(got - p), `${slot} ${path} ${id}`).toBeLessThan(5 * sd);
+        }
+      }
+    }
+    // The bare draw, at full precision.
+    for (const path of Object.keys(PATH_FAVOURS) as PathId[]) {
+      const rng = createRng(91);
+      const seen = new Map<AffixId, number>();
+      for (let i = 0; i < N; i++) {
+        const id = (drawAffixes(rng, 1, PATH_FAVOURS[path])[0] as { id: AffixId }).id;
+        seen.set(id, (seen.get(id) ?? 0) + 1);
+      }
+      for (const id of AFFIX_IDS) {
+        const p = PATH_FAVOURS[path].includes(id) ? 3 / 15 : 1 / 15;
+        const got = (seen.get(id) ?? 0) / N;
+        expect(Math.abs(got - p), `${path} ${id}`).toBeLessThan(5 * Math.sqrt((p * (1 - p)) / N));
+      }
+    }
+  });
+
+  it('keeps neutral non-Charm families on the even draw', () => {
+    for (const slot of ['head', 'chest', 'boots', 'attachment'] as SlotId[]) {
+      const first = MANY.filter((i) => i.slot === slot && i.affixes.length).map(
+        (i) => (i.affixes[0] as { id: AffixId }).id,
+      );
+      for (const id of AFFIX_IDS) {
+        const got = first.filter((a) => a === id).length / first.length;
+        const sd = Math.sqrt(((1 / 9) * (8 / 9)) / first.length);
+        expect(Math.abs(got - 1 / 9), `${slot} ${id}`).toBeLessThan(5 * sd);
+      }
+    }
+  });
+
+  it('can still roll every affix on every leaning family, and keeps the affix count per grade', () => {
+    for (const [slot, paths] of Object.entries(LEANS) as [SlotId, PathId[]][]) {
+      for (const path of new Set(paths)) {
+        const of = MANY.filter((i) => i.slot === slot && itemPath(i) === path);
+        const seen = new Set(of.flatMap((i) => i.affixes.map((a) => a.id)));
+        expect(seen, `${slot} ${path}`).toEqual(new Set(AFFIX_IDS));
+        for (const i of of) {
+          const [min, max] = GRADES[i.grade].affixes;
+          expect(i.affixes.length).toBeGreaterThanOrEqual(min);
+          expect(i.affixes.length).toBeLessThanOrEqual(max);
+          expect(new Set(i.affixes.map((a) => a.id)).size).toBe(i.affixes.length);
+        }
+      }
+    }
   });
 });

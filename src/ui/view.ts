@@ -9,6 +9,7 @@ import {
   xpToNext,
   type Cultivator,
   type Derived,
+  PATHS,
   type PathId,
 } from '../core/cultivator.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
@@ -21,6 +22,7 @@ import {
   CHARM_LINES,
   charmLine,
   itemAffixValue,
+  itemPath,
   GRADES,
   OFFLINE_DROP_MULTIPLIER,
   quality,
@@ -136,6 +138,15 @@ export function treasureTier(item: Item): string | null {
 export function charmLineName(item: Item): string | null {
   const line = charmLine(item);
   return line ? CHARM_LINES[line].name : null;
+}
+
+/**
+ * The Path an item's family leans toward, for its details, e.g. "Favoured by:
+ * Body Refiner"; `match` when it is the player's Path. Null for a neutral item.
+ */
+export function favouredBy(item: Item, path: PathId): { text: string; match: boolean } | null {
+  const lean = itemPath(item);
+  return lean ? { text: `Favoured by: ${PATHS[lean].name}`, match: lean === path } : null;
 }
 
 /**

@@ -88,6 +88,7 @@ import {
   arraySetUp,
   cellLabel,
   charmLineName,
+  favouredBy,
   compareToEquipped,
   equipBlock,
   freshDrops,
@@ -1260,6 +1261,8 @@ function play(
     if (tier) name.append(el('div', 'muted', tier));
     const line = charmLineName(item);
     if (line) name.append(el('div', 'muted', line));
+    const lean = favouredBy(item, state.cultivator.path);
+    if (lean) name.append(el('div', lean.match ? 'up' : 'muted', lean.text));
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {
