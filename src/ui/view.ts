@@ -374,35 +374,67 @@ export function overtimeLines(summary: OvertimeSummary): string[] {
   return lines;
 }
 
-/** A passive's shop line, e.g. "Seniority 2/20: +10% XP. Next rank: 8 Dao Insight". */
-export function passiveLabel(passives: Passives, id: PassiveId): string {
+/** How a passive's row looks: affordable, too dear, or at max rank. */
+export type PassiveState = 'can' | 'cant' | 'max';
+
+/** A passive's shop row: name and rank, the buy button, and the detail shown on expand. */
+export interface PassiveRow {
+  name: string;
+  /** e.g. "2/20". */
+  rank: string;
+  state: PassiveState;
+  /** The button's text, e.g. "Buy 8" or "Max". */
+  buy: string;
+  /** The button's accessible name; starts with its text. */
+  buyName: string;
+  /** e.g. "+10% XP per rank. Next rank: 8 Dao Insight." */
+  detail: string;
+}
+
+export function passiveRow(passives: Passives, insight: number, id: PassiveId): PassiveRow {
   const p = PASSIVES[id];
+  const rank = passives[id];
   const cost = passiveCost(passives, id);
-  const next = cost === null ? 'Max rank' : `Next rank: ${cost} Dao Insight`;
-  return `${p.name} ${passives[id]}/${p.maxRank}: ${p.perRankText} per rank. ${next}`;
+  const rankText = `${rank}/${p.maxRank}`;
+  if (cost === null) {
+    return {
+      name: p.name,
+      rank: rankText,
+      state: 'max',
+      buy: 'Max',
+      buyName: `Max: ${p.name} is at rank ${rank} of ${p.maxRank}`,
+      detail: `${p.perRankText} per rank. Max rank.`,
+    };
+  }
+  return {
+    name: p.name,
+    rank: rankText,
+    state: insight >= cost ? 'can' : 'cant',
+    buy: `Buy ${cost}`,
+    buyName: `Buy ${cost} Dao Insight: ${p.name} rank ${rank + 1} of ${p.maxRank}`,
+    detail: `${p.perRankText} per rank. Next rank: ${cost} Dao Insight.`,
+  };
 }
 
 /** The Early Retirement button, or why it is off. */
 export function retireLabel(p: RetirePreview): string {
-  return p.insight > 0
-    ? `Retire early for ${p.insight} Dao Insight…`
-    : `Reach floor ${RETIRE_MIN_FLOOR} to retire early`;
+  return p.insight > 0 ? 'Retire early…' : `Reach floor ${RETIRE_MIN_FLOOR} to retire early`;
 }
 
-/** The Early Retirement confirmation: what is kept and what is lost. */
+/** The Early Retirement confirmation: what is kept and what is lost, one short line each. */
 export function retireLines(p: RetirePreview): { kept: string[]; lost: string[] } {
-  const items = p.items === 1 ? '1 item' : `${p.items} items`;
   const lost = [
-    `Level ${p.level} and floor ${p.highestFloor}: back to level 1, floor 1`,
-    `${items}, in the bag and equipped`,
-    `${p.stones} Spirit Stones and ${p.essence} Spirit Essence`,
+    `Level ${p.level}, floor ${p.highestFloor}`,
+    p.items === 1 ? '1 item (bag and worn)' : `${p.items} items (bag and worn)`,
+    `${p.stones} Spirit Stones`,
+    `${p.essence} Spirit Essence`,
   ];
   if (p.bagCells > 0) lost.push(`${p.bagCells} bought bag slots`);
   return {
     kept: [
-      `Dao Insight: +${p.insight} (${p.insightAfter} to spend)`,
-      'Passives bought with Dao Insight',
-      'Your Path and auto filter',
+      `+${p.insight} Dao Insight (${p.insightAfter} total)`,
+      'Passives',
+      'Path and auto filter',
     ],
     lost,
   };

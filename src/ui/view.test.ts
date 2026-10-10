@@ -13,7 +13,7 @@ import {
   itemTag,
   treasureTier,
   overtimeLines,
-  passiveLabel,
+  passiveRow,
   realmLabel,
   retireLabel,
   retireLines,
@@ -194,21 +194,18 @@ describe('Early Retirement', () => {
   };
 
   it('labels the button with the insight, or the floor still needed', () => {
-    expect(retireLabel(preview)).toBe('Retire early for 8 Dao Insight…');
+    expect(retireLabel(preview)).toBe('Retire early…');
     expect(retireLabel({ ...preview, insight: 0 })).toBe('Reach floor 10 to retire early');
   });
 
   it('lists what is kept and what is lost', () => {
     expect(retireLines(preview)).toEqual({
-      kept: [
-        'Dao Insight: +8 (11 to spend)',
-        'Passives bought with Dao Insight',
-        'Your Path and auto filter',
-      ],
+      kept: ['+8 Dao Insight (11 total)', 'Passives', 'Path and auto filter'],
       lost: [
-        'Level 14 and floor 20: back to level 1, floor 1',
-        '9 items, in the bag and equipped',
-        '1500 Spirit Stones and 40 Spirit Essence',
+        'Level 14, floor 20',
+        '9 items (bag and worn)',
+        '1500 Spirit Stones',
+        '40 Spirit Essence',
         '8 bought bag slots',
       ],
     });
@@ -216,18 +213,37 @@ describe('Early Retirement', () => {
 
   it('leaves out bag slots when none were bought, and counts one item', () => {
     const { lost } = retireLines({ ...preview, items: 1, bagCells: 0 });
-    expect(lost).toContain('1 item, in the bag and equipped');
+    expect(lost).toContain('1 item (bag and worn)');
     expect(lost.some((l) => l.includes('bag slots'))).toBe(false);
   });
 
-  it('shows a passive’s rank, effect and next cost', () => {
+  it('shows a passive’s rank, buy button and detail, by state', () => {
     const p = { ...noPassives(), xp: 2, offline: 8 };
-    expect(passiveLabel(p, 'xp')).toBe(
-      'Seniority 2/20: +10% XP per rank. Next rank: 8 Dao Insight',
-    );
-    expect(passiveLabel(p, 'offline')).toBe(
-      'Flexible Hours 8/8: +1 h Overtime Cultivation cap per rank. Max rank',
-    );
+    expect(passiveRow(p, 8, 'xp')).toEqual({
+      name: 'Seniority',
+      rank: '2/20',
+      state: 'can',
+      buy: 'Buy 8',
+      buyName: 'Buy 8 Dao Insight: Seniority rank 3 of 20',
+      detail: '+10% XP per rank. Next rank: 8 Dao Insight.',
+    });
+    expect(passiveRow(p, 7, 'xp').state).toBe('cant');
+    expect(passiveRow(p, 1000, 'offline')).toEqual({
+      name: 'Flexible Hours',
+      rank: '8/8',
+      state: 'max',
+      buy: 'Max',
+      buyName: 'Max: Flexible Hours is at rank 8 of 8',
+      detail: '+1 h Overtime Cultivation cap per rank. Max rank.',
+    });
+  });
+
+  it('starts every buy button’s accessible name with its visible text', () => {
+    const p = { ...noPassives(), offline: 8 };
+    for (const id of ['xp', 'treasure', 'offline', 'points'] as const) {
+      const row = passiveRow(p, 5, id);
+      expect(row.buyName.startsWith(row.buy)).toBe(true);
+    }
   });
 });
 
