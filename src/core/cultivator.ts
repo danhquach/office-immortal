@@ -60,6 +60,8 @@ export interface Cultivator {
   /** XP towards the next level. */
   xp: number;
   stats: Stats;
+  /** Stat points taken back by a reset and not yet spent. */
+  unspent: number;
   equipment: Equipment;
   hp: number;
   /** Sim time of the next attack, in seconds. */
@@ -118,6 +120,7 @@ export function newCultivator(path: PathId): Cultivator {
     level: 1,
     xp: 0,
     stats,
+    unspent: 0,
     equipment: {},
     hp: 0,
     nextAttackAt: 0,

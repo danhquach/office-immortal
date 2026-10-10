@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { buyBagSpace, resetStats, setFilter, spendPoints } from '../core/economy.ts';
+import type { Item } from '../core/loot.ts';
 import { equip, newGame, tick, type GameState } from '../core/sim.ts';
 import {
   decodeSave,
@@ -145,7 +147,7 @@ describe('rejects', () => {
   });
 
   it.each([
-    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 2)],
+    ['an unknown version', (s: ReturnType<typeof raw>) => void (s.v = 3)],
     ['a version as text', (s: ReturnType<typeof raw>) => void ((s as J).v = '1')],
     ['a missing state', (s: ReturnType<typeof raw>) => void delete (s as J).state],
     ['an extra top-level key', (s: ReturnType<typeof raw>) => void ((s as J).admin = true)],
@@ -341,6 +343,142 @@ describe('rejects', () => {
           s.state.enemies = [list[list.length - 1], list[list.length - 1]];
         }),
       ).toBeNull();
+    });
+  });
+
+  describe('currencies, the filter and the bag', () => {
+    const filter = (s: ReturnType<typeof raw>) => s.state.filter as J;
+    it.each([
+      ['negative stones', (s: ReturnType<typeof raw>) => void (s.state.stones = -1)],
+      ['fractional essence', (s: ReturnType<typeof raw>) => void (s.state.essence = 1.5)],
+      ['unsafe stones', (s: ReturnType<typeof raw>) => void (s.state.stones = 2 ** 60)],
+      ['stones as text', (s: ReturnType<typeof raw>) => void (s.state.stones = '9')],
+      ['a bag below the start', (s: ReturnType<typeof raw>) => void (s.state.bagSize = 32)],
+      ['a bag past the cap', (s: ReturnType<typeof raw>) => void (s.state.bagSize = 88)],
+      ['a bag off the row size', (s: ReturnType<typeof raw>) => void (s.state.bagSize = 41)],
+      ['negative drops sold', (s: ReturnType<typeof raw>) => void (s.state.dropsSold = -1)],
+      ['a v1 drop count', (s: ReturnType<typeof raw>) => void (s.state.dropsLost = 0)],
+      ['no filter', (s: ReturnType<typeof raw>) => void delete s.state.filter],
+      ['an unknown filter grade', (s: ReturnType<typeof raw>) => void (filter(s).minGrade = 'x')],
+      ['an unknown filter action', (s: ReturnType<typeof raw>) => void (filter(s).action = 'burn')],
+      ['an unknown filter type', (s: ReturnType<typeof raw>) => void (filter(s).slots = ['cape'])],
+      [
+        'a repeated filter type',
+        (s: ReturnType<typeof raw>) => void (filter(s).slots = ['head', 'head']),
+      ],
+      [
+        'filter types out of order',
+        (s: ReturnType<typeof raw>) => void (filter(s).slots = ['charm', 'head']),
+      ],
+      [
+        'too many filter types',
+        (s: ReturnType<typeof raw>) => void (filter(s).slots = Array(9).fill('head')),
+      ],
+      ['an extra filter key', (s: ReturnType<typeof raw>) => void (filter(s).keepAll = true)],
+      ['a filter as an array', (s: ReturnType<typeof raw>) => void (s.state.filter = [])],
+      [
+        'a zero-width filter grade',
+        (s: ReturnType<typeof raw>) => void (filter(s).minGrade = 'earth\u200b'),
+      ],
+      [
+        'a bidi filter action',
+        (s: ReturnType<typeof raw>) => void (filter(s).action = '\u202esell'),
+      ],
+      [
+        'a look-alike filter type',
+        (s: ReturnType<typeof raw>) => void (filter(s).slots = ['h\u0435ad']),
+      ],
+      ['a padded filter action', (s: ReturnType<typeof raw>) => void (filter(s).action = ' sell')],
+      ['unspent points as text', (s: ReturnType<typeof raw>) => void (cult(s).unspent = '3')],
+      ['unspent points from nowhere', (s: ReturnType<typeof raw>) => void (cult(s).unspent = 3)],
+      [
+        'a stat below the base',
+        (s: ReturnType<typeof raw>) => void ((cult(s).stats as J).body = 0),
+      ],
+    ])('%s', (_, change) => {
+      expect(tampered(change)).toBeNull();
+    });
+
+    it('a pollution key in the filter', () => {
+      const text = encodeSave(STATE, SAVED_AT).replace(
+        '"filter":{',
+        '"filter":{"__proto__":{"polluted":true},',
+      );
+      expect(decodeSave(text)).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
+    });
+
+    it('round-trips a set filter, a bigger bag and unspent points', () => {
+      let s = { ...STATE, stones: 1e6 };
+      s = setFilter(s, { minGrade: 'earth', slots: ['weapon', 'charm'], action: 'salvage' });
+      s = buyBagSpace(buyBagSpace(s));
+      s = resetStats(s);
+      s = spendPoints(s, 'body', 2);
+      expect(s.cultivator.unspent).toBeGreaterThan(0);
+      expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+    });
+
+    it('a bag over 40 once the bag has been upgraded', () => {
+      const s = buyBagSpace({ ...STATE, stones: 1e6 });
+      const bag = Array.from({ length: s.bagSize }, () => s.inventory[0] as Item);
+      expect(decodeSave(encodeSave({ ...s, inventory: bag }, SAVED_AT))).not.toBeNull();
+      const over = [...bag, bag[0] as Item];
+      expect(decodeSave(encodeSave({ ...s, inventory: over }, SAVED_AT))).toBeNull();
+    });
+  });
+
+  describe('a version 1 save', () => {
+    /** The save as v1 wrote it: no currencies, filter, bag size or unspent points. */
+    function v1(): string {
+      const save = raw();
+      const st = save.state;
+      for (const k of ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']) {
+        delete st[k];
+      }
+      st.dropsLost = 3;
+      delete cult(save).unspent;
+      return JSON.stringify({ ...save, v: 1 });
+    }
+
+    it('loads, with the new fields at their defaults', () => {
+      const loaded = decodeSave(v1());
+      expect(loaded?.state).toEqual({
+        ...STATE,
+        bagSize: 40,
+        stones: 0,
+        essence: 0,
+        filter: newGame(1, 'sword').filter,
+        dropsSold: 0,
+        dropsSalvaged: 0,
+      });
+    });
+
+    it.each([
+      ['the state', '"state":{'],
+      ['the cultivator', '"cultivator":{'],
+    ])('rejects a pollution key in a v1 save: %s', (_, at) => {
+      const text = v1().replace(at, `${at}"__proto__":{"polluted":true},`);
+      expect(text).toContain('__proto__');
+      expect(decodeSave(text)).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
+    });
+
+    it('rejects a v1 save that carries unspent points', () => {
+      const save = JSON.parse(v1());
+      save.state.cultivator.unspent = 0;
+      expect(decodeSave(JSON.stringify(save))).toBeNull();
+    });
+
+    it('is still checked: a v1 save with v2 fields, or tampered, is rejected', () => {
+      const withStones = JSON.parse(v1());
+      withStones.state.stones = 5;
+      expect(decodeSave(JSON.stringify(withStones))).toBeNull();
+      const noLost = JSON.parse(v1());
+      delete noLost.state.dropsLost;
+      expect(decodeSave(JSON.stringify(noLost))).toBeNull();
+      const badLost = JSON.parse(v1());
+      badLost.state.dropsLost = -1;
+      expect(decodeSave(JSON.stringify(badLost))).toBeNull();
     });
   });
 });

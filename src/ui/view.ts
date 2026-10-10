@@ -19,6 +19,7 @@ import {
   UNIQUES,
   type BonusStat,
   type EquipSlotId,
+  type GradeId,
   type Item,
   type SlotId,
 } from '../core/loot.ts';
@@ -157,6 +158,17 @@ export function freshDrops(prev: GameState, next: GameState): Item[] {
   return next.inventory.slice(prev.inventory.length).reverse();
 }
 
+/** The bulk-sell confirmation, e.g. "Sell 12 items (best: Spirit) for 340 Spirit Stones?". */
+export function sellBelowLabel(p: {
+  count: number;
+  highest: GradeId | null;
+  stones: number;
+}): string {
+  if (p.count === 0 || p.highest === null) return 'Nothing to sell below that grade.';
+  const items = p.count === 1 ? '1 item' : `${p.count} items`;
+  return `Sell ${items} (highest grade: ${GRADES[p.highest].name}) for ${p.stones} Spirit Stones?`;
+}
+
 /** The short code on an item's grid cell, standing in until item icons exist. */
 export const SLOT_CODES: Readonly<Record<SlotId, string>> = {
   head: 'Hd',
@@ -209,6 +221,9 @@ export function overtimeLines(summary: OvertimeSummary): string[] {
     `Kills: ${summary.kills}`,
     `Drops kept: ${summary.dropsKept}`,
   ];
-  if (summary.dropsLost > 0) lines.push(`Lost to a full bag: ${summary.dropsLost}`);
+  if (summary.dropsSold > 0) lines.push(`Drops sold: ${summary.dropsSold}`);
+  if (summary.dropsSalvaged > 0) lines.push(`Drops salvaged: ${summary.dropsSalvaged}`);
+  lines.push(`Spirit Stones: +${summary.stones}`);
+  if (summary.essence > 0) lines.push(`Spirit Essence: +${summary.essence}`);
   return lines;
 }

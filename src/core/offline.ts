@@ -17,7 +17,11 @@ export interface OvertimeSummary {
   levels: number;
   kills: number;
   dropsKept: number;
-  dropsLost: number;
+  /** Drops sold or salvaged on pickup, by the filter or a full bag. */
+  dropsSold: number;
+  dropsSalvaged: number;
+  stones: number;
+  essence: number;
 }
 
 /**
@@ -50,7 +54,10 @@ export function catchUp(
       kills: after.kills - state.kills,
       // tick() only ever adds to the bag (equipping is the player's move).
       dropsKept: after.inventory.length - state.inventory.length,
-      dropsLost: after.dropsLost - state.dropsLost,
+      dropsSold: after.dropsSold - state.dropsSold,
+      dropsSalvaged: after.dropsSalvaged - state.dropsSalvaged,
+      stones: after.stones - state.stones,
+      essence: after.essence - state.essence,
     },
   };
 }

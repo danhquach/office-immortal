@@ -1,22 +1,48 @@
 // The page: a saved run (after its Overtime Cultivation catch-up) or the
 // first-run Path choice, then the combat strip, KPI tiles, character panel,
-// inventory grid, item details and recent drops (docs/design.md §5, §6, §10,
-// §14). Text reaches the page only through textContent. The sim decides
-// everything; this file only shows state, passes the player's equip choices
-// back in and saves.
+// inventory grid with its auto filter, item details and recent drops
+// (docs/design.md §5–§8, §10, §14). Text reaches the page only through
+// textContent. The sim decides everything; this file only shows state, passes
+// the player's choices (equip, sell, salvage, filter, spending) back in and
+// saves.
 
-import { derive, PATHS, type PathId } from '../core/cultivator.ts';
+import { derive, PATHS, type PathId, type StatId } from '../core/cultivator.ts';
+import {
+  BAG_ROW,
+  bagCost,
+  buyBagSpace,
+  canResetStats,
+  changePath,
+  essenceValue,
+  GRADE_IDS,
+  pathChangeCost,
+  resetStats,
+  salvage,
+  sell,
+  sellBelow,
+  sellBelowPreview,
+  sellPrice,
+  setFilter,
+  // Item types, not the equipment positions this file calls SLOT_IDS.
+  SLOT_IDS as ITEM_TYPES,
+  spendPoints,
+  statResetCost,
+  type FilterAction,
+} from '../core/economy.ts';
 import {
   defaultSlot,
   EQUIP_SLOTS,
   GRADES,
   quality,
+  SLOTS,
   slotsFor,
   type EquipSlotId,
+  type GradeId,
   type Item,
+  type SlotId,
 } from '../core/loot.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
-import { equip, INVENTORY_SIZE, newGame, tick, type GameState } from '../core/sim.ts';
+import { equip, newGame, tick, type GameState } from '../core/sim.ts';
 import { browserStorage, loadSave, writeSave, type SaveStorage } from '../storage/save.ts';
 import { autosave, runs } from './run.ts';
 import {
@@ -28,6 +54,7 @@ import {
   itemTag,
   overtimeLines,
   PATH_BLURBS,
+  sellBelowLabel,
   SLOT_CODES,
   statRows,
   waveLabel,
@@ -42,6 +69,11 @@ const RECENT_DROPS = 8;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
+const STAT_NAMES: readonly [StatId, string][] = [
+  ['body', 'Body'],
+  ['agility', 'Agility'],
+  ['spirit', 'Spirit'],
+];
 
 type Tag = keyof HTMLElementTagNameMap;
 
@@ -50,6 +82,41 @@ function el<K extends Tag>(tag: K, className = '', text = ''): HTMLElementTagNam
   if (className) node.className = className;
   if (text) node.textContent = text;
   return node;
+}
+
+function button(text: string, className = '', onClick?: () => void): HTMLButtonElement {
+  const b = el('button', className, text);
+  b.type = 'button';
+  // Off buttons are aria-disabled, not disabled, so one that turns off under the
+  // player's focus (a purchase they can no longer afford) keeps that focus.
+  if (onClick) {
+    b.addEventListener('click', () => {
+      if (b.getAttribute('aria-disabled') !== 'true') onClick();
+    });
+  }
+  return b;
+}
+
+/** A labelled <select> of `options` ([value, text] pairs). */
+function choice(
+  label: string,
+  options: readonly (readonly [string, string])[],
+): { box: HTMLLabelElement; select: HTMLSelectElement } {
+  const box = el('label', 'field', label);
+  const select = el('select');
+  for (const [value, text] of options) {
+    const o = el('option', '', text);
+    o.value = value;
+    select.append(o);
+  }
+  box.append(select);
+  return { box, select };
+}
+
+/** Sets text and on/off only when they change, so a redraw every tick never flickers. */
+function setButton(b: HTMLButtonElement, text: string, off: boolean): void {
+  if (b.textContent !== text) b.textContent = text;
+  if (b.getAttribute('aria-disabled') !== String(off)) b.setAttribute('aria-disabled', String(off));
 }
 
 /** A seed for a new run. Runs replay from it; it need not be secret. */
@@ -306,7 +373,9 @@ function play(
   const kLevel = kpi('Level');
   const kFloor = kpi('Floor');
   const kXp = kpi('XP to next level');
-  kpis.append(kPath.box, kLevel.box, kFloor.box, kXp.box);
+  const kStones = kpi('Spirit Stones');
+  const kEssence = kpi('Spirit Essence');
+  kpis.append(kPath.box, kLevel.box, kFloor.box, kXp.box, kStones.box, kEssence.box);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
   const character = panel('character', 'Character');
@@ -325,9 +394,31 @@ function play(
     slots.append(box);
   }
   const stats = el('dl', 'stats');
+  // Spending stat points taken back by a reset: one row per stat.
+  const points = el('div', 'points');
+  const pointsText = el('p');
+  points.append(pointsText);
+  for (const [id, name] of STAT_NAMES) {
+    const row = el('div', 'row');
+    const one = button(`+1 ${name}`, '', () => spend(id, 1));
+    const all = button(`All to ${name}`, '', () => spend(id, state.cultivator.unspent));
+    row.append(one, all);
+    points.append(row);
+  }
+  const resetBtn = button('', '', () => act(resetStats(state)));
+  const pathPick = choice('New Path', []);
+  const pathBtn = button('', '', () => {
+    const to = pathPick.select.value as PathId;
+    if (to) act(changePath(state, to));
+  });
+  const shopNote = el('p', 'muted hint');
+  const statsBody = el('div');
+  const pathRow = el('div', 'row');
+  pathRow.append(pathPick.box, pathBtn);
+  statsBody.append(stats, points, resetBtn, pathRow, shopNote);
   const charTabs = tabs([
     { id: 'gear', label: 'Equipment', body: slots },
-    { id: 'stats', label: 'Stats', body: stats },
+    { id: 'stats', label: 'Stats', body: statsBody },
   ]);
   character.box.append(charTabs.bar, ...charTabs.panels);
 
@@ -337,31 +428,123 @@ function play(
   grid.setAttribute('role', 'group');
   grid.setAttribute('aria-label', 'Inventory slots. Arrow keys move, Enter shows details.');
   const bagCells: HTMLButtonElement[] = [];
-  for (let i = 0; i < INVENTORY_SIZE; i++) {
-    const b = cell();
-    b.tabIndex = i === 0 ? 0 : -1;
-    b.addEventListener('click', () => {
-      setCursor(i);
-      select(state.inventory[i] ? { bag: i } : null);
-      if (selected) revealDetails();
-    });
-    b.addEventListener('dblclick', () => {
-      if (state.inventory[i]) equipFromBag(i);
-    });
-    b.addEventListener('pointerdown', (e) => startPress(e, i));
-    bagCells.push(b);
-    grid.append(b);
+  /** Adds cells until the grid matches the bag; a bag upgrade adds a row. */
+  function growBag(): void {
+    for (let i = bagCells.length; i < state.bagSize; i++) {
+      const b = cell();
+      b.tabIndex = i === 0 ? 0 : -1;
+      b.addEventListener('click', () => {
+        setCursor(i);
+        select(state.inventory[i] ? { bag: i } : null);
+        if (selected) revealDetails();
+      });
+      b.addEventListener('dblclick', () => {
+        if (state.inventory[i]) equipFromBag(i);
+      });
+      b.addEventListener('pointerdown', (e) => startPress(e, i));
+      bagCells.push(b);
+      grid.append(b);
+    }
   }
   grid.addEventListener('keydown', (e) => {
     // The column count is set by the stylesheet (fewer on a narrow screen).
     const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length;
-    const to = gridMove(cursor, e.key, INVENTORY_SIZE, cols);
+    const to = gridMove(cursor, e.key, state.bagSize, cols);
     if (to === null) return;
     e.preventDefault();
     setCursor(to);
     bagCells[to]?.focus();
   });
-  inventory.box.append(grid);
+
+  // Bulk sell: pick a grade, then confirm a message naming the count and the
+  // highest grade sold.
+  const below = choice(
+    'Sell everything below',
+    GRADE_IDS.slice(1).map((g) => [g, GRADES[g].name] as const),
+  );
+  /** The grade and preview the player is confirming; null when no confirmation is open. */
+  let pending: { grade: GradeId; text: string } | null = null;
+  const confirmBox = el('div', 'confirm');
+  confirmBox.setAttribute('role', 'alert');
+  const confirmText = el('p');
+  const confirmYes = button('Sell', 'primary', () => {
+    if (!pending) return;
+    const text = sellBelowLabel(sellBelowPreview(state, pending.grade));
+    // A drop since the preview changed what would go: show the new numbers first.
+    if (text !== pending.text) return askSellBelow(pending.grade);
+    const grade = pending.grade;
+    closeConfirm();
+    // Bag positions shift; an equipped selection stays.
+    if (selected && 'bag' in selected) selected = null;
+    act(sellBelow(state, grade));
+    sellBelowBtn.focus();
+  });
+  const confirmNo = button('Cancel', '', () => {
+    closeConfirm();
+    sellBelowBtn.focus();
+  });
+  confirmBox.append(confirmText, confirmYes, confirmNo);
+  confirmBox.hidden = true;
+  const sellBelowBtn = button('Sell…', '', () => askSellBelow(below.select.value as GradeId));
+  below.select.addEventListener('change', closeConfirm);
+  function askSellBelow(grade: GradeId): void {
+    const preview = sellBelowPreview(state, grade);
+    const text = sellBelowLabel(preview);
+    pending = preview.count > 0 ? { grade, text } : null;
+    confirmText.textContent = text;
+    confirmYes.hidden = !pending;
+    confirmNo.textContent = pending ? 'Cancel' : 'OK';
+    confirmBox.hidden = false;
+    (pending ? confirmYes : confirmNo).focus();
+  }
+  function closeConfirm(): void {
+    pending = null;
+    confirmBox.hidden = true;
+  }
+  const bulkRow = el('div', 'row');
+  bulkRow.append(below.box, sellBelowBtn);
+  const bagBtn = button('', '', () => act(buyBagSpace(state)));
+  const bagTools = el('div', 'tools');
+  bagTools.append(bulkRow, confirmBox, bagBtn);
+  const bagBody = el('div');
+  bagBody.append(grid, bagTools);
+
+  // Auto filter: a minimum grade, the item types kept, and what happens to the rest.
+  const minGrade = choice(
+    'Keep drops of grade',
+    GRADE_IDS.map((g, i) => [g, i === 0 ? 'Any grade' : `${GRADES[g].name} and above`] as const),
+  );
+  const actionPick = choice('Drops that fail are', [
+    ['sell', 'Sold for Spirit Stones'],
+    ['salvage', 'Salvaged into Spirit Essence'],
+  ]);
+  const types = el('fieldset', 'types');
+  types.append(el('legend', '', 'Keep these item types'));
+  const typeBoxes = {} as Record<SlotId, HTMLInputElement>;
+  for (const id of ITEM_TYPES) {
+    const label = el('label');
+    const box = el('input');
+    box.type = 'checkbox';
+    typeBoxes[id] = box;
+    label.append(box, ` ${SLOTS[id].name}`);
+    types.append(label);
+  }
+  const filterNote = el('p', 'muted hint', 'A full bag always sells what does not fit.');
+  const filterBody = el('div', 'filter');
+  filterBody.append(minGrade.box, types, actionPick.box, filterNote);
+  const readFilterForm = (): void => {
+    state = setFilter(state, {
+      minGrade: minGrade.select.value as GradeId,
+      slots: ITEM_TYPES.filter((id) => typeBoxes[id].checked),
+      action: actionPick.select.value as FilterAction,
+    });
+  };
+  filterBody.addEventListener('change', readFilterForm);
+  const bagTabs = tabs([
+    { id: 'bag', label: 'Bag', body: bagBody },
+    { id: 'filter', label: 'Auto filter', body: filterBody },
+  ]);
+  inventory.box.append(bagTabs.bar, ...bagTabs.panels);
 
   // Item details
   const details = panel('details', 'Details');
@@ -373,8 +556,8 @@ function play(
   const drops = el('ul', 'drops');
   drops.setAttribute('aria-live', 'polite');
   const noDrops = el('p', 'muted', 'Nothing yet.');
-  const lost = el('p', 'muted');
-  log.box.append(noDrops, drops, lost);
+  const handledText = el('p', 'muted');
+  log.box.append(noDrops, drops, handledText);
 
   const columns = el('div', 'columns');
   const mainCol = el('div', 'game side');
@@ -451,11 +634,12 @@ function play(
       drawnDetails = detailsKey;
       drawDetails();
     }
-    const key = `${detailsKey}|${state.inventory.length}`;
+    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}`;
     if (key === drawnGear) return;
     drawnGear = key;
 
-    inventory.heading.textContent = `Inventory (${state.inventory.length} / ${INVENTORY_SIZE})`;
+    growBag();
+    inventory.heading.textContent = `Inventory (${state.inventory.length} / ${state.bagSize})`;
     bagCells.forEach((b, i) => {
       fillCell(b, state.inventory[i], `Empty slot ${i + 1}`);
       b.setAttribute('aria-pressed', String(!!selected && 'bag' in selected && selected.bag === i));
@@ -515,6 +699,17 @@ function play(
       if (finePointer.matches) {
         parts.push(el('p', 'muted hint', 'Or double-click it, or drag it onto your character.'));
       }
+      const row = el('div', 'row');
+      const sellBtn = button(`Sell for ${sellPrice(item)} Spirit Stones`, '', () =>
+        dispose(index, 'sell'),
+      );
+      sellBtn.dataset.action = 'sell';
+      const salvageBtn = button(`Salvage for ${essenceValue(item)} Spirit Essence`, '', () =>
+        dispose(index, 'salvage'),
+      );
+      salvageBtn.dataset.action = 'salvage';
+      row.append(sellBtn, salvageBtn);
+      parts.push(row);
     }
     // A level-up redraws the comparison; a focused Equip button keeps focus.
     const active = document.activeElement;
@@ -563,6 +758,37 @@ function play(
       charTabs.show('gear');
       slotCells[at].focus();
     }
+  }
+
+  /** Applies a player action that changes the bag or the cultivator, then redraws. */
+  function act(next: GameState): void {
+    state = next;
+    gearVersion += 1;
+    draw(null);
+  }
+
+  /**
+   * Sells or salvages the bag item at `index`. The selection stays on that
+   * cell, so the next item can be handled straight away; focus stays on the
+   * same button, or goes to the cell when the bag has nothing left there.
+   */
+  function dispose(index: number, action: 'sell' | 'salvage'): void {
+    const next = (action === 'sell' ? sell : salvage)(state, index);
+    selected = next.inventory[index] ? { bag: index } : null;
+    act(next);
+    const again = detailBody.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
+    if (again) again.focus();
+    else {
+      setCursor(index);
+      bagCells[index]?.focus();
+    }
+  }
+
+  function spend(stat: StatId, n: number): void {
+    if (n < 1) return;
+    act(spendPoints(state, stat, n));
+    // The point buttons hide once every point is spent; keep focus in the panel.
+    if (state.cultivator.unspent === 0 && points.contains(document.activeElement)) resetBtn.focus();
   }
 
   // Drag to equip, for mouse and pen. Touch has tap to select and the Equip
@@ -651,11 +877,62 @@ function play(
     while (drops.children.length > RECENT_DROPS) drops.lastElementChild?.remove();
   }
 
+  /** Spending controls: their costs and whether they can be paid change with every kill. */
+  function drawShop(): void {
+    const c = state.cultivator;
+    kStones.value.textContent = String(state.stones);
+    kEssence.value.textContent = String(state.essence);
+
+    const bag = bagCost(state);
+    setButton(
+      bagBtn,
+      bag === null ? 'Bag is full size' : `Buy ${BAG_ROW} more bag slots: ${bag} Spirit Stones`,
+      bag === null || state.stones < bag,
+    );
+
+    const reset = statResetCost(c);
+    setButton(
+      resetBtn,
+      `Reset stat points: ${reset} Spirit Stones`,
+      state.stones < reset || !canResetStats(c),
+    );
+    const others = (Object.keys(PATHS) as PathId[]).filter((p) => p !== c.path);
+    const pathKey = others.join();
+    if (pathPick.select.dataset.paths !== pathKey) {
+      pathPick.select.dataset.paths = pathKey;
+      pathPick.select.replaceChildren(
+        ...others.map((p) => {
+          const o = el('option', '', PATHS[p].name);
+          o.value = p;
+          return o;
+        }),
+      );
+    }
+    const change = pathChangeCost(c);
+    setButton(pathBtn, `Change Path: ${change} Spirit Stones`, state.stones < change);
+    shopNote.textContent =
+      'A Path change puts every stat point into the new Path’s primary stat. A reset takes ' +
+      'them back to spend as you choose.';
+
+    points.hidden = c.unspent === 0;
+    pointsText.textContent = `Unspent stat points: ${c.unspent}`;
+
+    // The form shows the saved filter; the player's own change already matches it.
+    const f = state.filter;
+    if (minGrade.select.value !== f.minGrade) minGrade.select.value = f.minGrade;
+    if (actionPick.select.value !== f.action) actionPick.select.value = f.action;
+    for (const id of ITEM_TYPES) typeBoxes[id].checked = f.slots.includes(id);
+  }
+
   function draw(prev: GameState | null): void {
     drawStrip(prev);
     drawSummary();
     drawGear();
-    lost.textContent = state.dropsLost > 0 ? `Lost to a full bag: ${state.dropsLost}` : '';
+    drawShop();
+    const handled = [];
+    if (state.dropsSold > 0) handled.push(`Sold on pickup: ${state.dropsSold}`);
+    if (state.dropsSalvaged > 0) handled.push(`Salvaged on pickup: ${state.dropsSalvaged}`);
+    handledText.textContent = handled.join(' · ');
   }
 
   draw(null);

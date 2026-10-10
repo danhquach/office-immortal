@@ -12,6 +12,7 @@ import {
   itemLines,
   itemTag,
   overtimeLines,
+  sellBelowLabel,
   statRows,
   waveLabel,
 } from './view.ts';
@@ -222,7 +223,10 @@ describe('overtimeLines', () => {
     levels: 4,
     kills: 120,
     dropsKept: 9,
-    dropsLost: 0,
+    dropsSold: 0,
+    dropsSalvaged: 0,
+    stones: 450,
+    essence: 0,
   };
 
   it('lists every count', () => {
@@ -232,12 +236,43 @@ describe('overtimeLines', () => {
       'Levels gained: 4',
       'Kills: 120',
       'Drops kept: 9',
+      'Spirit Stones: +450',
     ]);
   });
 
-  it('says when the cap cut the time short, and shows drops lost', () => {
-    const lines = overtimeLines({ ...summary, seconds: 8 * 3600, capped: true, dropsLost: 2 });
+  it('says when the cap cut the time short, and shows drops sold and salvaged', () => {
+    const lines = overtimeLines({
+      ...summary,
+      seconds: 8 * 3600,
+      capped: true,
+      dropsSold: 2,
+      dropsSalvaged: 3,
+      essence: 40,
+    });
     expect(lines[0]).toBe('Away more than 8 h 0 min (the most replayed)');
-    expect(lines.at(-1)).toBe('Lost to a full bag: 2');
+    expect(lines.slice(5)).toEqual([
+      'Drops sold: 2',
+      'Drops salvaged: 3',
+      'Spirit Stones: +450',
+      'Spirit Essence: +40',
+    ]);
+    expect(lines.join()).not.toMatch(/lost/i);
+  });
+});
+
+describe('sellBelowLabel', () => {
+  it('names the count, the highest grade and the price', () => {
+    expect(sellBelowLabel({ count: 12, highest: 'spirit', stones: 340 })).toBe(
+      'Sell 12 items (highest grade: Spirit) for 340 Spirit Stones?',
+    );
+    expect(sellBelowLabel({ count: 1, highest: 'mortal', stones: 2 })).toBe(
+      'Sell 1 item (highest grade: Mortal) for 2 Spirit Stones?',
+    );
+  });
+
+  it('says when there is nothing to sell', () => {
+    expect(sellBelowLabel({ count: 0, highest: null, stones: 0 })).toBe(
+      'Nothing to sell below that grade.',
+    );
   });
 });

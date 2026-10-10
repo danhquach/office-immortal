@@ -24,7 +24,7 @@ treasures, and push higher.
 ## 2. Core loop
 
 ```
-fight floor ─► drops + XP ─► equip / salvage ─► stronger ─► next floor
+fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─► next floor
      ▲                                                          │
      └──── Early Retirement (prestige) ◄── wall: can't clear ◄──┘
 ```
@@ -100,19 +100,31 @@ Every drop is generated from a seeded roll.
 - **Quality %:** how close the item rolled to its maximum, shown on every item
   (e.g. "94%"). The "one more floor" hook.
 
-## 7. Salvage and filter
+## 7. Sell, salvage and filter
 
-- Unwanted items melt into **Spirit Essence**, which pays for upgrades.
-- **Auto-salvage filter:** rules such as "keep Earth and above" or "keep only
-  Weapons for my Path". Items that fail the filter are melted on pickup.
+- Unwanted items **sell** for Spirit Stones or **salvage** into **Spirit
+  Essence**, the crafting material (crafting comes later). Both pay by grade
+  and item level.
+- **Bulk sell:** "sell everything below grade X", after a confirmation that
+  names how many items go and the highest grade among them.
+- **Auto filter:** a minimum grade ("keep Earth and above") plus the item types
+  to keep. Drops that fail are sold or salvaged on pickup, as the player
+  chooses. The filter starts off: everything is kept.
+- **Full bag:** a drop that doesn't fit is sold, never lost.
+- Equipped items are never sold or salvaged.
 
 ## 8. Currencies
 
 | Currency | Source | Spent on |
 |---|---|---|
-| Spirit Stones | Every kill | Path change, stat reset, inventory space |
-| Spirit Essence | Salvage | Upgrading item base stats, rerolling one affix |
+| Spirit Stones | Kills and selling | Path change, stat reset, inventory space |
+| Spirit Essence | Salvage | Crafting (later): upgrading base stats, rerolling one affix |
 | Dao Insight | Early Retirement | Permanent passives (§9) |
+
+- **Path change** puts every stat point into the new Path's primary stat.
+- **Stat reset** takes back every point above the base to spend by hand;
+  level-ups keep going to the primary stat.
+- **Inventory space** adds a row of 8 cells, each row dearer, up to 80.
 
 ## 9. Prestige: Early Retirement
 
@@ -125,8 +137,8 @@ treasure find, a higher offline cap, more starting stat points.
 - **Time-based, not tick-based.** Progress is worked out from elapsed real
   time, because browsers throttle background tabs.
 - **Overtime Cultivation:** on return, the game replays the time away (capped
-  at 8 hours) and shows a summary: floors cleared, levels, drops kept and
-  melted.
+  at 8 hours) and shows a summary: floors cleared, levels, drops kept, sold
+  and salvaged, and the currencies earned.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { derive, PATHS, type PathId } from './cultivator.ts';
 import type { Item } from './loot.ts';
-import { equip, INVENTORY_SIZE, mitigate, newGame, tick, type GameState } from './sim.ts';
+import { INVENTORY_SIZE, sellPrice } from './economy.ts';
+import { equip, mitigate, newGame, tick, type GameState } from './sim.ts';
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
@@ -140,14 +141,26 @@ describe('drops', () => {
     expect(afterDeath).toBeGreaterThan(0);
   });
 
-  it('stops picking up when the bag is full and counts what was lost', () => {
+  it('sells overflow when the bag is full instead of losing it', () => {
     const full = withBag(
       newGame(21, 'sword'),
       Array.from({ length: INVENTORY_SIZE }, () => weapon(1, 0)),
     );
     const s = tick(full, 1800);
-    expect(s.inventory).toHaveLength(INVENTORY_SIZE);
-    expect(s.dropsLost).toBeGreaterThan(0);
+    const open = tick(newGame(21, 'sword'), 1800);
+    expect(s.inventory).toEqual(full.inventory);
+    expect(s.dropsSold).toBeGreaterThan(0);
+    expect(s.dropsSalvaged).toBe(0);
+    // Same seed, same fights: every drop the open bag kept, the full bag sold.
+    expect(s.dropsSold).toBe(open.inventory.length + open.dropsSold);
+    const prices = open.inventory.reduce((n, i) => n + sellPrice(i), 0);
+    expect(s.stones - open.stones).toBe(prices);
+  });
+
+  it('pays Spirit Stones for every kill', () => {
+    const s = tick(newGame(21, 'sword'), 600);
+    expect(s.kills).toBeGreaterThan(0);
+    expect(s.stones).toBeGreaterThanOrEqual(s.kills);
   });
 });
 
