@@ -1264,7 +1264,11 @@ function play(
     } else {
       const index = selected.bag;
       const blocked = equipBlock(state.cultivator, item);
-      if (blocked) parts.push(el('p', 'down', `${blocked} to equip.`));
+      if (blocked) {
+        const why = el('p', 'down', `${blocked} to equip.`);
+        why.id = 'equip-why';
+        parts.push(why);
+      }
       // One comparison and Equip button per position the item fits (two for
       // accessories and charms), the default position first.
       const fits = slotsFor(item.slot);
@@ -1283,6 +1287,7 @@ function play(
         // aria-disabled, as everywhere here; equipFromBag ignores the click.
         if (blocked) {
           equipBtn.setAttribute('aria-disabled', 'true');
+          equipBtn.setAttribute('aria-describedby', 'equip-why');
           equipBtn.title = blocked;
         }
         equipBtn.addEventListener('click', () => equipFromBag(index, to));
