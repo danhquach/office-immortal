@@ -114,7 +114,7 @@ Every drop is generated from a seeded roll.
 - **Base stat:** each item type rolls in a range (e.g. an Iron Flying Sword
   weapon rolls 8–14 damage at item level 10).
 - **Every other item's name follows the grade,** one name per grade (per
-  family for Accessories and Hidden Weapons, below), so a better drop looks
+  family for Accessories, Hidden Weapons and Charms, below), so a better drop looks
   better (each name has its own icon, coloured like its grade: Mortal grey,
   Spirit azure, Earth jade, Heaven white and gold, Immortal crimson and gold):
 
@@ -163,13 +163,43 @@ Every drop is generated from a seeded roll.
   fast and slow Paths gain alike (no crit, burst or lifesteal; reduced by the
   enemy's defence, at least 1). A kill by the array counts as any other kill.
 
-| Grade | Darts | Binding Rope | Charm |
-|---|---|---|---|
-| Mortal | Iron Throwing Darts | Hempen Binding Cord | Paper Ward Talisman |
-| Spirit | Azure Frost Darts | Azure Silk Sash | Azure Thunder Talisman |
-| Earth | Jade Viper Darts | Jade Dragon-Binding Chain | Jade Seal Talisman |
-| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash | Golden Heaven Seal |
-| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope | Phoenix Flame Talisman |
+| Grade | Darts | Binding Rope |
+|---|---|---|
+| Mortal | Iron Throwing Darts | Hempen Binding Cord |
+| Spirit | Azure Frost Darts | Azure Silk Sash |
+| Earth | Jade Viper Darts | Jade Dragon-Binding Chain |
+| Heaven | Golden Crow Flying Knives | Golden Heaven-Wrapping Sash |
+| Immortal | Phoenix Flame Darts | Phoenix Flame Binding Rope |
+
+- **Charms come in four lines,** even odds, and none leans toward a Path: a
+  player picks the one that fits how they play. A line favours three affixes:
+  when a Charm draws its affixes (still without repeats), each favoured affix
+  weighs 3 and every other affix 1, so a favoured one is about 3× as likely.
+  Every affix can still roll on every line. The utility affixes (qi regen,
+  spirit stone find, treasure find) roll at a scaled range on a Charm: 0.75×
+  on any Talisman, 1.5× on a Jade Slip (both ends of the range, before
+  rounding). Every other affix, the base stat (crit chance) and the affix
+  count per grade are the same on every line. Details names the line, e.g.
+  "Defend Talisman".
+
+| Line | Favoured affixes (weight 3, others 1) | Utility affix range |
+|---|---|---|
+| Attack Talisman | crit chance, crit damage, attack speed | 0.75× |
+| Defend Talisman | max HP, defence, lifesteal | 0.75× |
+| Utility Talisman | qi regen, spirit stone find, treasure find | 0.75× |
+| Jade Slip | qi regen, spirit stone find, treasure find | 1.5× |
+
+| Grade | Attack Talisman | Defend Talisman | Utility Talisman | Jade Slip |
+|---|---|---|---|---|
+| Mortal | Paper Ward Talisman | Paper Body-Guard Talisman | Paper Fortune Talisman | Cloudy Jade Slip |
+| Spirit | Azure Thunder Talisman | Azure Barrier Talisman | Azure Clear-Mind Talisman | Azure Spirit Jade Slip |
+| Earth | Jade Seal Talisman | Jade Vajra Talisman | Jade Wealth Talisman | Emerald Jade Token |
+| Heaven | Golden Heaven Seal | Golden Bell Guard Talisman | Golden Treasure-Seeking Talisman | Golden Sun Jade Token |
+| Immortal | Phoenix Flame Talisman | Phoenix Rebirth Talisman | Phoenix Heaven-Luck Talisman | Phoenix Blood Jade |
+
+- **Charms from before the lines** keep their name, so they load as the Attack
+  Talisman of their grade with their stored rolls. A utility affix on one now
+  shows at the Talisman range (0.75×).
 
 - **Weapons are a Taoist cultivator's magic tools,** in five families. Each
   grade drops one of each family, and the material gets richer with the grade

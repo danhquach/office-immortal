@@ -14,6 +14,7 @@ import {
   itemLines,
   itemTag,
   treasureTier,
+  charmLineName,
   overtimeLines,
   passiveRow,
   realmLabel,
@@ -100,6 +101,38 @@ describe('items', () => {
   it('gives no treasure tier for a grade it does not know', () => {
     expect(treasureTier({ ...stapler, grade: '__proto__' as Item['grade'] })).toBeNull();
     expect(treasureTier({ ...stapler, grade: 'toString' as Item['grade'] })).toBeNull();
+  });
+});
+
+describe('charmLineName', () => {
+  const charm = (name: string, grade: Item['grade'] = 'earth'): Item => ({
+    slot: 'charm',
+    name,
+    level: 10,
+    grade,
+    baseRoll: 0.5,
+    affixes: [{ id: 'qiRegen', roll: 1 }],
+  });
+
+  it.each([
+    ['Jade Seal Talisman', 'Attack Talisman'],
+    ['Jade Vajra Talisman', 'Defend Talisman'],
+    ['Jade Wealth Talisman', 'Utility Talisman'],
+    ['Emerald Jade Token', 'Jade Slip'],
+  ])('names %s a %s', (name, line) => {
+    expect(charmLineName(charm(name))).toBe(line);
+  });
+
+  it('names no line for other types or a name off its grade', () => {
+    expect(charmLineName(stapler)).toBeNull();
+    expect(charmLineName(charm('Phoenix Blood Jade', 'mortal'))).toBeNull();
+    expect(charmLineName(charm('Emerald Jade Token', '__proto__' as Item['grade']))).toBeNull();
+  });
+
+  it('shows a utility affix at the line range: 0.75x on a Talisman, 1.5x on Jade', () => {
+    // Qi regen 2–6% at level 1 and 1 + 9/20 = 1.45x at level 10: 8.7% at its top.
+    expect(itemLines(charm('Jade Wealth Talisman'))[1]).toBe('+6.5% Qi regen');
+    expect(itemLines(charm('Emerald Jade Token'))[1]).toBe('+13.1% Qi regen');
   });
 });
 

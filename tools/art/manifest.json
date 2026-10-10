@@ -526,10 +526,25 @@
       "id": "charm",
       "sources": [
         "items/charm-mortal.jpg",
+        "items/charm-defend-mortal.jpg",
+        "items/charm-utility-mortal.jpg",
+        "items/charm-jade-mortal.jpg",
         "items/charm-spirit.jpg",
+        "items/charm-defend-spirit.jpg",
+        "items/charm-utility-spirit.jpg",
+        "items/charm-jade-spirit.jpg",
         "items/charm-earth.jpg",
+        "items/charm-defend-earth.jpg",
+        "items/charm-utility-earth.jpg",
+        "items/charm-jade-earth.jpg",
         "items/charm-heaven.jpg",
-        "items/charm-immortal.jpg"
+        "items/charm-defend-heaven.jpg",
+        "items/charm-utility-heaven.jpg",
+        "items/charm-jade-heaven.jpg",
+        "items/charm-immortal.jpg",
+        "items/charm-defend-immortal.jpg",
+        "items/charm-utility-immortal.jpg",
+        "items/charm-jade-immortal.jpg"
       ]
     }
   ],

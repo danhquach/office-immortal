@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buyBagSpace, changePath, resetStats, setFilter, spendPoints } from '../core/economy.ts';
 import { makeTribulation, type Enemy } from '../core/floors.ts';
-import type { Item } from '../core/loot.ts';
+import { charmLine, type Item } from '../core/loot.ts';
 import { derive, xpToNext } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import {
@@ -660,7 +660,43 @@ describe('rejects', () => {
       ['sideArm', 'earth', 'Jade Dragon-Binding Chain'],
       ['sideArm', 'heaven', 'Golden Heaven-Wrapping Sash'],
       ['sideArm', 'immortal', 'Phoenix Flame Binding Rope'],
+      // The Defend, Utility and Jade Charm lines (#50).
+      ['charm', 'mortal', 'Paper Body-Guard Talisman'],
+      ['charm', 'mortal', 'Paper Fortune Talisman'],
+      ['charm', 'mortal', 'Cloudy Jade Slip'],
+      ['charm', 'spirit', 'Azure Barrier Talisman'],
+      ['charm', 'spirit', 'Azure Clear-Mind Talisman'],
+      ['charm', 'spirit', 'Azure Spirit Jade Slip'],
+      ['charm', 'earth', 'Jade Vajra Talisman'],
+      ['charm', 'earth', 'Jade Wealth Talisman'],
+      ['charm', 'earth', 'Emerald Jade Token'],
+      ['charm', 'heaven', 'Golden Bell Guard Talisman'],
+      ['charm', 'heaven', 'Golden Treasure-Seeking Talisman'],
+      ['charm', 'heaven', 'Golden Sun Jade Token'],
+      ['charm', 'immortal', 'Phoenix Rebirth Talisman'],
+      ['charm', 'immortal', 'Phoenix Heaven-Luck Talisman'],
+      ['charm', 'immortal', 'Phoenix Blood Jade'],
     ];
+
+    it('loads a Charm from before the lines unchanged, as an Attack Talisman with its rolls', () => {
+      const old = {
+        ...gear('charm', 'heaven', 'Golden Heaven Seal'),
+        affixes: [
+          { id: 'qiRegen', roll: 0.37 },
+          { id: 'treasureFind', roll: 1 },
+          { id: 'critDamage', roll: 0.91 },
+          { id: 'maxHp', roll: 0 },
+        ],
+      };
+      const save = inBag(old);
+      (cult(save).equipment as J).charm2 = gear('charm', 'mortal', 'Paper Ward Talisman');
+      const st = load(save)?.state;
+      expect(st?.inventory[0]).toEqual(old);
+      expect(st?.cultivator.equipment.charm2).toEqual(
+        gear('charm', 'mortal', 'Paper Ward Talisman'),
+      );
+      expect(charmLine(st?.inventory[0] as Item)).toBe('attack');
+    });
 
     it.each(FAMILIES)('loads a %s of %s grade named %s unchanged', (slot, grade, name) => {
       const loaded = load(inBag(gear(slot, grade, name)));
@@ -693,6 +729,17 @@ describe('rejects', () => {
       ['other casing', 'sideArm', 'immortal', 'phoenix flame binding rope'],
       ['padding', 'sideArm', 'mortal', 'Hempen Binding Cord '],
       ['a family with no such grade name', 'sideArm', 'mortal', 'Bronze Binding Rope'],
+      ['a line with no such grade name', 'charm', 'mortal', 'Paper Jade Slip'],
+      ['a line name, not an item name', 'charm', 'earth', 'Defend Talisman'],
+      ['a zero-width joiner', 'charm', 'spirit', 'Azure\u200d Spirit Jade Slip'],
+      ['a Greek look-alike', 'charm', 'immortal', 'Phoenix Bl\u03bfod Jade'],
+      ['a bidi isolate', 'charm', 'heaven', '\u2066Golden Sun Jade Token\u2069'],
+      ['other casing', 'charm', 'earth', 'emerald jade token'],
+      ['a prototype key', 'charm', 'mortal', '__proto__'],
+      ['a constructor key', 'charm', 'spirit', 'constructor'],
+      ['a toString key', 'charm', 'earth', 'toString'],
+      ['a bidi override', 'charm', 'immortal', 'Phoenix \u202eBlood Jade'],
+      ['an oversized name', 'charm', 'mortal', 'Cloudy Jade Slip'.repeat(5000)],
     ])('rejects a family name with %s', (_, slot, grade, name) => {
       expect(load(inBag(gear(slot, grade, name)))).toBeNull();
     });
