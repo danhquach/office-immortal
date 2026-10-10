@@ -5,10 +5,10 @@ type Perm = NotificationPermission;
 
 /** A stand-in for window.Notification: records what was shown, answers prompts with `answer`. */
 function fakeNotification(start: Perm, answer: Perm | Error = start) {
-  const shown: { title: string; body?: string }[] = [];
+  const shown: { title: string; body?: string; tag?: string }[] = [];
   const api = Object.assign(
     function (this: unknown, title: string, options?: NotificationOptions) {
-      shown.push({ title, body: options?.body });
+      shown.push({ title, body: options?.body, tag: options?.tag });
     },
     {
       permission: start,
@@ -22,7 +22,7 @@ function fakeNotification(start: Perm, answer: Perm | Error = start) {
   return { api, shown, win: { Notification: api } as unknown as Window };
 }
 
-const notice = { title: 'Office Immortal', body: 'Immortal-grade drop on floor 3' };
+const notice = { title: 'Office Immortal', body: 'Immortal-grade drop on floor 3', tag: 'drop' };
 
 describe('notifier', () => {
   it('is unsupported, and does nothing, without the API', async () => {
@@ -49,7 +49,18 @@ describe('notifier', () => {
     expect(f.api.requestPermission).toHaveBeenCalledTimes(1);
     expect(n.state()).toBe('on');
     n.show(notice);
-    expect(f.shown).toEqual([notice]);
+    expect(f.shown).toEqual([{ ...notice, tag: 'office-immortal-drop' }]);
+  });
+
+  it('tags each kind of notice apart, so one never replaces the other', async () => {
+    const f = fakeNotification('granted');
+    const n = notifier(f.win);
+    n.show(notice);
+    n.show({ ...notice, tag: 'tribulation' });
+    expect(f.shown.map((s) => s.tag)).toEqual([
+      'office-immortal-drop',
+      'office-immortal-tribulation',
+    ]);
   });
 
   it('turns off again on a second toggle', async () => {

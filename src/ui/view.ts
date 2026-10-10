@@ -11,7 +11,7 @@ import {
   type Derived,
   type PathId,
 } from '../core/cultivator.ts';
-import { DEMONS_PER_WAVE, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
+import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
   AFFIXES,
   affixValue,
@@ -37,7 +37,7 @@ import {
   type Passives,
   type RetirePreview,
 } from '../core/prestige.ts';
-import type { GameState } from '../core/sim.ts';
+import { canFaceTribulation, type GameState } from '../core/sim.ts';
 
 /** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
 export const PATH_BLURBS: Readonly<Record<PathId, string>> = {
@@ -172,6 +172,48 @@ export function waveLabel(state: GameState): string {
 export function xpLabel(c: Cultivator): string {
   const xp = `${Math.floor(c.xp)} / ${xpToNext(c.level)}`;
   return readyForTribulation(c) ? `${xp} · Tribulation due` : xp;
+}
+
+/**
+ * The Tribulation alert, while one is due and not yet being fought: its name
+ * and the realm a win reaches, e.g. { name: "Probation Review", next:
+ * "Foundation Establishment" }. Null otherwise.
+ */
+export function tribulationCall(state: GameState): { name: string; next: string } | null {
+  if (!canFaceTribulation(state)) return null;
+  const realm = realmOf(state.cultivator.level);
+  const name = TRIBULATIONS[realm];
+  const next = REALMS[realmOf(state.cultivator.level + 1)];
+  return name === undefined || next === undefined ? null : { name, next: next.name };
+}
+
+/**
+ * True when a Tribulation falls due between two states: the cultivator has just
+ * reached it. A lost one coming round again doesn't count, so it never repeats.
+ */
+export function tribulationFellDue(prev: GameState, next: GameState): boolean {
+  return !readyForTribulation(prev.cultivator) && readyForTribulation(next.cultivator);
+}
+
+/**
+ * The stage banner for a Tribulation moment between two states: it falls due,
+ * begins (clicked or reached at the floor's end), is won, or is lost. Null otherwise.
+ */
+export function tribulationBanner(prev: GameState, next: GameState): string | null {
+  const before = prev.enemies[0];
+  const now = next.enemies[0];
+  if (realmOf(next.cultivator.level) > realmOf(prev.cultivator.level)) {
+    const realm = REALMS[realmOf(next.cultivator.level)];
+    return realm ? `Breakthrough! ${realm.name}` : null;
+  }
+  if (before?.kind === 'tribulation' && next.deaths > prev.deaths) {
+    return `${before.name} stands. The floor replays.`;
+  }
+  if (now?.kind === 'tribulation' && before?.kind !== 'tribulation') {
+    return `Tribulation begins: ${now.name}`;
+  }
+  const call = tribulationFellDue(prev, next) ? tribulationCall(next) : null;
+  return call ? `Tribulation due: ${call.name}` : null;
 }
 
 /** The realm, with the job title beside it: "Foundation Establishment · Associate". */

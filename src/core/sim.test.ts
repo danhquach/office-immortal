@@ -3,7 +3,16 @@ import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cul
 import { TRIBULATIONS } from './floors.ts';
 import { slotsFor, type Item } from './loot.ts';
 import { INVENTORY_SIZE, sellPrice } from './economy.ts';
-import { ENEMY_ARRIVAL, equip, mitigate, newGame, tick, type GameState } from './sim.ts';
+import {
+  canFaceTribulation,
+  ENEMY_ARRIVAL,
+  equip,
+  faceTribulation,
+  mitigate,
+  newGame,
+  tick,
+  type GameState,
+} from './sim.ts';
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
@@ -386,6 +395,100 @@ describe('Tribulation', () => {
     );
     // The held XP went into levels past the cap.
     expect(s.cultivator.xp).toBeLessThan(xpToNext(s.cultivator.level));
+  });
+});
+
+describe('faceTribulation', () => {
+  it('can only be called while a Tribulation is due and not yet fought', () => {
+    const fresh = newGame(7, 'sword');
+    expect(canFaceTribulation(fresh)).toBe(false);
+    expect(() => faceTribulation(fresh)).toThrow(RangeError);
+    const due = until(fresh, (x) => hasTribulation(x) && x.enemies[0]?.kind !== 'tribulation');
+    expect(canFaceTribulation(due)).toBe(true);
+    const fighting = until(due, (x) => x.enemies[0]?.kind === 'tribulation');
+    expect(canFaceTribulation(fighting)).toBe(false);
+    expect(() => faceTribulation(fighting)).toThrow(RangeError);
+  });
+
+  it('brings the Tribulation to the front at full HP, the interrupted enemy behind it', () => {
+    const s = until(newGame(7, 'sword'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    s.cultivator.hp = 1;
+    const interrupted = s.enemies[0]!;
+    const next = faceTribulation(s);
+    expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[0] });
+    expect(next.enemies[1]).toEqual(interrupted);
+    expect(next.enemies).toHaveLength(s.enemies.length);
+    expect(next.enemies.filter((e) => e.kind === 'tribulation')).toHaveLength(1);
+    expect(next.cultivator.hp).toBe(derive(next.cultivator).maxHp);
+    // Both sides wait out the arrival pause, as after any kill.
+    expect(next.cultivator.nextAttackAt).toBeGreaterThan(s.time + ENEMY_ARRIVAL);
+    expect(next.enemyNextAttackAt).toBeGreaterThan(s.time + ENEMY_ARRIVAL);
+    // The old state is untouched.
+    expect(s.enemies[0]).toBe(interrupted);
+    expect(s.cultivator.hp).toBe(1);
+  });
+
+  it('draws no randomness, and plays the same after it in one big step as in small ones', () => {
+    const s = until(newGame(7, 'body'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    const faced = faceTribulation(s);
+    expect(faced.rng).toEqual(s.rng);
+    expect(tick(faced, 300)).toEqual(run(faced, 300, 0.5));
+  });
+
+  it('works in the arrival pause, before either side has attacked', () => {
+    const s = until(newGame(7, 'sword'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    // Just after a kill: the next enemy has not arrived yet.
+    const kills = s.kills;
+    let paused = s;
+    while (paused.kills === kills) paused = tick(paused, 0.05);
+    expect(paused.cultivator.nextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL / 2);
+    const next = faceTribulation(paused);
+    expect(next.enemies[0]?.kind).toBe('tribulation');
+    expect(next.cultivator.nextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL);
+    expect(next.enemyNextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL);
+  });
+
+  it('faces the last realm cap, level 60, with its own Tribulation', () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.level = 60;
+    s.cultivator.xp = xpToNext(60);
+    expect(canFaceTribulation(s)).toBe(true);
+    const next = faceTribulation(s);
+    expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[5] });
+    expect(next.enemies).toHaveLength(s.enemies.length + 1);
+  });
+
+  it('makes the Tribulation when a due state has none queued', () => {
+    const s = until(newGame(7, 'sword'), hasTribulation);
+    s.enemies = s.enemies.filter((e) => e.kind !== 'tribulation');
+    const next = faceTribulation(s);
+    expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[0] });
+    expect(next.enemies).toHaveLength(s.enemies.length + 1);
+  });
+
+  it('breaks through on a win, then fights the interrupted enemy on the same floor', () => {
+    let s = until(newGame(7, 'body'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    const { floor } = s;
+    const left = s.enemies.length - 1;
+    s = faceTribulation(s);
+    s.enemies[0]!.hp = 1;
+    const kills = s.kills;
+    s = until(s, (x) => x.kills > kills);
+    expect(s.cultivator.level).toBeGreaterThan(10);
+    expect(s.floor).toBe(floor);
+    expect(s.enemies).toHaveLength(left);
+    expect(hasTribulation(s)).toBe(false);
+  });
+
+  it('replays the floor on a loss, with the Tribulation due again', () => {
+    let s = until(newGame(7, 'sword'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    const { floor, deaths } = s;
+    s = faceTribulation(s);
+    s.enemies[0]!.damage = 1e9;
+    s = until(s, (x) => x.deaths > deaths);
+    expect(s.floor).toBe(floor);
+    expect(s.cultivator.level).toBe(10);
+    expect(canFaceTribulation(s)).toBe(true);
   });
 });
 

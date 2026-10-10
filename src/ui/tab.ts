@@ -21,7 +21,8 @@ export interface Notifier {
   state(): NoticeState;
   /** Turns it on (asking for permission the first time) or off. Call only from a click. */
   toggle(): Promise<void>;
-  show(notice: { title: string; body: string }): void;
+  /** `tag` names the kind of notice: a newer one of the same kind replaces it. */
+  show(notice: { title: string; body: string; tag: string }): void;
 }
 
 export function notifier(win: Window): Notifier {
@@ -55,8 +56,8 @@ export function notifier(win: Window): Notifier {
     show(notice) {
       if (!api || !on || api.permission !== 'granted') return;
       try {
-        // One tag, so a burst of drops replaces rather than stacks.
-        new api(notice.title, { body: notice.body, tag: 'office-immortal-drop' });
+        // One tag per kind, so a burst of drops replaces rather than stacks.
+        new api(notice.title, { body: notice.body, tag: `office-immortal-${notice.tag}` });
       } catch {
         // Some mobile browsers only notify through a service worker; skip it.
       }

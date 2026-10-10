@@ -174,6 +174,31 @@ export function equip(state: GameState, index: number, to?: EquipSlotId): GameSt
   return s;
 }
 
+/** True while a Tribulation is due and not yet being fought, so the player can start it now. */
+export function canFaceTribulation(state: GameState): boolean {
+  return readyForTribulation(state.cultivator) && state.enemies[0]?.kind !== 'tribulation';
+}
+
+/**
+ * Starts the due Tribulation now instead of at the end of the floor (docs/design.md
+ * §4): it steps to the front, the enemy it interrupts waits behind it, and the
+ * cultivator faces it at full HP. Returns the new state; `state` is left untouched.
+ */
+export function faceTribulation(state: GameState): GameState {
+  if (!canFaceTribulation(state)) throw new RangeError('faceTribulation: no Tribulation to face');
+  const s = structuredClone(state);
+  const c = s.cultivator;
+  const at = s.enemies.findIndex((e) => e.kind === 'tribulation');
+  const [trial] = at < 0 ? [makeTribulation(s.floor, realmOf(c.level))] : s.enemies.splice(at, 1);
+  s.enemies.unshift(trial as Enemy);
+  const d = derive(c);
+  c.hp = d.maxHp;
+  c.attackCount = 0;
+  c.nextAttackAt = s.time + ENEMY_ARRIVAL + d.attackInterval;
+  s.enemyNextAttackAt = s.time + ENEMY_ARRIVAL + currentEnemy(s).attackInterval;
+  return s;
+}
+
 /** Damage after defence: never below 1, always a whole number. */
 export function mitigate(damage: number, defence: number): number {
   return Math.max(1, Math.round((damage * DEFENCE_HALVES_AT) / (DEFENCE_HALVES_AT + defence)));
