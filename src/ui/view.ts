@@ -20,6 +20,7 @@ import {
   equippedArray,
   baseValue,
   GRADES,
+  OFFLINE_DROP_MULTIPLIER,
   quality,
   SLOTS,
   UNIQUES,
@@ -45,7 +46,7 @@ import { canEquip, canFaceTribulation, requiredRealm, type GameState } from '../
 
 /** The Path picker's one-liners: office cover, role, primary stat (docs/design.md §3). */
 export const PATH_BLURBS: Readonly<Record<PathId, string>> = {
-  sword: 'Sales · Fast hits, crit · Agility',
+  sword: 'Sales · Fast hits, crit, a little lifesteal · Agility',
   body: 'Facilities · Tanky, lifesteal · Body',
   talisman: 'IT · Burst, area damage · Spirit',
 };
@@ -491,6 +492,10 @@ export function overtimeLines(summary: OvertimeSummary): string[] {
   if (summary.dropsSalvaged > 0) lines.push(`Drops salvaged: ${summary.dropsSalvaged}`);
   lines.push(`Spirit Stones: +${summary.stones}`);
   if (summary.essence > 0) lines.push(`Spirit Essence: +${summary.essence}`);
+  // So a lower drop count isn't read as a bug.
+  lines.push(
+    `Items drop at ${Math.round(OFFLINE_DROP_MULTIPLIER * 100)}% of the usual rate while away. Keep the tab open for more loot.`,
+  );
   return lines;
 }
 

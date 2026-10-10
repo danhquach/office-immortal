@@ -9,6 +9,7 @@ import {
   defaultSlot,
   DROP_CHANCE,
   EQUIP_SLOTS,
+  OFFLINE_DROP_MULTIPLIER,
   equipmentBonuses,
   equippedArray,
   isDisc,
@@ -28,6 +29,7 @@ import {
   type SlotId,
 } from './loot.ts';
 import { createRng, type Rng } from './rng.ts';
+import { makeFloor } from './floors.ts';
 
 const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
@@ -435,19 +437,55 @@ describe('ranges', () => {
 });
 
 describe('rollDrop', () => {
-  function dropRate(kind: keyof typeof DROP_CHANCE, treasureFind: number): number {
+  function dropRate(kind: keyof typeof DROP_CHANCE, treasureFind: number, offline = false): number {
     const rng = createRng(77);
     let drops = 0;
-    for (let i = 0; i < 20_000; i++) if (rollDrop(rng, kind, 5, treasureFind)) drops++;
+    for (let i = 0; i < 20_000; i++) if (rollDrop(rng, kind, 5, treasureFind, offline)) drops++;
     return drops / 20_000;
   }
+
+  /** Mean drops per floor's line-up (makeFloor) over many seeded floors. */
+  function floorRate(treasureFind: number, offline: boolean): number {
+    const rng = createRng(2024);
+    const floors = 20_000;
+    let drops = 0;
+    for (let f = 0; f < floors; f++) {
+      for (const enemy of makeFloor(rng, 1)) {
+        if (rollDrop(rng, enemy.kind, 1, treasureFind, offline)) drops++;
+      }
+    }
+    return drops / floors;
+  }
+
+  it('drops at the online chances: demon 2%, elite 12%, boss 25%, Tribulation 100%', () => {
+    expect(DROP_CHANCE).toEqual({ demon: 0.02, elite: 0.12, boss: 0.25, tribulation: 1 });
+    expect(OFFLINE_DROP_MULTIPLIER).toBe(0.5);
+  });
+
+  it('halves every chance offline but a Tribulation, which always drops', () => {
+    expect(dropRate('tribulation', 0, true)).toBe(1);
+    // Over 20k draws, these margins are more than 5 standard deviations.
+    expect(Math.abs(dropRate('boss', 0, true) - DROP_CHANCE.boss / 2)).toBeLessThan(0.02);
+    expect(Math.abs(dropRate('elite', 0, true) - DROP_CHANCE.elite / 2)).toBeLessThan(0.015);
+    expect(Math.abs(dropRate('demon', 0, true) - DROP_CHANCE.demon / 2)).toBeLessThan(0.005);
+  });
+
+  it('gives about 0.55 drops a floor online and 0.28 offline, both rising with treasure find', () => {
+    // 20k floors: one standard deviation is about 0.005 drops a floor online.
+    const online = floorRate(0, false);
+    const offline = floorRate(0, true);
+    expect(Math.abs(online - 0.55)).toBeLessThan(0.03);
+    expect(Math.abs(offline - 0.275)).toBeLessThan(0.02);
+    expect(floorRate(0.5, false)).toBeGreaterThan(online * 1.3);
+    expect(floorRate(0.5, true)).toBeGreaterThan(offline * 1.3);
+  });
 
   it('always drops from a Tribulation, often from a boss and rarely from a demon', () => {
     expect(dropRate('tribulation', 0)).toBe(1);
     // Over 20k draws, ±0.02 is more than 5 standard deviations.
     expect(Math.abs(dropRate('boss', 0) - DROP_CHANCE.boss)).toBeLessThan(0.02);
     expect(Math.abs(dropRate('elite', 0) - DROP_CHANCE.elite)).toBeLessThan(0.02);
-    expect(Math.abs(dropRate('demon', 0) - DROP_CHANCE.demon)).toBeLessThan(0.015);
+    expect(Math.abs(dropRate('demon', 0) - DROP_CHANCE.demon)).toBeLessThan(0.006);
   });
 
   it('drops more with treasure find', () => {

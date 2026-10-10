@@ -632,6 +632,7 @@ describe('overtimeLines', () => {
       'Kills: 120',
       'Drops kept: 9',
       'Spirit Stones: +450',
+      'Items drop at 50% of the usual rate while away. Keep the tab open for more loot.',
     ]);
   });
 
@@ -650,6 +651,7 @@ describe('overtimeLines', () => {
       'Drops salvaged: 3',
       'Spirit Stones: +450',
       'Spirit Essence: +40',
+      'Items drop at 50% of the usual rate while away. Keep the tab open for more loot.',
     ]);
     expect(lines.join()).not.toMatch(/lost/i);
   });

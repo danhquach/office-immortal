@@ -122,11 +122,17 @@ export function newGame(
   return state;
 }
 
+/** How a tick is played: `offline` is Overtime Cultivation, at the offline drop rate. */
+export interface TickOptions {
+  offline?: boolean;
+}
+
 /** Advances the sim by `dt` seconds and returns the new state; `state` is left untouched. */
-export function tick(state: GameState, dt: number): GameState {
+export function tick(state: GameState, dt: number, opts: TickOptions = {}): GameState {
   if (!Number.isFinite(dt) || dt < 0) throw new RangeError(`tick: bad dt ${dt}`);
   const s = structuredClone(state);
   const rng = rngFrom(s.rng);
+  const offline = opts.offline === true;
   const end = s.time + dt;
   for (;;) {
     const c = s.cultivator;
@@ -137,8 +143,8 @@ export function tick(state: GameState, dt: number): GameState {
     const next = Math.min(c.nextAttackAt, arrayAt, s.enemyNextAttackAt);
     if (next > end) break;
     s.time = next;
-    if (c.nextAttackAt === next) cultivatorAttacks(s, rng);
-    else if (arrayAt === next) arrayHits(s, rng);
+    if (c.nextAttackAt === next) cultivatorAttacks(s, rng, offline);
+    else if (arrayAt === next) arrayHits(s, rng, offline);
     else enemyAttacks(s, rng);
   }
   s.time = end;
@@ -245,7 +251,7 @@ function currentEnemy(s: GameState): Enemy {
   return enemy;
 }
 
-function cultivatorAttacks(s: GameState, rng: Rng): void {
+function cultivatorAttacks(s: GameState, rng: Rng, offline: boolean): void {
   const c = s.cultivator;
   const path = PATHS[c.path];
   const d = derive(c);
@@ -258,7 +264,7 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   enemy.hp -= dealt;
   c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
   c.nextAttackAt = s.time + d.attackInterval;
-  if (enemy.hp <= 0) defeated(s, rng);
+  if (enemy.hp <= 0) defeated(s, rng, offline);
 }
 
 /**
@@ -266,18 +272,18 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
  * second (not per hit, so fast and slow Paths gain alike), no crit, burst or
  * lifesteal.
  */
-function arrayHits(s: GameState, rng: Rng): void {
+function arrayHits(s: GameState, rng: Rng, offline: boolean): void {
   const enemy = currentEnemy(s);
   const share = equippedArray(s.cultivator.equipment)?.value ?? 0;
   const d = derive(s.cultivator);
   const damage = (d.damage / d.attackInterval) * share * ARRAY_TICK;
   enemy.hp -= Math.min(enemy.hp, mitigate(damage, enemy.defence));
   s.arrayNextAt = s.time + ARRAY_TICK;
-  if (enemy.hp <= 0) defeated(s, rng);
+  if (enemy.hp <= 0) defeated(s, rng, offline);
 }
 
 /** The enemy in front fell: rewards, a drop, then the next enemy or the next floor. */
-function defeated(s: GameState, rng: Rng): void {
+function defeated(s: GameState, rng: Rng, offline: boolean): void {
   const c = s.cultivator;
   const d = derive(c);
   const enemy = currentEnemy(s);
@@ -285,7 +291,8 @@ function defeated(s: GameState, rng: Rng): void {
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
   gainXp(c, Math.round(enemy.xp * xpMultiplier(s.passives)));
   if (enemy.kind === 'tribulation') breakThrough(c);
-  const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind + passiveTreasureFind(s.passives));
+  const find = d.treasureFind + passiveTreasureFind(s.passives);
+  const drop = rollDrop(rng, enemy.kind, s.floor, find, offline);
   if (drop) pickUp(s, drop);
   s.enemies.shift();
   queueTribulation(s);

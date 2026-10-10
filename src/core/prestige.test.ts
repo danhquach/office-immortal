@@ -138,10 +138,10 @@ describe('determinism with passives', () => {
     expect(big).toEqual(small);
   });
 
-  it('replays Overtime Cultivation exactly as the open tab would, under the raised cap', () => {
+  it('replays Overtime Cultivation exactly, at the offline drop rate, under the raised cap', () => {
     const s = boosted();
     const away = MAX_OFFLINE_SECONDS + 2 * 3600;
-    expect(catchUp(s, away).state).toEqual(tick(s, away));
+    expect(catchUp(s, away).state).toEqual(tick(s, away, { offline: true }));
   });
 });
 

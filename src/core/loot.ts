@@ -440,8 +440,14 @@ export function equippedArray(equipment: Equipment): { id: ArrayId; value: numbe
   return item?.array ? { id: item.array, value: arrayValue(item) } : null;
 }
 
-/** Chance that a kill drops an item; bosses have better odds. */
-export const DROP_CHANCE = { demon: 0.04, elite: 0.25, boss: 0.5, tribulation: 1 } as const;
+/** Chance that a kill drops an item online; bosses have better odds. */
+export const DROP_CHANCE = { demon: 0.02, elite: 0.12, boss: 0.25, tribulation: 1 } as const;
+
+/**
+ * Scales the drop chance in Overtime Cultivation (time replayed after the tab
+ * was closed), so playing is the better way to find loot. Never a Tribulation's.
+ */
+export const OFFLINE_DROP_MULTIPLIER = 0.5;
 
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
 const EQUIP_SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
@@ -528,14 +534,19 @@ export function rollItem(rng: Rng, level: number): Item {
   return item;
 }
 
-/** Rolls whether a kill drops an item and, if so, the item. Treasure find raises the odds. */
+/**
+ * Rolls whether a kill drops an item and, if so, the item. Treasure find raises
+ * the odds; offline lowers them by OFFLINE_DROP_MULTIPLIER, except a Tribulation's.
+ */
 export function rollDrop(
   rng: Rng,
   kind: keyof typeof DROP_CHANCE,
   floor: number,
   treasureFind: number,
+  offline = false,
 ): Item | null {
-  if (!chance(rng, DROP_CHANCE[kind] * (1 + treasureFind))) return null;
+  const scale = offline && kind !== 'tribulation' ? OFFLINE_DROP_MULTIPLIER : 1;
+  if (!chance(rng, DROP_CHANCE[kind] * scale * (1 + treasureFind))) return null;
   return rollItem(rng, floor);
 }
 
