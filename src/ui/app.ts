@@ -1,8 +1,9 @@
-// The page: first-run Path choice, then the combat strip, KPI tiles, character
-// panel, inventory grid, item details and recent drops (docs/design.md §5, §6,
+// The page: a saved run (after its Overtime Cultivation catch-up) or the
+// first-run Path choice, then the combat strip, KPI tiles, character panel,
+// inventory grid, item details and recent drops (docs/design.md §5, §6, §10,
 // §14). Text reaches the page only through textContent. The sim decides
-// everything; this file only shows state and passes the player's equip choices
-// back in.
+// everything; this file only shows state, passes the player's equip choices
+// back in and saves.
 
 import { derive, PATHS, type PathId } from '../core/cultivator.ts';
 import {
@@ -14,7 +15,10 @@ import {
   type EquipSlotId,
   type Item,
 } from '../core/loot.ts';
+import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
 import { equip, INVENTORY_SIZE, newGame, tick, type GameState } from '../core/sim.ts';
+import { browserStorage, loadSave, writeSave, type SaveStorage } from '../storage/save.ts';
+import { autosave, runs } from './run.ts';
 import {
   cellLabel,
   compareToEquipped,
@@ -22,6 +26,7 @@ import {
   gridMove,
   itemLines,
   itemTag,
+  overtimeLines,
   PATH_BLURBS,
   SLOT_CODES,
   statRows,
@@ -30,6 +35,9 @@ import {
 } from './view.ts';
 
 const TICK_MS = 200;
+const SAVE_MS = 10_000;
+/** Shorter times away (a reload, a quick tab switch) get no summary. */
+const SUMMARY_MIN_SECONDS = 60;
 const RECENT_DROPS = 8;
 /** How far the mouse must move with the button down before a press becomes a drag. */
 const DRAG_START_PX = 5;
@@ -49,10 +57,22 @@ function newSeed(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0] as number;
 }
 
-export function start(root: HTMLElement): void {
+/** The one run playing; starting or loading another stops its timers and listeners first. */
+const run = runs();
+
+/** Loads the saved run and replays the time away, or offers a new run when there is none. */
+export function start(root: HTMLElement, storage: SaveStorage | null = browserStorage()): void {
+  run.stop();
+  const saved = storage && loadSave(storage);
+  if (saved) {
+    const { state, summary } = catchUp(saved.state, offlineSeconds(saved.savedAt, Date.now()));
+    // play() stamps the save straight away, so a crash can't replay this time twice.
+    play(root, state, storage, summary);
+    return;
+  }
   root.replaceChildren(
     titleBar(),
-    pathChoice((path) => play(root, newGame(newSeed(), path))),
+    pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
   );
   root.querySelector<HTMLButtonElement>('.paths button')?.focus();
 }
@@ -232,7 +252,29 @@ function flash(sprite: HTMLElement): void {
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
-function play(root: HTMLElement, initial: GameState): void {
+/** The Overtime Cultivation summary, dismissed by its button. */
+function overtimePanel(summary: OvertimeSummary): HTMLElement {
+  const box = el('section', 'panel overtime');
+  box.setAttribute('aria-labelledby', 'overtime-title');
+  const h = el('h2', '', 'Overtime Cultivation');
+  h.id = 'overtime-title';
+  const lines = el('ul', 'lines');
+  for (const line of overtimeLines(summary)) lines.append(el('li', '', line));
+  const ok = el('button', 'primary', 'Back to work');
+  ok.type = 'button';
+  ok.addEventListener('click', () => box.remove());
+  box.append(h, el('p', 'muted', 'Your cultivator kept fighting while you were away.'), lines, ok);
+  return box;
+}
+
+function play(
+  root: HTMLElement,
+  initial: GameState,
+  storage: SaveStorage | null,
+  summary: OvertimeSummary | null,
+): void {
+  const scope = run.next();
+  const { signal } = scope;
   let state = initial;
   let selected: Selection = null;
   /** The bag cell that holds the grid's one tab stop. */
@@ -339,8 +381,11 @@ function play(root: HTMLElement, initial: GameState): void {
   mainCol.append(details.box, log.box);
   columns.append(character.box, inventory.box, mainCol);
   const game = el('div', 'game');
+  const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
+  if (away) game.append(away);
   game.append(strip, kpis, columns);
   root.replaceChildren(titleBar(), game);
+  away?.querySelector('button')?.focus();
 
   function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
     f.name.textContent = name;
@@ -536,37 +581,51 @@ function play(root: HTMLElement, initial: GameState): void {
     drag = null;
   }
 
-  window.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    if (!drag.ghost) {
-      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START_PX) return;
-      const item = state.inventory[drag.index];
-      if (!item) return endDrag();
-      const ghost = bagCells[drag.index]?.cloneNode(true) as HTMLElement;
-      ghost.classList.add('ghost');
-      ghost.setAttribute('aria-hidden', 'true');
-      document.body.append(ghost);
-      document.body.classList.add('dragging');
-      for (const p of slotsFor(item.slot)) slotCells[p].classList.add('target');
-      drag.ghost = ghost;
-    }
-    drag.ghost.style.left = `${e.clientX}px`;
-    drag.ghost.style.top = `${e.clientY}px`;
-    character.box.classList.toggle('drop-ok', overCharacter(e));
-  });
+  window.addEventListener(
+    'pointermove',
+    (e) => {
+      if (!drag) return;
+      if (!drag.ghost) {
+        if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START_PX) return;
+        const item = state.inventory[drag.index];
+        if (!item) return endDrag();
+        const ghost = bagCells[drag.index]?.cloneNode(true) as HTMLElement;
+        ghost.classList.add('ghost');
+        ghost.setAttribute('aria-hidden', 'true');
+        document.body.append(ghost);
+        document.body.classList.add('dragging');
+        for (const p of slotsFor(item.slot)) slotCells[p].classList.add('target');
+        drag.ghost = ghost;
+      }
+      drag.ghost.style.left = `${e.clientX}px`;
+      drag.ghost.style.top = `${e.clientY}px`;
+      character.box.classList.toggle('drop-ok', overCharacter(e));
+    },
+    { signal },
+  );
 
-  window.addEventListener('pointerup', (e) => {
-    if (!drag) return;
-    const { index, ghost } = drag;
-    endDrag();
-    // Dropped on a position the item fits: that one. Anywhere else on the
-    // character: the item's default position.
-    if (ghost && overCharacter(e)) equipFromBag(index, dropSlot(e, index));
-  });
-  window.addEventListener('pointercancel', endDrag);
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && drag) endDrag();
-  });
+  window.addEventListener(
+    'pointerup',
+    (e) => {
+      if (!drag) return;
+      const { index, ghost } = drag;
+      endDrag();
+      // Dropped on a position the item fits: that one. Anywhere else on the
+      // character: the item's default position.
+      if (ghost && overCharacter(e)) equipFromBag(index, dropSlot(e, index));
+    },
+    { signal },
+  );
+  window.addEventListener('pointercancel', endDrag, { signal });
+  // A drag's ghost lives on <body>, outside this run's page; it goes with the run.
+  signal.addEventListener('abort', endDrag);
+  window.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key === 'Escape' && drag) endDrag();
+    },
+    { signal },
+  );
 
   function dropSlot(e: PointerEvent, index: number): EquipSlotId | undefined {
     const at = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>('[data-slot]')
@@ -604,12 +663,22 @@ function play(root: HTMLElement, initial: GameState): void {
   // Time-based: each step plays the real time since the last one, so a
   // throttled background tab still makes the same progress.
   let last = performance.now();
-  setInterval(() => {
+  function step(): void {
     const now = performance.now();
     const prev = state;
     state = tick(state, (now - last) / 1000);
     last = now;
     logDrops(freshDrops(prev, state));
     draw(prev);
-  }, TICK_MS);
+  }
+
+  /** Plays up to now, then saves, so the stamp and the state agree. */
+  function save(): void {
+    if (!storage) return;
+    step();
+    writeSave(storage, state, Date.now());
+  }
+
+  scope.every(TICK_MS, step);
+  autosave(scope, save, { doc: document, win: window }, SAVE_MS);
 }

@@ -67,23 +67,23 @@ describe('rollItem', () => {
   });
 
   it('keeps every roll and value within its range', () => {
-    for (const item of MANY) {
+    // Collected and checked once: a million expect() calls are too slow for CI.
+    const bad: string[] = [];
+    const within = (what: string, v: number, lo: number, hi: number, i: number): void => {
+      if (!(v >= lo && v <= hi)) bad.push(`item ${i} ${what}: ${v} not in [${lo}, ${hi}]`);
+    };
+    MANY.forEach((item, i) => {
       const base = rangeAt(SLOTS[item.slot].base, item.level);
-      expect(item.baseRoll).toBeGreaterThanOrEqual(0);
-      expect(item.baseRoll).toBeLessThanOrEqual(1);
-      expect(baseValue(item)).toBeGreaterThanOrEqual(base.lo);
-      expect(baseValue(item)).toBeLessThanOrEqual(base.hi);
+      within('baseRoll', item.baseRoll, 0, 1, i);
+      within('base', baseValue(item), base.lo, base.hi, i);
       for (const a of item.affixes) {
         const r = rangeAt(AFFIXES[a.id], item.level);
-        expect(a.roll).toBeGreaterThanOrEqual(0);
-        expect(a.roll).toBeLessThanOrEqual(1);
-        expect(affixValue(a, item.level)).toBeGreaterThanOrEqual(r.lo);
-        expect(affixValue(a, item.level)).toBeLessThanOrEqual(r.hi);
+        within(`${a.id} roll`, a.roll, 0, 1, i);
+        within(a.id, affixValue(a, item.level), r.lo, r.hi, i);
       }
-      const q = quality(item);
-      expect(q).toBeGreaterThanOrEqual(0);
-      expect(q).toBeLessThanOrEqual(100);
-    }
+      within('quality', quality(item), 0, 100, i);
+    });
+    expect(bad.slice(0, 10)).toEqual([]);
   });
 
   it('gives each grade its affix count, never the same affix twice, and a unique only on Immortal', () => {
@@ -96,12 +96,18 @@ describe('rollItem', () => {
       immortal: [5],
     };
     const counts = new Map<GradeId, Set<number>>(GRADE_IDS.map((g) => [g, new Set()]));
-    for (const item of MANY) {
+    const bad: string[] = [];
+    MANY.forEach((item, i) => {
       counts.get(item.grade)?.add(item.affixes.length);
-      expect(new Set(item.affixes.map((a) => a.id)).size).toBe(item.affixes.length);
-      expect(item.unique !== undefined).toBe(item.grade === 'immortal');
-      expect(SLOTS[item.slot].names).toContain(item.name);
-    }
+      if (new Set(item.affixes.map((a) => a.id)).size !== item.affixes.length) {
+        bad.push(`item ${i}: repeated affix`);
+      }
+      if ((item.unique !== undefined) !== (item.grade === 'immortal')) {
+        bad.push(`item ${i}: unique on ${item.grade}`);
+      }
+      if (!SLOTS[item.slot].names.includes(item.name)) bad.push(`item ${i}: name ${item.name}`);
+    });
+    expect(bad.slice(0, 10)).toEqual([]);
     for (const g of GRADE_IDS) expect([...(counts.get(g) ?? [])].sort()).toEqual(design[g]);
   });
 
@@ -281,5 +287,21 @@ describe('equipmentBonuses', () => {
     expect(b.damage).toBe(14 + 5);
     expect(b.maxHp).toBe(20 + 50);
     expect(b.damagePct).toBe(0.25);
+  });
+
+  it('sums to the exact same numbers whatever order the items went on', () => {
+    // Float sums depend on order; a save reloads gear in position order.
+    const positions = Object.keys(EQUIP_SLOTS) as (keyof typeof EQUIP_SLOTS)[];
+    for (let seed = 1; seed <= 200; seed++) {
+      const rng = createRng(seed);
+      const worn = positions.map((at) => {
+        let item = rollItem(rng, 1 + (seed % 40));
+        while (item.slot !== EQUIP_SLOTS[at].takes) item = rollItem(rng, item.level);
+        return [at, item] as const;
+      });
+      const forward = equipmentBonuses(Object.fromEntries(worn));
+      const backward = equipmentBonuses(Object.fromEntries([...worn].reverse()));
+      expect(backward).toEqual(forward);
+    }
   });
 });
