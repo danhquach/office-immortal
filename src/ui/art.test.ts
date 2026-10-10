@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import manifestText from '../../tools/art/manifest.json?raw';
+import { renders } from '../../tools/art/render-weapons.mjs';
+import { FAMILIES, GRADES } from '../../tools/art/weapons.mjs';
 import { PATHS, type PathId } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, makeFloor, TRIBULATIONS, ZONES, type Enemy } from '../core/floors.ts';
 import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
@@ -23,7 +25,14 @@ const INLINE = import.meta.glob<string>('../assets/art/*.png', {
 });
 const exists = (name: string) => artUrl(name) !== '';
 const manifest = JSON.parse(manifestText) as {
-  icons: { id: SlotId; materials?: string[]; files?: string[]; sources?: string[] }[];
+  icons: {
+    id: SlotId;
+    materials?: string[];
+    files?: string[];
+    sources?: string[];
+    renders?: string[];
+    source?: string;
+  }[];
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -104,7 +113,7 @@ describe('iconCell', () => {
     const cells = new Set<string>();
     for (const slot of ICON_COLUMNS) {
       const entry = manifest.icons.find((i) => i.id === slot);
-      expect(entry?.files ?? entry?.sources ?? entry?.materials).toHaveLength(
+      expect(entry?.files ?? entry?.sources ?? entry?.renders ?? entry?.materials).toHaveLength(
         SLOTS[slot].names.length,
       );
       for (const name of SLOTS[slot].names) {
@@ -122,7 +131,65 @@ describe('iconCell', () => {
     const cell = manifest.icon_size * manifest.icon_scale;
     expect(cell).toBe(64);
     expect([u32(16), u32(20)]).toEqual([cell * ICON_COLUMNS.length, cell * ICON_ROWS]);
-    expect(ICON_ROWS).toBe(15);
+    // The weapon column has the most names: 5 families in each of 5 grades.
+    expect(ICON_ROWS).toBe(25);
+    expect(ICON_ROWS).toBe(SLOTS.weapon.names.length);
+  });
+
+  it('draws weapons from our own SVG renders, with no pack art left', () => {
+    const weapon = manifest.icons.find((i) => i.id === 'weapon');
+    expect(weapon?.renders).toHaveLength(25);
+    expect(weapon?.files).toBeUndefined();
+    expect(weapon?.source).toBeUndefined();
+    expect(manifest.icons.some((i) => i.files)).toBe(false);
+  });
+
+  it('lists the weapon renders in the row order of the weapon names', () => {
+    const family = (name: string) =>
+      name.endsWith('Flying Sword')
+        ? 'flying'
+        : name.endsWith('Whisk')
+          ? 'whisk'
+          : name.endsWith('Peachwood Sword')
+            ? 'peach'
+            : name.endsWith('Fan')
+              ? 'fan'
+              : 'seal';
+    const grades = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
+    const renders = manifest.icons.find((i) => i.id === 'weapon')?.renders;
+    expect(renders).toEqual(
+      SLOTS.weapon.names.map((n, i) => `weapons/${grades[Math.floor(i / 5)]}-${family(n)}.png`),
+    );
+  });
+
+  it('draws the weapon names loot.ts rolls, in its order', () => {
+    expect(GRADES.flatMap((_, g) => FAMILIES.map((f) => f.names[g]))).toEqual(SLOTS.weapon.names);
+  });
+
+  it('renders the weapon icons to the files the manifest lists, in row order', () => {
+    const list = renders();
+    expect(list.map((r) => r.name)).toEqual(SLOTS.weapon.names);
+    expect(list.map((r) => r.file)).toEqual(manifest.icons.find((i) => i.id === 'weapon')?.renders);
+  });
+
+  it('puts each weapon name in its grade and family cell', () => {
+    // Rows run grade by grade, families in the order loot.ts lists them.
+    expect(iconCell({ slot: 'weapon', name: 'Iron Flying Sword' } as Item)).toEqual({
+      col: 4,
+      row: 0,
+    });
+    expect(iconCell({ slot: 'weapon', name: 'Stone Mountain Seal' } as Item)).toEqual({
+      col: 4,
+      row: 4,
+    });
+    expect(iconCell({ slot: 'weapon', name: 'Azure Cloud Flying Sword' } as Item)).toEqual({
+      col: 4,
+      row: 5,
+    });
+    expect(iconCell({ slot: 'weapon', name: 'Heaven-Crushing Seal' } as Item)).toEqual({
+      col: 4,
+      row: 24,
+    });
   });
 
   it('falls back to the first material for a name it does not know', () => {

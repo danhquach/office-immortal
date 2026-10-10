@@ -32,7 +32,7 @@ import { catchUp } from './offline.ts';
 import { equip, newGame, tick, type GameState } from './sim.ts';
 
 function item(grade: GradeId, level = 1, slot: SlotId = 'weapon'): Item {
-  return { slot, name: 'Iron Jian', level, grade, baseRoll: 0.5, affixes: [] };
+  return { slot, name: 'Iron Flying Sword', level, grade, baseRoll: 0.5, affixes: [] };
 }
 
 function game(bag: Item[] = [], stones = 0): GameState {

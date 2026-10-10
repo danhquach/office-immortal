@@ -2,11 +2,16 @@
 
 Inputs: art-src/<id>.jpg (git-ignored generations, prompts in manifest.json).
 The sources are not committed, so a rebuild needs them regenerated or copied in;
-the shipped PNGs in src/assets/art are the record.
+the shipped PNGs in src/assets/art are the record. Weapon icons are the
+exception: they are drawn as SVG in tools/art/weapons.mjs (committed), and
+`node tools/art/render-weapons.mjs` renders them into art-src/weapons/.
 Outputs: src/assets/art/*.png (shipped).
 
-  python3 tools/art/build.py          # build everything
-  python3 tools/art/build.py <id>...  # build only these
+  python3 tools/art/build.py               # build everything
+  python3 tools/art/build.py <id>...       # build only these
+  python3 tools/art/build.py icons:<id>... # rebuild only these icon columns,
+                                           # keeping every other column of the
+                                           # shipped atlas as it is
 
 Sprites come out as a sheet of 4 rows (idle, attack, hit, death) by 4 frames;
 hit uses the first 2. Each character has one generation per pose, made with the
@@ -29,13 +34,15 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
   background  id*, height*, seed, prompt, dim (brightness and saturation, default
               0.8), extra, trim_top (source rows dropped), blend (px of seam fade).
   icon        id*, then one of: family* and materials* (one recolour of the
-              art-src/icon-<id>.jpg generation per item name), files* (one
-              ready-made icon_size PNG under art-src/ per item name, used as
-              drawn) or sources* (one generation under art-src/ per item name,
-              drawn smooth at full cell size; pair: each is one boot, drawn as
-              a matching pair), plus seed, prompt, source (provenance only).
-              Atlas cells are icon_size x icon_scale px; pixel icons are
-              scaled up whole, so they look as drawn.
+              art-src/icon-<id>.jpg generation per item name), sources* (one
+              generation under art-src/ per item name, drawn smooth at full
+              cell size; pair: each is one boot, drawn as a matching pair) or
+              renders* (one transparent PNG under art-src/
+              per item name, e.g. from render-weapons.mjs: no cut-out, cropped
+              to its shape and drawn smooth at full cell size), plus seed,
+              prompt, source (provenance only).
+              Atlas cells are icon_size x icon_scale px; recoloured pixel
+              icons are scaled up whole, so they look as drawn.
 """
 
 import json
@@ -378,12 +385,17 @@ def variant(asset: dict, base: dict) -> Image.Image:
     return s
 
 
-def save(img: Image.Image, path: Path) -> None:
-    """An indexed PNG: palette colours plus one transparent entry, the smallest file."""
+def indexed(img: Image.Image) -> Image.Image:
+    """The image in palette colours, with index len(ALL) as transparent."""
     a = img.getchannel("A")
     p = img.convert("RGB").quantize(palette=FULL, dither=Image.Dither.NONE)
     p.paste(len(ALL), mask=a.point(lambda v: 255 if v < 128 else 0))
-    p.save(path, optimize=True, transparency=len(ALL))
+    return p
+
+
+def save(img: Image.Image, path: Path) -> None:
+    """An indexed PNG: palette colours plus one transparent entry, the smallest file."""
+    (img if img.mode == "P" else indexed(img)).save(path, optimize=True, transparency=len(ALL))
 
 
 def seam_period(src: Image.Image, lo: float = 0.7, hi: float = 0.95, strip: int = 12) -> int:
@@ -473,9 +485,10 @@ def pair_of(boot: Image.Image) -> Image.Image:
     return out
 
 
-def smooth_icon(path: Path, n: int, pair: bool) -> Image.Image:
-    """A generation cut out and fitted into n x n, smoothly: no palette, no pixel grid."""
-    cut = cut_out(Image.open(path))
+def smooth_icon(path: Path, n: int, pair: bool, transparent: bool = False) -> Image.Image:
+    """A generation cut out (or a render already on transparency) and fitted
+    into n x n, smoothly: no palette, no pixel grid."""
+    cut = Image.open(path).convert("RGBA") if transparent else cut_out(Image.open(path))
     cut = cut.crop(cut.getbbox())
     if pair:
         cut = pair_of(cut)
@@ -487,12 +500,16 @@ def smooth_icon(path: Path, n: int, pair: bool) -> Image.Image:
 
 
 def icon_rows(e: dict) -> list:
-    return e.get("files") or e.get("sources") or e.get("materials") or []
+    return e.get("sources") or e.get("renders") or e.get("materials") or []
 
 
-def icon_atlas() -> Image.Image:
+def icon_atlas(columns: list[str] | None = None) -> Image.Image:
     """Every item type (columns, manifest order) in each of its names (rows, in
-    the order loot.ts lists the names), in cells of icon_size x icon_scale px."""
+    the order loot.ts lists the names), in cells of icon_size x icon_scale px.
+
+    With `columns`, only those item types are drawn and the other columns are
+    left empty, for kept_columns() to fill from the shipped atlas.
+    """
     n = MANIFEST["icon_size"]
     k = MANIFEST["icon_scale"]
     cell = n * k
@@ -504,12 +521,14 @@ def icon_atlas() -> Image.Image:
         return img.resize((cell, cell), Image.NEAREST)
 
     for c, e in enumerate(entries):
-        if "sources" in e:
+        if columns is not None and e["id"] not in columns:
+            continue
+        if "renders" in e:
+            for r, f in enumerate(e["renders"]):
+                out.paste(smooth_icon(SRC / f, cell, False, transparent=True), (c * cell, r * cell))
+        elif "sources" in e:
             for r, f in enumerate(e["sources"]):
                 out.paste(smooth_icon(SRC / f, cell, e.get("pair", False)), (c * cell, r * cell))
-        elif "files" in e:
-            for r, f in enumerate(e["files"]):
-                out.paste(pixel(Image.open(SRC / f).convert("RGBA")), (c * cell, r * cell))
         else:
             base = icon(e, n)
             for r, dst in enumerate(e["materials"]):
@@ -518,6 +537,27 @@ def icon_atlas() -> Image.Image:
         for r in range(len(icon_rows(e))):
             if out.crop((c * cell, r * cell, (c + 1) * cell, (r + 1) * cell)).getbbox() is None:
                 sys.exit(f"icon {e['id']}: row {r} came out empty")
+    return out
+
+
+def kept_columns(columns: list[str]) -> Image.Image:
+    """The atlas with only `columns` rebuilt: every other column is copied from
+    the shipped icons.png index for index, so its pixels stay exactly as they
+    were (quantizing them again could move a colour to a near one)."""
+    cell = MANIFEST["icon_size"] * MANIFEST["icon_scale"]
+    entries = MANIFEST["icons"]
+    old = Image.open(OUT / "icons.png")
+    out = indexed(icon_atlas(columns))
+    if old.mode != "P" or old.getpalette() != out.getpalette() or old.info.get("transparency") != len(ALL):
+        sys.exit("icons.png is not indexed to the current palette: rebuild the whole atlas")
+    if old.width != out.width or old.height % cell:
+        sys.exit(f"icons.png is {old.size}, not {len(entries)} columns of {cell} px cells")
+    for c, e in enumerate(entries):
+        if e["id"] in columns:
+            continue
+        # Rows past the old atlas stay empty; rows past the new one are dropped.
+        h = min(old.height, out.height)
+        out.paste(old.crop((c * cell, 0, (c + 1) * cell, h)), (c * cell, 0))
     return out
 
 
@@ -540,7 +580,8 @@ KNOBS = {
     "variant": {"id", "size", "base", "recolor", "aura", "seed", "prompt", "lift", "keep", "crop",
                 "flip", "extra", "shadow", "border", "margin"},
     "background": {"id", "height", "seed", "prompt", "dim", "extra", "trim_top", "blend"},
-    "icon": {"id", "family", "materials", "files", "sources", "pair", "source", "seed", "prompt"},
+    "icon": {"id", "family", "materials", "sources", "renders", "pair", "source", "seed",
+             "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -550,8 +591,9 @@ REQUIRED = {
 }
 
 
-def check_manifest() -> None:
-    """Stops the build on a typo'd knob, a missing one, or a variant whose base has no poses."""
+def check_manifest(builds=lambda kind, name: True) -> None:
+    """Stops the build on a typo'd knob, a missing one, a variant whose base has
+    no poses, or a missing source for something `builds(kind, id)` will build."""
     errors = []
     by_id = {a["id"]: a for a in MANIFEST["sprites"]}
     entries = [("variant" if "base" in a else "sprite", a) for a in MANIFEST["sprites"]]
@@ -566,24 +608,21 @@ def check_manifest() -> None:
         if kind == "variant" and "poses" not in by_id.get(e["base"], {}):
             errors.append(f"variant {name}: base {e['base']!r} is not a sprite with poses")
         if kind == "icon":
-            kinds = [k for k in ("files", "sources") if k in e]
+            kinds = [k for k in ("sources", "renders") if k in e]
             if "family" in e or "materials" in e:
                 kinds.append("family and materials")
             if len(kinds) != 1:
-                errors.append(f"icon {name}: needs exactly one of files, sources, or family and materials")
+                errors.append(
+                    f"icon {name}: needs exactly one of sources, renders, or family and materials"
+                )
             elif kinds == ["family and materials"] and not ("family" in e and "materials" in e):
                 errors.append(f"icon {name}: needs both family and materials")
             if "pair" in e and "sources" not in e:
                 errors.append(f"icon {name}: pair only applies to sources")
-            for f in e.get("sources", []):
+            for f in [*e.get("sources", []), *e.get("renders", [])] if builds(kind, name) else []:
                 if not (SRC / f).exists():
                     errors.append(f"icon {name}: source {f} missing")
-            for f in e.get("files", []):
-                if not (SRC / f).exists():
-                    errors.append(f"icon {name}: source {f} missing")
-                elif Image.open(SRC / f).size != (MANIFEST["icon_size"],) * 2:
-                    errors.append(f"icon {name}: {f} is not {MANIFEST['icon_size']} px square")
-        for f in [] if kind != "sprite" else [e["poses"]["idle"], *(p for r in ("attack", "hit", "death") for p in e["poses"][r])]:
+        for f in [] if kind != "sprite" or not builds(kind, name) else [e["poses"]["idle"], *(p for r in ("attack", "hit", "death") for p in e["poses"][r])]:
             if not (SRC / f).exists():
                 errors.append(f"sprite {name}: source {f} missing")
     if errors:
@@ -591,13 +630,29 @@ def check_manifest() -> None:
 
 
 def main() -> None:
-    check_manifest()
     only = sys.argv[1:]
+    columns = [a.split(":", 1)[1] for a in only if a.startswith("icons:")]
+    icon_ids = [i["id"] for i in MANIFEST["icons"]]
+    for c in columns:
+        if c not in icon_ids:
+            sys.exit(f"icons:{c}: no such icon column (have {', '.join(icon_ids)})")
+
+    # A variant is rebuilt from its base sprite's poses, so it needs their sources too.
+    wanted = set(only) | {a["base"] for a in MANIFEST["sprites"] if "base" in a and a["id"] in only}
+
+    def builds(kind: str, name: str) -> bool:
+        if kind == "icon":
+            return not only or "icons" in only or name in columns
+        return not only or name in wanted
+
+    check_manifest(builds)
     OUT.mkdir(parents=True, exist_ok=True)
     if not only or "paperdoll" in only:
         save(paperdoll(), OUT / "paperdoll.png")
     if not only or "icons" in only:
         save(icon_atlas(), OUT / "icons.png")
+    elif columns:
+        save(kept_columns(columns), OUT / "icons.png")
     for bg in MANIFEST["backgrounds"]:
         if (not only or bg["id"] in only) and (SRC / f"{bg['id']}.jpg").exists():
             save(background(bg), OUT / f"bg-{bg['id']}.png")
