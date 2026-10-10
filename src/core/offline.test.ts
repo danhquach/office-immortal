@@ -55,7 +55,10 @@ describe('catchUp', () => {
       levels: 0,
       kills: 0,
       dropsKept: 0,
-      dropsLost: 0,
+      dropsSold: 0,
+      dropsSalvaged: 0,
+      stones: 0,
+      essence: 0,
     });
   });
 
@@ -67,7 +70,8 @@ describe('catchUp', () => {
     expect(summary.levels).toBe(state.cultivator.level - 1);
     expect(summary.kills).toBe(state.kills);
     expect(summary.dropsKept).toBe(state.inventory.length);
-    expect(summary.dropsLost).toBe(state.dropsLost);
+    expect(summary.dropsSold).toBe(state.dropsSold);
+    expect(summary.stones).toBe(state.stones);
     // Two hours is enough to see progress on every count that the summary shows.
     expect(summary.kills).toBeGreaterThan(0);
     expect(summary.levels).toBeGreaterThan(0);

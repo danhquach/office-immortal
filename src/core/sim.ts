@@ -13,14 +13,20 @@ import {
   type Cultivator,
   type PathId,
 } from './cultivator.ts';
+import {
+  defaultFilter,
+  earn,
+  INVENTORY_SIZE,
+  killStones,
+  pickUp,
+  type LootFilter,
+} from './economy.ts';
 import { makeFloor, type Enemy } from './floors.ts';
 import { defaultSlot, rollDrop, slotsFor, type EquipSlotId, type Item } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 
 /** Defence that halves incoming damage. */
 export const DEFENCE_HALVES_AT = 50;
-/** Items the bag holds; drops past this are lost until there is room. */
-export const INVENTORY_SIZE = 40;
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -35,8 +41,15 @@ export interface GameState {
   enemyNextAttackAt: number;
   /** Items picked up and not equipped. */
   inventory: Item[];
-  /** Drops lost because the bag was full. */
-  dropsLost: number;
+  /** Cells in the bag; Spirit Stones buy more. */
+  bagSize: number;
+  stones: number;
+  essence: number;
+  filter: LootFilter;
+  /** Drops sold on pickup, by the filter or a full bag. */
+  dropsSold: number;
+  /** Drops salvaged on pickup by the filter. */
+  dropsSalvaged: number;
   kills: number;
   deaths: number;
 }
@@ -51,7 +64,12 @@ export function newGame(seed: number, path: PathId): GameState {
     enemies: [],
     enemyNextAttackAt: 0,
     inventory: [],
-    dropsLost: 0,
+    bagSize: INVENTORY_SIZE,
+    stones: 0,
+    essence: 0,
+    filter: defaultFilter(),
+    dropsSold: 0,
+    dropsSalvaged: 0,
     kills: 0,
     deaths: 0,
   };
@@ -132,12 +150,10 @@ function cultivatorAttacks(s: GameState, rng: Rng): void {
   if (enemy.hp > 0) return;
 
   s.kills += 1;
+  earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
   gainXp(c, enemy.xp);
   const drop = rollDrop(rng, enemy.kind, s.floor, d.treasureFind);
-  if (drop) {
-    if (s.inventory.length < INVENTORY_SIZE) s.inventory.push(drop);
-    else s.dropsLost += 1;
-  }
+  if (drop) pickUp(s, drop);
   s.enemies.shift();
   if (s.enemies.length > 0) {
     s.enemyNextAttackAt = s.time + currentEnemy(s).attackInterval;

@@ -74,6 +74,22 @@ button {
 button:hover {
   border-color: var(--accent);
 }
+/* Off but still focusable (see app.ts); muted text still passes 4.5:1. */
+button[aria-disabled='true'],
+button[aria-disabled='true']:hover {
+  color: var(--muted);
+  border-style: dashed;
+  border-color: var(--line);
+  cursor: not-allowed;
+}
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.2rem 0.3rem;
+}
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -135,7 +151,7 @@ button:hover {
 }
 .kpis {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 0.75rem;
 }
 .kpi .label {
@@ -165,6 +181,9 @@ button:hover {
 }
 /* Too narrow for three columns: details move under the grid. */
 @media (max-width: 1099px) {
+  .kpis {
+    grid-template-columns: repeat(3, 1fr);
+  }
   .columns {
     grid-template-columns: minmax(15rem, 1fr) auto;
     grid-template-areas:
@@ -503,6 +522,60 @@ button.primary {
 }
 .grade-immortal {
   color: var(--grade-immortal);
+}
+/* Sell, salvage, the bag tools, the auto filter and spending */
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.4rem;
+  margin: 0.5rem 0;
+}
+.field {
+  display: grid;
+  gap: 0.15rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.field select {
+  color: var(--ink);
+}
+.tools {
+  margin-top: 0.5rem;
+  max-width: 24rem;
+}
+.confirm {
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.confirm p {
+  margin: 0 0 0.5rem;
+}
+.confirm button {
+  margin-right: 0.4rem;
+}
+.filter {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 24rem;
+}
+.types {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.2rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  margin: 0;
+}
+.types legend {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.points p {
+  margin: 0.5rem 0 0;
+  font-weight: 600;
 }
 .drops {
   list-style: none;

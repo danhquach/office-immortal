@@ -16,6 +16,14 @@ import {
   type StatId,
 } from '../core/cultivator.ts';
 import {
+  BAG_ROW,
+  defaultFilter,
+  INVENTORY_SIZE,
+  MAX_BAG_SIZE,
+  type FilterAction,
+  type LootFilter,
+} from '../core/economy.ts';
+import {
   BOSSES,
   DEMONS,
   DEMONS_PER_WAVE,
@@ -39,12 +47,14 @@ import {
   type SlotId,
   type UniqueId,
 } from '../core/loot.ts';
-import { INVENTORY_SIZE, type GameState } from '../core/sim.ts';
+import type { GameState } from '../core/sim.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+/** Older versions that still load: v1 came before currencies, the filter and bag upgrades. */
+const OLD_VERSIONS: readonly number[] = [1];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -177,11 +187,19 @@ const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'state']);
-  if (o.v !== SAVE_VERSION) fail('version');
-  return { savedAt: int(o.savedAt, 0, Number.MAX_SAFE_INTEGER), state: readState(o.state) };
+  if (o.v !== SAVE_VERSION && !OLD_VERSIONS.includes(o.v as number)) fail('version');
+  const version = o.v as number;
+  return {
+    savedAt: int(o.savedAt, 0, Number.MAX_SAFE_INTEGER),
+    state: readState(o.state, version),
+  };
 }
 
-function readState(v: unknown): GameState {
+const COUNT = Number.MAX_SAFE_INTEGER;
+
+/** Reads a state of `version`; a v1 state gets the defaults of what it lacks. */
+function readState(v: unknown, version: number): GameState {
+  const v1 = version === 1;
   const o = obj(v, [
     'time',
     'rng',
@@ -191,31 +209,56 @@ function readState(v: unknown): GameState {
     'enemies',
     'enemyNextAttackAt',
     'inventory',
-    'dropsLost',
     'kills',
     'deaths',
+    ...(v1
+      ? ['dropsLost']
+      : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
   ]);
   const time = num(o.time, 0, MAX_TIME);
   const highestFloor = int(o.highestFloor, 1, MAX_FLOOR);
   const floor = int(o.floor, 1, highestFloor);
   const rng = obj(o.rng, ['s']);
+  // v1 counted drops lost to a full bag; they were never sold, so the count is dropped.
+  if (v1) int(o.dropsLost, 0, COUNT);
+  const bagSize = v1 ? INVENTORY_SIZE : int(o.bagSize, INVENTORY_SIZE, MAX_BAG_SIZE);
+  if ((bagSize - INVENTORY_SIZE) % BAG_ROW !== 0) fail('bag size');
   const state: GameState = {
     time,
     rng: { s: int(rng.s, 0, 0xffffffff) },
-    cultivator: readCultivator(o.cultivator, time, highestFloor),
+    cultivator: readCultivator(o.cultivator, time, highestFloor, v1),
     floor,
     highestFloor,
     enemies: readEnemies(o.enemies, floor),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL),
-    inventory: arr(o.inventory, INVENTORY_SIZE).map((i) => readItem(i, highestFloor)),
-    dropsLost: int(o.dropsLost, 0, Number.MAX_SAFE_INTEGER),
-    kills: int(o.kills, 0, Number.MAX_SAFE_INTEGER),
-    deaths: int(o.deaths, 0, Number.MAX_SAFE_INTEGER),
+    inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor)),
+    bagSize,
+    stones: v1 ? 0 : int(o.stones, 0, COUNT),
+    essence: v1 ? 0 : int(o.essence, 0, COUNT),
+    filter: v1 ? defaultFilter() : readFilter(o.filter),
+    dropsSold: v1 ? 0 : int(o.dropsSold, 0, COUNT),
+    dropsSalvaged: v1 ? 0 : int(o.dropsSalvaged, 0, COUNT),
+    kills: int(o.kills, 0, COUNT),
+    deaths: int(o.deaths, 0, COUNT),
   };
   return state;
 }
 
-function readCultivator(v: unknown, time: number, highestFloor: number): Cultivator {
+const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];
+
+function readFilter(v: unknown): LootFilter {
+  const o = obj(v, ['minGrade', 'slots', 'action']);
+  const slots = arr(o.slots, SLOT_IDS.length).map((id) => oneOf(id, SLOT_IDS));
+  // In SLOTS order without repeats, as setFilter keeps them.
+  if (SLOT_IDS.filter((id) => slots.includes(id)).join() !== slots.join()) fail('filter slots');
+  return {
+    minGrade: oneOf(o.minGrade, GRADE_IDS),
+    slots,
+    action: oneOf(o.action, FILTER_ACTIONS),
+  };
+}
+
+function readCultivator(v: unknown, time: number, highestFloor: number, v1: boolean): Cultivator {
   const o = obj(v, [
     'path',
     'level',
@@ -225,15 +268,17 @@ function readCultivator(v: unknown, time: number, highestFloor: number): Cultiva
     'hp',
     'nextAttackAt',
     'attackCount',
+    ...(v1 ? [] : ['unspent']),
   ]);
   const path = oneOf(o.path, PATH_IDS);
   const level = int(o.level, 1, MAX_LEVEL);
   const s = obj(o.stats, STAT_IDS);
   const stats = { body: 0, agility: 0, spirit: 0 };
-  for (const id of STAT_IDS) stats[id] = int(s[id], 0, Number.MAX_SAFE_INTEGER);
+  for (const id of STAT_IDS) stats[id] = int(s[id], BASE_STAT, Number.MAX_SAFE_INTEGER);
   // Every stat point comes from the start or a level-up; none can appear from nowhere.
   const points = 3 * BASE_STAT + STARTING_PRIMARY_BONUS + STAT_POINTS_PER_LEVEL * (level - 1);
-  if (stats.body + stats.agility + stats.spirit !== points) fail('stat points');
+  const unspent = v1 ? 0 : int(o.unspent, 0, points);
+  if (stats.body + stats.agility + stats.spirit + unspent !== points) fail('stat points');
   const eq = obj(o.equipment, [], EQUIP_IDS);
   const equipment: Equipment = {};
   for (const at of EQUIP_IDS) {
@@ -247,6 +292,7 @@ function readCultivator(v: unknown, time: number, highestFloor: number): Cultiva
     level,
     xp: int(o.xp, 0, xpToNext(level) - 1),
     stats,
+    unspent,
     equipment,
     hp: 0,
     nextAttackAt: num(o.nextAttackAt, time, time + MAX_INTERVAL),
