@@ -371,6 +371,38 @@ describe('rejects', () => {
       expect(tampered((s) => void weapon(s, 'mortal', 'Azure Silk Whisk'))).toBeNull();
     });
 
+    it('loads a Vajra Pestle on its own grade with its stored rolls', () => {
+      const save = raw();
+      // A Mortal weapon may have no affixes, so the bare item is a valid one.
+      const stored = weapon(save, 'mortal', 'Iron Vajra Pestle');
+      const loaded = decodeSave(JSON.stringify(save));
+      expect(loaded?.state.inventory[0]).toMatchObject({
+        slot: 'weapon',
+        grade: 'mortal',
+        name: 'Iron Vajra Pestle',
+        baseRoll: stored.baseRoll,
+      });
+    });
+
+    it.each([
+      ['another grade', 'Golden Vajra Pestle'],
+      ['a zero-width space', 'Iron Vajra\u200bPestle'],
+      ['a bidi override', 'Iron \u202eVajra Pestle'],
+      ['a Cyrillic look-alike', 'Ir\u043en Vajra Pestle'],
+      ['padding', 'Iron Vajra Pestle '],
+      ['a lower-case spelling', 'iron vajra pestle'],
+    ])('rejects a Vajra Pestle named with %s', (_, name) => {
+      expect(tampered((s) => void weapon(s, 'mortal', name))).toBeNull();
+    });
+
+    it('rejects a Vajra Pestle name on another type', () => {
+      expect(
+        tampered(
+          (s) => void Object.assign(item(s), { slot: 'sideArm', name: 'Iron Vajra Pestle' }),
+        ),
+      ).toBeNull();
+    });
+
     it('rejects a retired weapon name on another type', () => {
       expect(
         tampered((s) => void Object.assign(item(s), { slot: 'head', name: 'Jade Stapler' })),

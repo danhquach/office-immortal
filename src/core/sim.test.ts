@@ -345,6 +345,15 @@ describe('treasure tier realm gate', () => {
     ).toEqual([0, 0, 1, 1, 2]);
   });
 
+  it('gates a Vajra Pestle by its tier like any weapon', () => {
+    const names = ['Iron', 'Azure Thunder', 'Jade Demon-Subduing', 'Golden', 'Phoenix Flame'];
+    expect(
+      (['mortal', 'spirit', 'earth', 'heaven', 'immortal'] as const).map((grade, i) =>
+        requiredRealm({ ...weapon(5, 0), name: `${names[i]} Vajra Pestle`, grade }),
+      ),
+    ).toEqual([0, 0, 1, 1, 2]);
+  });
+
   it('gates weapons only', () => {
     for (const slot of [
       'head',

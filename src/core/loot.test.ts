@@ -135,10 +135,10 @@ describe('rollItem', () => {
     for (const g of GRADE_IDS) expect([...(counts.get(g) ?? [])].sort()).toEqual(design[g]);
   });
 
-  it('names weapons by grade: five names each, no name shared between grades', () => {
+  it('names weapons by grade: six names each, no name shared between grades', () => {
     const all = GRADE_IDS.flatMap((g) => namesFor('weapon', g));
-    for (const g of GRADE_IDS) expect(namesFor('weapon', g)).toHaveLength(5);
-    expect(new Set(all).size).toBe(25);
+    for (const g of GRADE_IDS) expect(namesFor('weapon', g)).toHaveLength(6);
+    expect(new Set(all).size).toBe(30);
     // Atlas rows follow SLOTS.names, so it lists them in grade order.
     expect(SLOTS.weapon.names).toEqual(all);
     // Seeded: every grade rolls every one of its names, and only those.
@@ -151,7 +151,14 @@ describe('rollItem', () => {
   });
 
   it('gives each grade one weapon of each family, in family order', () => {
-    const families = [/ Flying Sword$/, / Whisk$/, /Peachwood Sword$/, / Fan$/, / Seal$/];
+    const families = [
+      / Flying Sword$/,
+      / Whisk$/,
+      /Peachwood Sword$/,
+      / Fan$/,
+      / Seal$/,
+      / Vajra Pestle$/,
+    ];
     for (const g of GRADE_IDS) {
       const names = namesFor('weapon', g);
       families.forEach((family, i) => expect(names[i], `${g} ${i}`).toMatch(family));
@@ -164,7 +171,19 @@ describe('rollItem', () => {
       'Thousand-Year Peachwood Sword',
       'Phoenix Flame Fan',
       'Heaven-Crushing Seal',
+      'Phoenix Flame Vajra Pestle',
     ]);
+  });
+
+  it('drops each of the six weapon families about one time in six over 100k rolls', () => {
+    const weapons = MANY.filter((i) => i.slot === 'weapon');
+    expect(weapons.length).toBeGreaterThan(5000);
+    const p = 1 / 6;
+    const sd = Math.sqrt((p * (1 - p)) / weapons.length);
+    for (let f = 0; f < 6; f++) {
+      const got = weapons.filter((i) => namesFor('weapon', i.grade)[f] === i.name).length;
+      expect(Math.abs(got / weapons.length - p), `family ${f}`).toBeLessThan(5 * sd);
+    }
   });
 
   it('renames each retired blade to the first weapon name of its own grade only', () => {
@@ -833,7 +852,7 @@ describe('Charm lines', () => {
 describe('Path lean', () => {
   // Each family by type, in names order, and the Path it leans to (docs/design.md §6).
   const LEANS: Partial<Record<SlotId, readonly (PathId | null)[]>> = {
-    weapon: ['sword', 'talisman', 'sword', 'talisman', 'body'],
+    weapon: ['sword', 'talisman', 'sword', 'talisman', 'body', 'body'],
     sideArm: ['sword', 'body'],
     accessory: ['body', 'talisman', 'sword'],
   };

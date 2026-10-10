@@ -80,9 +80,9 @@ interface RangeDef {
 }
 
 /**
- * Weapon names by grade: a Taoist cultivator's magic tools in five families,
- * always listed Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal. The
- * material gets richer with each grade.
+ * Weapon names by grade: a Taoist cultivator's magic tools in six families,
+ * always listed Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal,
+ * Vajra Pestle. The material gets richer with each grade.
  */
 const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   mortal: [
@@ -91,6 +91,7 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
     'Peachwood Sword',
     'Feather Fan',
     'Stone Mountain Seal',
+    'Iron Vajra Pestle',
   ],
   spirit: [
     'Azure Cloud Flying Sword',
@@ -98,6 +99,7 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
     'Spirit Peachwood Sword',
     'Azure Wind Fan',
     'Azure Peak Seal',
+    'Azure Thunder Vajra Pestle',
   ],
   earth: [
     'Jade Serpent Flying Sword',
@@ -105,6 +107,7 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
     'Hundred-Year Peachwood Sword',
     'Jade Crane Fan',
     'Jade Mountain Seal',
+    'Jade Demon-Subduing Vajra Pestle',
   ],
   heaven: [
     'Golden Crow Flying Sword',
@@ -112,6 +115,7 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
     'Thunderstruck Peachwood Sword',
     'Golden Cloud Fan',
     'Golden Mountain Seal',
+    'Golden Vajra Pestle',
   ],
   immortal: [
     'Phoenix Flame Flying Sword',
@@ -119,6 +123,7 @@ const WEAPON_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
     'Thousand-Year Peachwood Sword',
     'Phoenix Flame Fan',
     'Heaven-Crushing Seal',
+    'Phoenix Flame Vajra Pestle',
   ],
 };
 
@@ -271,8 +276,8 @@ export const PATH_FAVOURS: Readonly<Record<PathId, readonly AffixId[]>> = {
  * are neutral.
  */
 const FAMILY_PATHS: Partial<Record<SlotId, readonly PathId[]>> = {
-  // Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal.
-  weapon: ['sword', 'talisman', 'sword', 'talisman', 'body'],
+  // Flying Sword, Horsetail Whisk, Peachwood Sword, Fan, Seal, Vajra Pestle.
+  weapon: ['sword', 'talisman', 'sword', 'talisman', 'body', 'body'],
   // Darts, Binding Rope.
   sideArm: ['sword', 'body'],
   // Pendant, Bell, Mirror.

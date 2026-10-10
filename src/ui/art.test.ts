@@ -130,14 +130,14 @@ describe('iconCell', () => {
     const cell = manifest.icon_size * manifest.icon_scale;
     expect(cell).toBe(64);
     expect([u32(16), u32(20)]).toEqual([cell * ICON_COLUMNS.length, cell * ICON_ROWS]);
-    // The weapon column has the most names: 5 families in each of 5 grades.
-    expect(ICON_ROWS).toBe(25);
+    // The weapon column has the most names: 6 families in each of 5 grades.
+    expect(ICON_ROWS).toBe(30);
     expect(ICON_ROWS).toBe(SLOTS.weapon.names.length);
   });
 
   it('draws weapons from our own SVG renders, with no pack art left', () => {
     const weapon = manifest.icons.find((i) => i.id === 'weapon');
-    expect(weapon?.renders).toHaveLength(25);
+    expect(weapon?.renders).toHaveLength(30);
     expect(weapon?.files).toBeUndefined();
     expect(weapon?.source).toBeUndefined();
     expect(manifest.icons.some((i) => i.files)).toBe(false);
@@ -160,9 +160,9 @@ describe('iconCell', () => {
       );
       expect(SLOTS[entry.id].names, entry.id).toHaveLength(grades.length * prefixes.length);
     }
-    // 25 weapons, 20 charms, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other three types.
+    // 30 weapons, 20 charms, 15 accessories, 10 hidden weapons, 10 attachments and 5 of each of the other three types.
     const icons = manifest.icons.reduce((n, i) => n + (i.sources ?? i.renders ?? []).length, 0);
-    expect(icons).toBe(25 + 20 + 15 + 10 + 10 + 5 * 3);
+    expect(icons).toBe(30 + 20 + 15 + 10 + 10 + 5 * 3);
     // No recoloured pixel-pack icon is left in the atlas.
     expect(manifest.icons.some((i) => i.materials ?? i.family)).toBe(false);
   });
@@ -213,11 +213,13 @@ describe('iconCell', () => {
             ? 'peach'
             : name.endsWith('Fan')
               ? 'fan'
-              : 'seal';
+              : name.endsWith('Seal')
+                ? 'seal'
+                : 'pestle';
     const grades = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
     const renders = manifest.icons.find((i) => i.id === 'weapon')?.renders;
     expect(renders).toEqual(
-      SLOTS.weapon.names.map((n, i) => `weapons/${grades[Math.floor(i / 5)]}-${family(n)}.png`),
+      SLOTS.weapon.names.map((n, i) => `weapons/${grades[Math.floor(i / 6)]}-${family(n)}.png`),
     );
   });
 
@@ -241,13 +243,21 @@ describe('iconCell', () => {
       col: 4,
       row: 4,
     });
-    expect(iconCell({ slot: 'weapon', name: 'Azure Cloud Flying Sword' } as Item)).toEqual({
+    expect(iconCell({ slot: 'weapon', name: 'Iron Vajra Pestle' } as Item)).toEqual({
       col: 4,
       row: 5,
     });
+    expect(iconCell({ slot: 'weapon', name: 'Azure Cloud Flying Sword' } as Item)).toEqual({
+      col: 4,
+      row: 6,
+    });
     expect(iconCell({ slot: 'weapon', name: 'Heaven-Crushing Seal' } as Item)).toEqual({
       col: 4,
-      row: 24,
+      row: 28,
+    });
+    expect(iconCell({ slot: 'weapon', name: 'Phoenix Flame Vajra Pestle' } as Item)).toEqual({
+      col: 4,
+      row: 29,
     });
   });
 
