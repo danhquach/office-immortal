@@ -135,6 +135,51 @@ const BOOTS_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
   immortal: ['Phoenix Flame Boots'],
 };
 
+/** Head names by grade: from a scholar's hemp cap to a phoenix crown. */
+const HEAD_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Hempen Scholar Cap'],
+  spirit: ['Azure Cloud Circlet'],
+  earth: ['Jade Lotus Crown'],
+  heaven: ['Golden Sun Crown'],
+  immortal: ['Phoenix Flame Crown'],
+};
+
+/** Hidden weapon names by grade: throwing darts and flying knives. */
+const SIDE_ARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Iron Throwing Darts'],
+  spirit: ['Azure Frost Darts'],
+  earth: ['Jade Viper Darts'],
+  heaven: ['Golden Crow Flying Knives'],
+  immortal: ['Phoenix Flame Darts'],
+};
+
+/** Gourd names by grade, worn at the hip. */
+const ATTACHMENT_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Clay Wine Gourd'],
+  spirit: ['Azure Spirit Gourd'],
+  earth: ['Jade Elixir Gourd'],
+  heaven: ['Golden Nectar Gourd'],
+  immortal: ['Phoenix Flame Gourd'],
+};
+
+/** Pendant and amulet names by grade. */
+const ACCESSORY_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Bone Bead Pendant'],
+  spirit: ['Azure Spirit Pendant'],
+  earth: ['Jade Dragon Pendant'],
+  heaven: ['Golden Sun Amulet'],
+  immortal: ['Phoenix Flame Amulet'],
+};
+
+/** Talisman and seal names by grade. */
+const CHARM_NAMES: Readonly<Record<GradeId, readonly string[]>> = {
+  mortal: ['Paper Ward Talisman'],
+  spirit: ['Azure Thunder Talisman'],
+  earth: ['Jade Seal Talisman'],
+  heaven: ['Golden Heaven Seal'],
+  immortal: ['Phoenix Flame Talisman'],
+};
+
 /**
  * Item types. `names` lists every name the type can have, in icon-atlas row
  * order; a type with `byGrade` rolls its name from the item's grade instead.
@@ -153,7 +198,8 @@ export const SLOTS: Readonly<
   head: {
     name: 'Head',
     base: { stat: 'defence', scale: 'flat', lo: 0.2, hi: 0.4 },
-    names: ['Headset of Clarity', 'Thinking Cap', 'Jade Hair Crown'],
+    names: Object.values(HEAD_NAMES).flat(),
+    byGrade: HEAD_NAMES,
   },
   chest: {
     name: 'Chest',
@@ -170,7 +216,8 @@ export const SLOTS: Readonly<
   attachment: {
     name: 'Attachment',
     base: { stat: 'lifesteal', scale: 'share', lo: 0.01, hi: 0.02 },
-    names: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
+    names: Object.values(ATTACHMENT_NAMES).flat(),
+    byGrade: ATTACHMENT_NAMES,
   },
   // An Iron Flying Sword rolls 8–14 damage at item level 10.
   weapon: {
@@ -180,19 +227,22 @@ export const SLOTS: Readonly<
     byGrade: WEAPON_NAMES,
   },
   sideArm: {
-    name: 'Side arm',
+    name: 'Hidden Weapon',
     base: { stat: 'damage', scale: 'flat', lo: 0.5, hi: 0.9 },
-    names: ['Stapler Dagger', 'Laser-Pointer Wand', 'Hole-Punch Knuckle'],
+    names: Object.values(SIDE_ARM_NAMES).flat(),
+    byGrade: SIDE_ARM_NAMES,
   },
   accessory: {
     name: 'Accessory',
     base: { stat: 'maxHp', scale: 'flat', lo: 4, hi: 7 },
-    names: ['Lanyard Pendant', 'Badge of the Dao', 'Key-Card Amulet'],
+    names: Object.values(ACCESSORY_NAMES).flat(),
+    byGrade: ACCESSORY_NAMES,
   },
   charm: {
     name: 'Charm',
     base: { stat: 'critChance', scale: 'share', lo: 0.004, hi: 0.008 },
-    names: ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm'],
+    names: Object.values(CHARM_NAMES).flat(),
+    byGrade: CHARM_NAMES,
   },
 };
 
@@ -203,10 +253,15 @@ export function namesFor(slot: SlotId, grade: GradeId): readonly string[] {
 
 /** Names earlier versions rolled on any grade, per type; a loaded save renames them. */
 const RETIRED_NAMES: Partial<Record<SlotId, readonly string[]>> = {
+  head: ['Headset of Clarity', 'Thinking Cap', 'Jade Hair Crown'],
   chest: ['Silk Cardigan', 'Pinstripe Daoist Robe', 'Casual-Friday Vestment'],
   // Boots replaced Pants; a save's pants arrive here as boots.
   boots: ['Slacks of Stillness', 'Pleated Dao Trousers', 'Khaki Leggings'],
+  attachment: ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash'],
   weapon: ['Jade Stapler', 'Letter-Opener Sword', 'Spirit Ruler'],
+  sideArm: ['Stapler Dagger', 'Laser-Pointer Wand', 'Hole-Punch Knuckle'],
+  accessory: ['Lanyard Pendant', 'Badge of the Dao', 'Key-Card Amulet'],
+  charm: ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm'],
 };
 
 /**
@@ -237,7 +292,7 @@ export const EQUIP_SLOTS: Readonly<Record<EquipSlotId, { name: string; takes: Sl
   boots: { name: 'Boots', takes: 'boots' },
   attachment: { name: 'Attachment', takes: 'attachment' },
   weapon: { name: 'Weapon', takes: 'weapon' },
-  sideArm: { name: 'Side arm', takes: 'sideArm' },
+  sideArm: { name: 'Hidden Weapon', takes: 'sideArm' },
   accessory1: { name: 'Accessory 1', takes: 'accessory' },
   accessory2: { name: 'Accessory 2', takes: 'accessory' },
   charm1: { name: 'Charm 1', takes: 'charm' },

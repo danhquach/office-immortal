@@ -105,22 +105,32 @@ The realm name is primary; the job title is shown beside it.
 Every drop is generated from a seeded roll.
 
 - **Slots:** Head, Chest, Boots, Attachment (worn at the hip, e.g. a pill
-  gourd), Weapon, Side arm, two Accessories and two Charms: eight item types
-  over ten positions. An item fills its first free position; a player can
-  choose either of a pair.
+  gourd), Weapon, Hidden Weapon (throwing darts and knives), two Accessories
+  and two Charms: eight item types over ten positions. An item fills its
+  first free position; a player can choose either of a pair.
 - **Item level** = the floor it dropped on. It caps every roll.
 - **Base stat:** each item type rolls in a range (e.g. an Iron Flying Sword
   weapon rolls 8–14 damage at item level 10).
-- **Robe and boot names follow the grade,** so a better drop looks better
-  (each name has its own icon, coloured like its grade):
+- **Every other item's name follows the grade,** one name per grade, so a
+  better drop looks better (each name has its own icon, coloured like its
+  grade: Mortal grey, Spirit azure, Earth jade, Heaven white and gold,
+  Immortal crimson and gold):
 
-| Grade | Chest | Boots |
-|---|---|---|
-| Mortal | Hempen Novice Robe | Hempen Cloth Boots |
-| Spirit | Azure Disciple Robe | Azure Cloud Boots |
-| Earth | Jade Crane Robe | Jade Step Boots |
-| Heaven | Golden Elder Robe | Golden Cloud Boots |
-| Immortal | Phoenix Flame Robe | Phoenix Flame Boots |
+| Grade | Head | Chest | Boots | Attachment |
+|---|---|---|---|---|
+| Mortal | Hempen Scholar Cap | Hempen Novice Robe | Hempen Cloth Boots | Clay Wine Gourd |
+| Spirit | Azure Cloud Circlet | Azure Disciple Robe | Azure Cloud Boots | Azure Spirit Gourd |
+| Earth | Jade Lotus Crown | Jade Crane Robe | Jade Step Boots | Jade Elixir Gourd |
+| Heaven | Golden Sun Crown | Golden Elder Robe | Golden Cloud Boots | Golden Nectar Gourd |
+| Immortal | Phoenix Flame Crown | Phoenix Flame Robe | Phoenix Flame Boots | Phoenix Flame Gourd |
+
+| Grade | Hidden Weapon | Accessory | Charm |
+|---|---|---|---|
+| Mortal | Iron Throwing Darts | Bone Bead Pendant | Paper Ward Talisman |
+| Spirit | Azure Frost Darts | Azure Spirit Pendant | Azure Thunder Talisman |
+| Earth | Jade Viper Darts | Jade Dragon Pendant | Jade Seal Talisman |
+| Heaven | Golden Crow Flying Knives | Golden Sun Amulet | Golden Heaven Seal |
+| Immortal | Phoenix Flame Darts | Phoenix Flame Amulet | Phoenix Flame Talisman |
 
 - **Weapons are a Taoist cultivator's magic tools,** in five families. Each
   grade drops one of each family, and the material gets richer with the grade
@@ -144,7 +154,10 @@ Every drop is generated from a seeded roll.
   Emerald Wind Jian; Golden Crow Sword, Sunlit Phoenix Blade, Imperial Gold
   Sabre; Vermilion Bird Blade, Heart Flame Jian, Nine Suns Sabre, by grade)
   loads as the Flying Sword of its grade. The same name on another grade is
-  rejected.
+  rejected. A Head, Hidden Weapon, Attachment, Accessory or Charm with a name
+  from before names followed the grade (the office names, e.g. Thinking Cap,
+  Stapler Dagger, Coffee Gourd, Lanyard Pendant, Sticky-Note Talisman) loads as
+  the name of its type and grade; on another type it is rejected.
 
 - **Grades (rarity) and affix count:**
 

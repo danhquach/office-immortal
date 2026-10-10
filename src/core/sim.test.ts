@@ -272,7 +272,7 @@ describe('equip', () => {
   it('never leaves HP above a lower max HP', () => {
     const pendant: Item = {
       slot: 'accessory',
-      name: 'Lanyard Pendant',
+      name: 'Bone Bead Pendant',
       level: 50,
       grade: 'mortal',
       baseRoll: 1,

@@ -170,8 +170,19 @@ describe('rollItem', () => {
     );
   });
 
-  it('names robes and boots by grade: one name each, in grade order', () => {
-    for (const slot of ['chest', 'boots'] as const) {
+  it('names every type but weapons by grade: one name each, in grade order', () => {
+    const types = [
+      'head',
+      'chest',
+      'boots',
+      'attachment',
+      'sideArm',
+      'accessory',
+      'charm',
+    ] as const;
+    // With weapons, that is every type.
+    expect([...types, 'weapon'].sort()).toEqual(Object.keys(SLOTS).sort());
+    for (const slot of types) {
       for (const g of GRADE_IDS) expect(namesFor(slot, g)).toHaveLength(1);
       expect(SLOTS[slot].names).toEqual(GRADE_IDS.flatMap((g) => namesFor(slot, g)));
       for (const g of GRADE_IDS) {
@@ -182,11 +193,72 @@ describe('rollItem', () => {
     }
   });
 
-  it('keeps one name list for the types without grade names', () => {
-    for (const s of Object.keys(SLOTS) as (keyof typeof SLOTS)[]) {
-      if (SLOTS[s].byGrade) continue;
-      for (const g of GRADE_IDS) expect(namesFor(s, g)).toBe(SLOTS[s].names);
+  it('rolls the names docs/design.md lists for the five remaining types', () => {
+    const table: Record<'head' | 'sideArm' | 'attachment' | 'accessory' | 'charm', string[]> = {
+      head: [
+        'Hempen Scholar Cap',
+        'Azure Cloud Circlet',
+        'Jade Lotus Crown',
+        'Golden Sun Crown',
+        'Phoenix Flame Crown',
+      ],
+      sideArm: [
+        'Iron Throwing Darts',
+        'Azure Frost Darts',
+        'Jade Viper Darts',
+        'Golden Crow Flying Knives',
+        'Phoenix Flame Darts',
+      ],
+      attachment: [
+        'Clay Wine Gourd',
+        'Azure Spirit Gourd',
+        'Jade Elixir Gourd',
+        'Golden Nectar Gourd',
+        'Phoenix Flame Gourd',
+      ],
+      accessory: [
+        'Bone Bead Pendant',
+        'Azure Spirit Pendant',
+        'Jade Dragon Pendant',
+        'Golden Sun Amulet',
+        'Phoenix Flame Amulet',
+      ],
+      charm: [
+        'Paper Ward Talisman',
+        'Azure Thunder Talisman',
+        'Jade Seal Talisman',
+        'Golden Heaven Seal',
+        'Phoenix Flame Talisman',
+      ],
+    };
+    for (const [slot, names] of Object.entries(table)) {
+      expect(SLOTS[slot as keyof typeof table].names).toEqual(names);
     }
+  });
+
+  it('labels the side arm type and position Hidden Weapon', () => {
+    expect(SLOTS.sideArm.name).toBe('Hidden Weapon');
+    expect(EQUIP_SLOTS.sideArm).toEqual({ name: 'Hidden Weapon', takes: 'sideArm' });
+    const labels = [...Object.values(SLOTS), ...Object.values(EQUIP_SLOTS)].map((x) => x.name);
+    expect(labels.filter((l) => /side arm/i.test(l))).toEqual([]);
+  });
+
+  it('renames each retired office name to the first name of the item grade', () => {
+    const office: [SlotId, string[]][] = [
+      ['head', ['Headset of Clarity', 'Thinking Cap', 'Jade Hair Crown']],
+      ['sideArm', ['Stapler Dagger', 'Laser-Pointer Wand', 'Hole-Punch Knuckle']],
+      ['attachment', ['Coffee Gourd', 'Thermos of Elixirs', 'Break-Room Calabash']],
+      ['accessory', ['Lanyard Pendant', 'Badge of the Dao', 'Key-Card Amulet']],
+      ['charm', ['Sticky-Note Talisman', 'Laminated Seal', 'Post-Meeting Charm']],
+    ];
+    for (const [slot, olds] of office) {
+      for (const old of olds) {
+        for (const g of GRADE_IDS) expect(renamed(slot, g, old)).toBe(namesFor(slot, g)[0]);
+        // On another type it is left as is, so the save check rejects it.
+        expect(renamed(slot === 'head' ? 'charm' : 'head', 'mortal', old)).toBe(old);
+      }
+    }
+    expect(renamed('sideArm', 'mortal', 'Stapler Dagger\u200b')).toBe('Stapler Dagger\u200b');
   });
 
   it('rolls every slot, affix and unique effect', () => {
@@ -356,7 +428,7 @@ describe('equipmentBonuses', () => {
     };
     const sideArm: Item = {
       slot: 'sideArm',
-      name: 'Stapler Dagger',
+      name: 'Azure Frost Darts',
       level: 10,
       grade: 'spirit',
       baseRoll: 0,

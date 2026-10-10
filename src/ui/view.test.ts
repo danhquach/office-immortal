@@ -121,7 +121,7 @@ describe('compareToEquipped', () => {
     const c = newCultivator('sword');
     const gourd: Item = {
       slot: 'attachment',
-      name: 'Coffee Gourd',
+      name: 'Azure Spirit Gourd',
       level: 1,
       grade: 'spirit',
       baseRoll: 0,

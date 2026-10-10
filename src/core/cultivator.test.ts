@@ -65,7 +65,7 @@ describe('derive', () => {
   function withAffix(id: AffixId, level: number): Item {
     return {
       slot: 'accessory',
-      name: 'Lanyard Pendant',
+      name: 'Azure Spirit Pendant',
       level,
       grade: 'spirit',
       baseRoll: 0,
