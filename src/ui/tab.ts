@@ -75,9 +75,13 @@ function pictureInPicture(win: Window): PictureInPicture | null {
     : null;
 }
 
-/** Whether this browser can pop the Mini view out (Chromium's Document Picture-in-Picture). */
+/**
+ * Whether this browser can pop the Mini view out (Chromium's Document
+ * Picture-in-Picture). Not inside a frame (a game portal's embed): the API
+ * refuses any window but the top one.
+ */
 export function canPopOut(win: Window): boolean {
-  return pictureInPicture(win) !== null;
+  return pictureInPicture(win) !== null && win.top === win;
 }
 
 /** The Mini view's size: about 3:1 (docs/design.md §14). */

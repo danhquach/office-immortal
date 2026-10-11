@@ -22,16 +22,26 @@ const HTML_SINK = 'Render text with textContent / DOM nodes, never as HTML.';
 const noHtmlSinks = {
   'no-restricted-syntax': [
     'error',
+    // el.innerHTML = … and el['innerHTML'] = …
     {
-      selector: 'AssignmentExpression > MemberExpression[property.name=/^(innerHTML|outerHTML)$/]',
+      selector:
+        'AssignmentExpression > MemberExpression[property.name=/^(innerHTML|outerHTML)$/], AssignmentExpression > MemberExpression[property.value=/^(innerHTML|outerHTML)$/]',
       message: HTML_SINK,
     },
     {
-      selector: 'CallExpression[callee.property.name=/^(insertAdjacentHTML|write|writeln)$/]',
+      selector:
+        'CallExpression[callee.property.name=/^(insertAdjacentHTML|write|writeln|setHTMLUnsafe|parseFromString|createContextualFragment)$/]',
       message: HTML_SINK,
     },
-    { selector: "CallExpression[callee.name='eval']", message: 'No eval.' },
+    // eval(…) and window.eval(…)
+    {
+      selector: "CallExpression[callee.name='eval'], CallExpression[callee.property.name='eval']",
+      message: 'No eval.',
+    },
   ],
+  // setTimeout('code') and new Function('code') are eval too.
+  'no-implied-eval': 'error',
+  'no-new-func': 'error',
 };
 
 // src/core/** is the pure simulation: it must run under Vitest and in offline

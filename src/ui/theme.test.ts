@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import boot from '../../public/theme-boot.js?raw';
 import html from '../../index.html?raw';
@@ -110,11 +111,11 @@ describe('first-paint script (public/theme-boot.js)', () => {
       },
     };
     // Test-only: run the repo's own boot script with stand-ins for its globals.
-    new Function('localStorage', 'matchMedia', 'document', script as string)(
-      storage,
-      () => ({ matches: osDark }),
-      { documentElement: root },
-    );
+    runInNewContext(script as string, {
+      localStorage: storage,
+      matchMedia: () => ({ matches: osDark }),
+      document: { documentElement: root },
+    });
     return root.dataset.theme;
   }
 
