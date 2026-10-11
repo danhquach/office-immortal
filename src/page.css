@@ -300,11 +300,47 @@ select {
   gap: 0.75rem;
 }
 .paths button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: 0.75rem;
   text-align: left;
   padding: 0.75rem;
 }
 .paths strong {
-  display: block;
+  align-self: end;
+}
+.paths .muted {
+  align-self: start;
+}
+/* The Path's fighter, far right: a 128 px sheet frame shown at 64 px. Idles,
+   and swings when the button is hovered or focused. */
+.paths .avatar {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  width: 64px;
+  height: 64px;
+  background-repeat: no-repeat;
+  background-size: 256px 256px;
+  background-position: 0 0;
+  image-rendering: pixelated;
+  animation: avatar-frames 0.8s steps(4) infinite;
+}
+.paths button:is(:hover, :focus-visible) .avatar {
+  background-position-y: -64px;
+  animation-duration: 0.4s;
+}
+@keyframes avatar-frames {
+  to {
+    background-position-x: -256px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .paths .avatar,
+  .paths button:is(:hover, :focus-visible) .avatar {
+    animation: none;
+    background-position: 0 0;
+  }
 }
 
 /* Layout: Full is a grid; Narrow (under 768 px) stacks it, strip first. */

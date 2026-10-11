@@ -534,7 +534,14 @@ function pathChoice(onPick: (path: PathId) => void): HTMLElement {
   for (const id of Object.keys(PATHS) as PathId[]) {
     const b = el('button');
     b.type = 'button';
-    b.append(el('strong', '', tn('path', PATHS[id].name)), el('span', 'muted', pathBlurb(id)));
+    const avatar = el('span', 'avatar');
+    avatar.setAttribute('aria-hidden', 'true');
+    avatar.style.backgroundImage = cssUrl(artUrl(`path-${id}`));
+    b.append(
+      el('strong', '', tn('path', PATHS[id].name)),
+      el('span', 'muted', pathBlurb(id)),
+      avatar,
+    );
     b.addEventListener('click', () => onPick(id));
     list.append(b);
   }

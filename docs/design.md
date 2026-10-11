@@ -34,11 +34,11 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 - **Solo.** One character. No party in v1.
 - **Paths (classes):** pick one at the start; change it later for a cost.
 
-| Path | Office cover | Role | Primary stat |
-|---|---|---|---|
-| Sword Cultivator | Sales | Fast hits, crit, a little lifesteal (5%) | Agility |
-| Body Refiner | Facilities | Tanky, lifesteal | Body |
-| Talisman Master | IT | Burst, area damage | Spirit |
+| Path | Role | Primary stat |
+|---|---|---|
+| Sword Cultivator | Fast hits, crit, a little lifesteal (5%) | Agility |
+| Body Refiner | Tanky, lifesteal | Body |
+| Talisman Master | Burst, area damage | Spirit |
 
 - **Balance:** no Path is much stronger than the others; a test keeps each
   within 15% of the others on the floor reached.

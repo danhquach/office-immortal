@@ -20,9 +20,9 @@ const vi: Pack = {
 
     'choose.title': 'Chọn Con Đường',
     'choose.intro': 'Tu sĩ của bạn tự chiến đấu. Hãy chọn lối đánh.',
-    'pathBlurb.sword': 'Kinh doanh · Đánh nhanh, bạo kích, hút máu nhẹ · Thân Pháp',
-    'pathBlurb.body': 'Hành chính · Trâu bò, hút máu · Thể Chất',
-    'pathBlurb.talisman': 'IT · Bộc phát, sát thương diện rộng · Thần Thức',
+    'pathBlurb.sword': 'Đánh nhanh, bạo kích, hút máu nhẹ · Thân Pháp',
+    'pathBlurb.body': 'Trâu bò, hút máu · Thể Chất',
+    'pathBlurb.talisman': 'Bộc phát, sát thương diện rộng · Thần Thức',
 
     'overtime.title': 'Tu Luyện Tăng Ca',
     'overtime.intro': 'Tu sĩ của bạn vẫn chiến đấu khi bạn vắng mặt.',

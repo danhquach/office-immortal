@@ -16,9 +16,9 @@ const messages = {
 
   'choose.title': 'Choose your Path',
   'choose.intro': 'Your cultivator fights on their own. Pick how they fight.',
-  'pathBlurb.sword': 'Sales · Fast hits, crit, a little lifesteal · Agility',
-  'pathBlurb.body': 'Facilities · Tanky, lifesteal · Body',
-  'pathBlurb.talisman': 'IT · Burst, area damage · Spirit',
+  'pathBlurb.sword': 'Fast hits, crit, a little lifesteal · Agility',
+  'pathBlurb.body': 'Tanky, lifesteal · Body',
+  'pathBlurb.talisman': 'Burst, area damage · Spirit',
 
   'overtime.title': 'Overtime Cultivation',
   'overtime.intro': 'Your cultivator kept fighting while you were away.',
