@@ -3,10 +3,14 @@
 // all, 200 MB per file, 240-character paths) so a bad upload fails here, not
 // on the site. Also refuses a build with the cloud save in it: itch.io serves
 // every game from one shared origin, where another game could read the cloud
-// sign-in token. Run `npm run build` first; writes office-immortal-web.zip.
+// sign-in token. The cloud save reaches itch.io only through the storage frame
+// on GitHub Pages (docs/design.md §11), so the one thing allowed is a frame-src
+// naming a github.io origin, and no frame page of its own. Run `npm run build`
+// first; writes office-immortal-web.zip.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { cloudProblems } from './zip-checks.mjs';
 
 const DIST = 'dist';
 const OUT = 'office-immortal-web.zip';
@@ -22,13 +26,14 @@ if (!existsSync(join(DIST, 'index.html'))) {
   throw new Error(`${DIST}/index.html is missing: run npm run build first`);
 }
 
-// The build's CSP lists the cloud origin in connect-src only when it has the cloud save.
-const html = readFileSync(join(DIST, 'index.html'), 'utf8');
-if (!/connect-src &#39;self&#39;;|connect-src 'self';/.test(html)) {
-  throw new Error('The build has the cloud save in it: rebuild without VITE_SUPABASE_URL');
-}
-
 const all = files(DIST);
+const refused = cloudProblems({
+  html: readFileSync(join(DIST, 'index.html'), 'utf8'),
+  paths: all.map((f) => relative(DIST, f)),
+  read: (path) => readFileSync(join(DIST, path), 'utf8'),
+});
+if (refused.length) throw new Error(refused.join('\n'));
+
 const problems = [];
 let total = 0;
 for (const f of all) {

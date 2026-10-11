@@ -48,7 +48,10 @@ section; change both together.
 > **Saves:** progress is saved in your browser for this site, so it doesn't
 > carry over from another site or another browser, and clearing site data
 > deletes it. Playing on itch.io and on the game's own site keeps two separate
-> saves. Cloud save isn't available in the itch.io version.
+> saves. To keep progress across browsers and devices, turn on cloud save
+> (Menu, Settings, Cloud save) and link the other device with a one-time code.
+> Cloud save needs a browser that supports it in an embedded game, such as
+> Chrome, Edge or Safari; in Firefox the game saves in the browser only.
 >
 > **Made with AI:** the art was generated with an image model (flux.2-klein-4b,
 > through Pollinations) and then cleaned up and reworked by hand; the code was

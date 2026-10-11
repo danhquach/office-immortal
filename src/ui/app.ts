@@ -71,6 +71,13 @@ import {
   writeBoth,
   type Backup,
 } from '../storage/backup.ts';
+import type { FrameConfig } from '../storage/frame-config.ts';
+import {
+  loadFramed,
+  openFrame,
+  withFallbackCopy,
+  type FrameLink,
+} from '../storage/frame-client.ts';
 import {
   browserStorage,
   encodeSave,
@@ -307,10 +314,16 @@ let showCloudNote: ((note: CloudMessage) => void) | null = null;
 let current: { root: HTMLElement; storage: SaveStorage } | null = null;
 
 function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null {
+  if (!storage) return null;
+  // In the storage frame (itch.io), the frame's sync is set before the first start.
+  if (sync) {
+    current = { root, storage };
+    return sync;
+  }
   const config = readCloudConfig(import.meta.env);
-  if (!config || !storage) return null;
+  if (!config) return null;
   current = { root, storage };
-  sync ??= createSync({
+  sync = createSync({
     cloud: createCloud({
       config,
       storage,
@@ -325,13 +338,65 @@ function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null 
     now: Date.now,
     visible: () => !document.hidden,
     // The adopted save is in browser storage; its stamp may be older than the backup's.
-    onAdopt: () => current && start(current.root, current.storage, 'local'),
-    onNote: (code) => {
-      cloudNote = code;
-      showCloudNote?.(code);
-    },
+    onAdopt: adopted,
+    onNote: noted,
   });
   return sync;
+}
+
+/** The sync took the cloud's save: restart from it (it is in browser storage, whatever its stamp). */
+function adopted(): void {
+  if (current) start(current.root, current.storage, 'local');
+}
+
+function noted(code: CloudMessage): void {
+  cloudNote = code;
+  showCloudNote?.(code);
+}
+
+/** The storage frame, once it answered (the itch.io build); null everywhere else. */
+let frameLink: FrameLink | null = null;
+
+/**
+ * The itch.io build: links to the storage frame on GitHub Pages, then starts.
+ * Linked, the save, its backup and the cloud save live in the frame; if the
+ * frame refuses or doesn't load, the game runs on this page's own storage as
+ * before. Either way the run starts once, after the answer.
+ */
+export async function startWithFrame(root: HTMLElement, config: FrameConfig): Promise<void> {
+  const link = await openFrame(config, { onAdopt: adopted, onNote: noted });
+  if (!link) {
+    start(root);
+    return;
+  }
+  frameLink = link;
+  sync = link.sync;
+  backupCopy = withFallbackCopy(link.backup, browserStorage(), idbBackup(browserIdb()));
+  start(root, link.storage);
+}
+
+/**
+ * The newest save in `storage` and the backup. With the frame, its save wins
+ * whenever it has one; this page's own copies (on itch.io's shared origin) are
+ * read only when the frame holds none, as on the first start with the frame.
+ */
+function loadStart(storage: SaveStorage | null): Promise<Save | null> {
+  if (!frameLink || !storage) return loadNewest(storage, backup(), Date.now());
+  const own = { storage: browserStorage(), backup: idbBackup(browserIdb()) };
+  return loadFramed({ storage, backup: backup() }, own, Date.now());
+}
+
+/** Calls `fn` on another tab's change to browser storage (key null: cleared) until `signal`. */
+function watchStorage(
+  fn: (key: string | null, value: string | null) => void,
+  signal: AbortSignal,
+): void {
+  if (frameLink) {
+    const stop = frameLink.onStorage(fn);
+    signal.addEventListener('abort', stop);
+    return;
+  }
+  window.addEventListener('storage', (e) => fn(e.key, e.newValue), { signal });
 }
 
 /** The IndexedDB copy of the save, opened on first use. */
@@ -364,7 +429,7 @@ export function start(
   };
   if (from === 'local') begin(storage && loadSave(storage));
   else if (from) begin(from);
-  else void loadNewest(storage, backup(), Date.now()).then(begin);
+  else void loadStart(storage).then(begin);
 }
 
 function resume(root: HTMLElement, storage: SaveStorage | null, saved: Save | null): void {
@@ -2545,19 +2610,15 @@ function play(
 
   // A Reset progress in another tab deletes the save: this tab stops its run
   // too, so its autosave can't write the old state back.
-  window.addEventListener(
-    'storage',
-    (e) => {
-      if (!storage) return;
-      if (e.key === SAVE_KEY && e.newValue === null) start(root, storage);
-      // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
-      // Only an adoption writes this key, so autosaving tabs can't set each other off.
-      else if (e.key === ADOPT_KEY) start(root, storage, 'local');
-      // Something else cleared browser storage: put this run's save straight back.
-      else if (e.key === null) save();
-    },
-    { signal },
-  );
+  watchStorage((key, value) => {
+    if (!storage) return;
+    if (key === SAVE_KEY && value === null) start(root, storage);
+    // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
+    // Only an adoption writes this key, so autosaving tabs can't set each other off.
+    else if (key === ADOPT_KEY) start(root, storage, 'local');
+    // Something else cleared browser storage: put this run's save straight back.
+    else if (key === null) save();
+  }, signal);
 
   // Looking at the tab again clears the count and the favicon's dot.
   document.addEventListener(
