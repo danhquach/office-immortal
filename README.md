@@ -93,6 +93,45 @@ npm run preview  # serve the production build from dist/
 
 Unit tests sit next to the code they cover, as `src/**/*.test.ts`.
 
+## Release on itch.io
+
+The game is also published on itch.io as an HTML5 project. Pushing a version
+tag on a commit already on `main` builds it without the cloud save, zips it
+(`npm run zip`, which checks itch.io's upload limits and refuses a build with
+the cloud save in it; it needs `zip` on the PATH) and, once the required check
+is green and you approve the run, uploads it with butler, itch.io's upload
+tool. Pushes to `main` still deploy only to GitHub
+Pages.
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+One-time setup:
+
+- **itch.io project:** Kind of project **HTML**; upload channel `html5` (butler
+  creates it on the first push), marked **This file will be played in the
+  browser**; embed in page at 960 × 640 with **Fullscreen button** and
+  **Enable scrollbars** on; **Mobile friendly** on. The store page describes
+  the game by genre only.
+- **GitHub:** the `itch` environment holds the secret `BUTLER_API_KEY` (an
+  itch.io API key) and the variable `ITCH_GAME` (`user/game`). It runs only for
+  `v*` tags and waits for a reviewer's approval; a tag ruleset lets only admins
+  create, move or delete `v*` tags.
+
+How the itch.io build differs from GitHub Pages:
+
+- **No cloud save.** itch.io serves every uploaded game from one shared origin,
+  so another game there could read the cloud sign-in token. The itch.io build
+  leaves the cloud settings out and the menu doesn't offer it.
+- **Its own local save.** Saves are kept per site, so progress on itch.io and
+  on GitHub Pages are separate. On that shared origin another game can also
+  clear or overwrite the local save; there is no way to stop that from inside
+  the page.
+- **No pop-out.** The browser refuses Document Picture-in-Picture inside a
+  frame, so the button is hidden. Browsers may also refuse notifications
+  inside the frame.
+
 ## License
 
 [MIT](LICENSE)

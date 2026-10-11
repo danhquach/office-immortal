@@ -23,3 +23,6 @@ test-results/
 .DS_Store
 *.swp
 art-src/
+
+# itch.io upload (npm run zip)
+office-immortal-web.zip

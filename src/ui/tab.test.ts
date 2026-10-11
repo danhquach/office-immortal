@@ -125,9 +125,17 @@ describe('notifier', () => {
 });
 
 describe('pop-out', () => {
-  it('is offered only where Document Picture-in-Picture exists', () => {
-    expect(canPopOut({} as Window)).toBe(false);
-    expect(canPopOut({ documentPictureInPicture: {} } as unknown as Window)).toBe(true);
+  it('is offered only where Document Picture-in-Picture exists, in the top window', () => {
+    const top = (extra: object) => {
+      const win = { ...extra } as { top?: unknown };
+      win.top = win;
+      return win as unknown as Window;
+    };
+    expect(canPopOut(top({}))).toBe(false);
+    expect(canPopOut(top({ documentPictureInPicture: {} }))).toBe(true);
+    // Embedded in a frame (an itch.io page): the API refuses, so no button.
+    const framed = { documentPictureInPicture: {}, top: {} } as unknown as Window;
+    expect(canPopOut(framed)).toBe(false);
   });
 
   it('gives null, and builds nothing, without the API or when the window is refused', async () => {

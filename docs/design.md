@@ -368,7 +368,8 @@ treasure find, a higher offline cap, more starting stat points.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini
-  view (§14) pops out into a small always-on-top window.
+  view (§14) pops out into a small always-on-top window. Not offered when the
+  page is embedded in a frame (the itch.io build): the API refuses there.
 - **Notification:** optional browser notification on an Immortal-grade drop
   and when a Tribulation falls due (§4).
 
