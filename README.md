@@ -96,9 +96,10 @@ Unit tests sit next to the code they cover, as `src/**/*.test.ts`.
 ## Release on itch.io
 
 The game is also published on itch.io as an HTML5 project. Pushing a version
-tag on a commit already on `main` builds it without the cloud save, zips it
-(`npm run zip`, which checks itch.io's upload limits and refuses a build with
-the cloud save in it; it needs `zip` on the PATH) and, once the required check
+tag on a commit already on `main` builds it with the storage frame instead of
+the cloud settings, zips it (`npm run zip`, which checks itch.io's upload
+limits and refuses a build with the cloud save in it; it needs `zip` on the
+PATH) and, once the required check
 is green and you approve the run, uploads it with butler, itch.io's upload
 tool. Pushes to `main` still deploy only to GitHub
 Pages.
@@ -115,19 +116,31 @@ One-time setup:
   **Enable scrollbars** on; **Mobile friendly** on. The store page describes
   the game by genre only.
 - **GitHub:** the `itch` environment holds the secret `BUTLER_API_KEY` (an
-  itch.io API key) and the variable `ITCH_GAME` (`user/game`). It runs only for
+  itch.io API key) and the variable `ITCH_GAME` (`user/game`). Repository
+  variables: `VITE_STORE_FRAME_URL`, the frame page on GitHub Pages
+  (`https://<user>.github.io/<repo>/store.html`, used by the itch.io build),
+  and `VITE_ITCH_PAGE_ORIGIN`, the itch.io page (`https://<user>.itch.io`, used
+  by the GitHub Pages build so its frame answers that page). The release
+  refuses to zip without the first. The job runs only for
   `v*` tags and waits for a reviewer's approval; a tag ruleset lets only admins
   create, move or delete `v*` tags.
 
 How the itch.io build differs from GitHub Pages:
 
-- **No cloud save.** itch.io serves every uploaded game from one shared origin,
-  so another game there could read the cloud sign-in token. The itch.io build
-  leaves the cloud settings out and the menu doesn't offer it.
+- **Cloud save through a storage frame.** itch.io serves every uploaded game
+  from one shared origin, so another game there could read a cloud sign-in
+  token kept in its storage. The itch.io build keeps its save and cloud save
+  in a hidden frame on GitHub Pages instead, which answers only our own itch.io
+  page (`docs/design.md` §11, "Cloud save on itch.io"). Where the browser
+  can't use it (Firefox, which lacks `location.ancestorOrigins`, or blocked
+  frame storage), the game runs on its own itch.io storage without the cloud
+  save. To move progress between itch.io and GitHub Pages, use a link code
+  (cloud save) or the save code.
 - **Its own local save.** Saves are kept per site, so progress on itch.io and
-  on GitHub Pages are separate. On that shared origin another game can clear
-  or overwrite `localStorage`, so every save also goes to IndexedDB and the
-  game loads the newest valid copy (`docs/design.md` §11).
+  on GitHub Pages are separate. Every save also goes to a fallback copy on
+  itch.io's shared origin, used only when the frame doesn't answer or holds no
+  save; there another game can clear or overwrite `localStorage`, so it also
+  goes to IndexedDB and the game loads the newest valid copy.
 - **Save code backup.** Menu, Settings, Save code: **Export** copies the save
   as a text code to keep outside the browser. To restore (new browser, cleared
   site data), paste the code into the field, press **Import** and confirm.

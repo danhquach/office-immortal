@@ -476,6 +476,65 @@ waits on the network.
   the game logs nothing and never puts cloud data in the page title.
   Server text is never shown: errors map to the game's own messages.
 
+### Cloud save on itch.io
+
+itch.io serves every uploaded HTML5 game from one shared origin, so anything
+the game keeps in its own browser storage there can be read, changed or
+cleared by any other game on itch.io. The itch.io build therefore keeps its
+save and its cloud save in a **storage frame**: a page without visible content
+(`store.html`) on our GitHub Pages origin, embedded hidden in the game.
+
+- **What lives in the frame.** The local save, its IndexedDB copy, the
+  settings, and the whole cloud save: the sign-in session, the sync and every
+  request to the backend. The token never leaves the frame. The game works from
+  a copy of the frame's storage kept in memory, so play never waits on a
+  message: writes go to the copy at once and on to the frame, and the frame's
+  own writes (taking the cloud's save) come back as messages. An autosave
+  sent just as the frame takes the cloud's save can land after it; the game
+  restarts from the cloud's save either way and its next save puts it back, as
+  between two tabs.
+- **Who the frame answers.** Only when `location.ancestorOrigins` is exactly
+  itch.io's game host (`*.itch.zone`) inside our own itch.io page at the top
+  (the page origin is set at build time). Anything else gets no answer: a
+  missing `ancestorOrigins` (Firefox), another game on the same itch.io origin
+  in its own page, another frame on our page (a video), our page framed by
+  another, or the frame loaded on its own. The trust is per itch.io account:
+  `https://<user>.itch.io` is the top of every game that account publishes. A
+  message counts only from the frame's parent window at that origin; replies go
+  to that origin alone, never `*`.
+- **Messages.** A fixed list of request types (read and write a stored key, the
+  backup, and each cloud action). Both sides read every message through an
+  allow-list, as for the save: exact keys, known storage keys only (the cloud's
+  own key is never one), text of a save's size at most, known message codes.
+  A conflict's two saves travel as save text and go through the load check
+  again on arrival. Anything off is dropped without an answer.
+- **Fallback.** Where the frame refuses, or isn't linked within 7 s (2 s
+  once loaded), the game runs on its own itch.io storage and IndexedDB
+  copy, without the cloud save, as before. A browser without
+  `ancestorOrigins` skips the frame at once. So progress is never stuck behind
+  the frame, every save also goes to the game's own itch.io copies. Those are
+  read only when the frame doesn't answer or holds no save (its first start,
+  or a browser that wipes frame storage between visits); whenever the frame has
+  a save, it wins. Another game can read or change those copies, but they hold
+  only the game's state, never the token, and never override the frame's save.
+  Reset progress clears every copy. The cost: a session that ran without the
+  frame while the frame still holds a save (GitHub Pages slow or down) is
+  dropped at the next linked start, which plays the frame's save.
+- **Builds.** The GitHub Pages build ships `store.html` and names the itch.io
+  page it answers (`VITE_ITCH_PAGE_ORIGIN`). The itch.io build has no cloud
+  settings and no `store.html`; it names the frame
+  (`VITE_STORE_FRAME_URL`) and its Content-Security-Policy gains only
+  `frame-src` for that GitHub Pages origin. `npm run zip` refuses any other
+  form: a cloud address, no frame or a frame origin that is not GitHub Pages,
+  or a frame page of its own.
+- **Known limit.** itch.io sends no Cross-Origin-Opener-Policy, so another
+  itch.io game that opens our itch.io page in a popup can script our game
+  (they share an origin) and act through it: upload over or delete the cloud
+  save, or ask the frame for a link code. It can't read the token, but a link
+  code redeemed on its own device joins the player's cloud save, which is as
+  good as the token for that save. Showing the link code inside the frame, so
+  the game page never sees it, is the follow-up (#88).
+
 ## 12. Out of scope (v1)
 
 - Party / multiple characters.

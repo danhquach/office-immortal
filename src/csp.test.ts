@@ -17,4 +17,14 @@ describe('Content-Security-Policy', () => {
       BASE.replace("connect-src 'self'", "connect-src 'self' https://abcdefghij.supabase.co"),
     );
   });
+
+  it('adds only the storage frame origin as frame-src in the itch.io build', () => {
+    const csp = buildCsp(null, 'https://ourname.github.io');
+    expect(csp).toBe(
+      BASE.replace(
+        "connect-src 'self';",
+        "connect-src 'self'; frame-src https://ourname.github.io;",
+      ),
+    );
+  });
 });

@@ -34,11 +34,19 @@ jobs:
           # See supabase/README.md.
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-      - name: Build and zip for itch.io (no cloud save)
+          # The itch.io page the storage frame (store.html) answers; empty means it answers no one.
+          VITE_ITCH_PAGE_ORIGIN: ${{ vars.VITE_ITCH_PAGE_ORIGIN }}
+      - name: Build and zip for itch.io (cloud save through the storage frame)
         # itch.io serves every uploaded game from one shared origin, so another
         # game could read the cloud sign-in token from localStorage. The itch.io
-        # build leaves the cloud settings out, which hides cloud save there.
+        # build leaves the cloud settings out and keeps its save and cloud save
+        # in the storage frame on GitHub Pages instead (docs/design.md §11).
+        # npm run zip refuses anything else.
         if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          VITE_SUPABASE_URL: ''
+          VITE_SUPABASE_ANON_KEY: ''
+          VITE_STORE_FRAME_URL: ${{ vars.VITE_STORE_FRAME_URL }}
         run: npm run build && npm run zip
       - name: Upload itch.io build
         if: startsWith(github.ref, 'refs/tags/v')

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { readCloudConfig } from './src/storage/cloud-config.ts';
+import { readFrameConfig } from './src/storage/frame-config.ts';
 
 /**
  * The built page's Content-Security-Policy. GitHub Pages sends no headers, so it
@@ -10,7 +11,10 @@ import { readCloudConfig } from './src/storage/cloud-config.ts';
  *
  * Not settable from a meta tag (accepted): `frame-ancestors`, `report-uri`, `sandbox`.
  */
-export function buildCsp(cloudOrigin: string | null = null): string {
+export function buildCsp(
+  cloudOrigin: string | null = null,
+  frameOrigin: string | null = null,
+): string {
   return [
     "default-src 'none'",
     "script-src 'self'",
@@ -18,15 +22,20 @@ export function buildCsp(cloudOrigin: string | null = null): string {
     "img-src 'self' data:",
     // The cloud save's project origin, only when the build is configured for it (§11).
     ["connect-src 'self'", cloudOrigin].filter(Boolean).join(' '),
+    // The storage frame's origin, only in the itch.io build (§11, "Cloud save on itch.io").
+    ...(frameOrigin ? [`frame-src ${frameOrigin}`] : []),
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ');
 }
 
+const env = loadEnv('production', process.cwd(), 'VITE_');
 /** The cloud origin the build is configured with; null (no change to the CSP) when missing or malformed. */
-const cloud = readCloudConfig(loadEnv('production', process.cwd(), 'VITE_'));
-const CSP = buildCsp(cloud?.url ?? null);
+const cloud = readCloudConfig(env);
+/** The itch.io build's storage frame; null for the GitHub Pages build. */
+const frame = readFrameConfig(env);
+const CSP = buildCsp(cloud?.url ?? null, frame?.origin ?? null);
 
 /** Build only: the dev server's hot reload needs inline script and a websocket. */
 const cspMeta: Plugin = {
@@ -46,4 +55,10 @@ export default defineConfig({
   // Relative asset URLs so the same build works at the site root (local preview)
   // and under the repository sub-path on GitHub Pages.
   base: './',
+  build: {
+    rollupOptions: {
+      // The storage frame page ships on GitHub Pages only; the itch.io build embeds that one.
+      input: frame ? ['index.html'] : ['index.html', 'store.html'],
+    },
+  },
 });

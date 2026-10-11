@@ -15,6 +15,7 @@ export default mergeConfig(
         'src/storage/**/*.test.ts',
         'src/ui/**/*.test.ts',
         'src/csp.test.ts',
+        'src/zip-checks.test.ts',
         'src/lint.test.ts',
       ],
       environment: 'node',
