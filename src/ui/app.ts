@@ -71,7 +71,7 @@ import {
   writeBoth,
   type Backup,
 } from '../storage/backup.ts';
-import type { FrameConfig } from '../storage/frame-config.ts';
+import { CODE_HASH, LINK_HASH, type FrameConfig } from '../storage/frame-config.ts';
 import {
   loadFramed,
   openFrame,
@@ -101,7 +101,7 @@ import {
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
-import { cloudStatusLine, cloudText, needsChoice, saveSummary } from './cloud-view.ts';
+import { cloudStatusLine, cloudText, frameStep, needsChoice, saveSummary } from './cloud-view.ts';
 import {
   enemyName,
   lang,
@@ -356,6 +356,16 @@ function noted(code: CloudMessage): void {
 
 /** The storage frame, once it answered (the itch.io build); null everywhere else. */
 let frameLink: FrameLink | null = null;
+/** With the storage frame: its page, also shown visibly to make or take a link code, which this page never sees. */
+let frameUrl: string | null = null;
+
+/** A visible frame of the storage page that makes or takes a link code (ui/code-frame.ts). */
+function storeFrame(url: string, hash: string, title: MessageKey, className: string) {
+  const frame = el('iframe', className);
+  attr(frame, 'title', title);
+  frame.src = url + hash;
+  return frame;
+}
 
 /**
  * The itch.io build: links to the storage frame on GitHub Pages, then starts.
@@ -370,6 +380,7 @@ export async function startWithFrame(root: HTMLElement, config: FrameConfig): Pr
     return;
   }
   frameLink = link;
+  frameUrl = config.url;
   sync = link.sync;
   backupCopy = withFallbackCopy(link.backup, browserStorage(), idbBackup(browserIdb()));
   start(root, link.storage);
@@ -1010,6 +1021,9 @@ function cloudPanels(
       });
     });
   });
+  /** On itch.io, the code is made and shown, or typed, in frames on GitHub Pages instead (ui/code-frame.ts). */
+  const codeSlot = el('div');
+  const linkSlot = el('div');
   const turnOff = buttonT('cloud.turnOff', '', () => {
     shownCode = null;
     codeLine.textContent = '';
@@ -1034,8 +1048,9 @@ function cloudPanels(
     });
   });
   const linkHint = elt('p', 'muted hint', 'cloud.linkHint');
-  const linkRow = el('div', 'cloud-row');
-  linkRow.append(linkBox, link);
+  const linkRow = el('div', frameUrl ? '' : 'cloud-row');
+  if (frameUrl) linkRow.append(elt('p', '', 'cloud.linkField'), linkSlot);
+  else linkRow.append(linkBox, link);
 
   const menu = [
     elt('h3', '', 'cloud.title'),
@@ -1043,8 +1058,7 @@ function cloudPanels(
     statusLine,
     turnOn,
     syncNow,
-    getCode,
-    codeLine,
+    ...(frameUrl ? [codeSlot] : [getCode, codeLine]),
     linkRow,
     linkHint,
     turnOff,
@@ -1064,6 +1078,18 @@ function cloudPanels(
     setButton(syncNow, t('cloud.syncNow'), syncing || needsChoice(status));
     turnOff.hidden = off;
     codeLine.hidden = !on;
+    if (frameUrl) {
+      const url = frameUrl;
+      const slot = (box: HTMLElement, shown: boolean, add: () => HTMLElement): void => {
+        const step = frameStep(box.childElementCount > 0, shown);
+        if (step === 'add') box.append(add());
+        else if (step === 'drop') box.replaceChildren();
+      };
+      slot(codeSlot, on, () => storeFrame(url, CODE_HASH, 'cloud.codeFrame', 'code-frame'));
+      slot(linkSlot, off || relink, () =>
+        storeFrame(url, LINK_HASH, 'cloud.linkField', 'code-frame link-frame'),
+      );
+    }
     choice.hidden = !needsChoice(status);
     if (status.kind === 'conflict') {
       setText(choiceText, t('cloud.conflict'));
@@ -1099,6 +1125,32 @@ function pathLink(cloud: Sync): HTMLElement {
     shown = text;
     msg.textContent = text ? text() : '';
   };
+  say(() => (msg.textContent = shown ? shown() : ''));
+  if (frameUrl) {
+    // On itch.io the code is typed into a frame on GitHub Pages, out of this page's reach.
+    box.append(
+      elt('p', '', 'cloud.pathLink'),
+      storeFrame(frameUrl, LINK_HASH, 'cloud.pathLink', 'code-frame link-frame'),
+      msg,
+    );
+    // This page sees an attempt only as the sync's status: it starts at "syncing".
+    let attempt = false;
+    /** Set once on the page; off it again (a language switch or the run starting), it stops listening. */
+    let mounted = false;
+    const stop = cloud.subscribe((status) => {
+      if (box.isConnected) mounted = true;
+      else if (mounted) return stop();
+      if (status.kind !== 'syncing') return;
+      attempt = true;
+      show(null);
+    });
+    showCloudNote = (code) => {
+      show(() => cloudText(code));
+      // A problem with the attempt is shown here, not again over the run (a loaded save still is).
+      if (attempt && code !== 'loaded') cloudNote = null;
+    };
+    return box;
+  }
   const field = el('label', 'field');
   const caption = document.createTextNode('');
   say(() => (caption.data = t('cloud.pathLink')));
@@ -1125,7 +1177,6 @@ function pathLink(cloud: Sync): HTMLElement {
   });
   // Problems come back as notes; here they show beside the field.
   showCloudNote = (code) => show(() => cloudText(code));
-  say(() => (msg.textContent = shown ? shown() : ''));
   box.append(field, go, msg);
   return box;
 }

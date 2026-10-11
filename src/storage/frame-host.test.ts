@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../core/sim.ts';
-import { clock, fakeServer, memory } from './cloud-fakes.ts';
+import { clock, CONFIG, fakeServer, memory } from './cloud-fakes.ts';
+import { createCloud } from './cloud.ts';
 import { ADOPT_KEY, CLOUD_KEY, readMeta } from './cloud-meta.ts';
 import { FRAME, framePair, GAME, ITCH, settle } from './frame-fakes.ts';
 import { allowedParent, createHost, storageWorks } from './frame-host.ts';
-import { PROTOCOL } from './frame-protocol.ts';
+import { LINK_PROTOCOL, PROTOCOL } from './frame-protocol.ts';
 import { encodeSave, SAVE_KEY } from './save.ts';
 
 const T = 1_800_000_000_000;
@@ -15,6 +16,13 @@ const req = (id: number, op: string, args: Record<string, unknown> = {}) => ({
   op,
   ...args,
 });
+
+/** A second cloud on a frame's storage, as the link code frame has (same origin, same storage). */
+const codeCloud = (
+  f: { storage: ReturnType<typeof memory> },
+  server: ReturnType<typeof fakeServer>,
+  time: ReturnType<typeof clock>,
+) => createCloud({ config: CONFIG, storage: f.storage, fetch: server.fetch, now: time.now });
 
 describe('who the frame answers', () => {
   it('answers our game, directly inside our itch.io page at the top', () => {
@@ -119,8 +127,9 @@ describe('messages the frame takes', () => {
       req(1, 'sync.offer', { raw: raw(T), savedAt: Number.NaN }),
       req(1, 'sync.offer', { raw: raw(T), savedAt: -1 }),
       req(1, 'sync.flush', { reason: 'unload' }),
-      req(1, 'sync.link', { code: 'A'.repeat(65) }),
-      req(1, 'sync.link', { code: 7 }),
+      // The game never sees a link code either way: code frames do (ui/code-frame.ts).
+      req(1, 'sync.linkCode'),
+      req(1, 'sync.link', { code: 'ABCDEFGH12' }),
       req(1, 'backup.put', { raw: 'x'.repeat(200_001) }),
       JSON.parse(`{"p":"${PROTOCOL}","id":1,"op":"hello","__proto__":{"polluted":true}}`),
       JSON.parse(
@@ -194,8 +203,6 @@ describe('the game linked to its frame', () => {
     sync?.begin();
     sync?.offer(raw(T), T);
     await sync?.turnOn();
-    const code = await sync?.linkCode();
-    expect(code?.code).toMatch(/^[0-9A-Z]{10}$/);
     f.server.down = true;
     await sync?.syncNow();
     f.server.down = false;
@@ -215,15 +222,22 @@ describe('the game linked to its frame', () => {
     la?.storage.setItem(SAVE_KEY, raw(T));
     la?.sync?.offer(raw(T), T);
     await la?.sync?.turnOn();
-    const code = (await la?.sync?.linkCode())?.code as string;
+    // As the code frame makes it: on the frame's storage, never through the game.
+    const code = (await codeCloud(a, server, time).createLinkCode()).code;
 
     const b = framePair({ server, time });
     const lb = await b.client.connect();
     lb?.sync?.begin();
     lb?.storage.setItem(SAVE_KEY, raw(T + 5, 2));
     lb?.sync?.offer(raw(T + 5, 2), T + 5);
-    await lb?.sync?.link(code);
     await settle();
+    // Typed into the link frame beside the storage frame, never into the game.
+    b.fromLink({ p: LINK_PROTOCOL, code, n: 1 });
+    await settle();
+    expect(b.linkReplies).toEqual([
+      { source: b.linkWindow, message: { p: LINK_PROTOCOL, done: true, n: 1 } },
+    ]);
+    expect(JSON.stringify(b.posted.map((p) => p.message))).not.toContain(code);
     expect(lb?.sync?.status.kind).toBe('conflict');
     lb?.sync?.useCloud();
     await settle();
@@ -277,6 +291,45 @@ describe('the game linked to its frame', () => {
   });
 });
 
+describe('a typed code from a link frame', () => {
+  it('is taken only from a sibling frame on our own origin, through the allow-list', async () => {
+    const f = framePair();
+    const link = await f.client.connect();
+    link?.sync?.begin();
+    const ok = { p: LINK_PROTOCOL, code: 'ABCDEFGH10', n: 1 };
+    // The game window, another origin, an unknown window, hostile shapes: no answer, no attempt.
+    f.fromLink(ok, GAME, f.parentWindow);
+    f.fromLink(ok, FRAME, f.parentWindow);
+    f.fromLink(ok, 'https://attacker.example');
+    f.fromLink(ok, FRAME, { name: 'stranger' });
+    f.fromLink({ ...ok, code: 'A'.repeat(65) });
+    f.fromLink({ ...ok, extra: 1 });
+    f.fromLink(JSON.parse(`{"p":"${LINK_PROTOCOL}","code":"A","n":1,"__proto__":{"polluted":1}}`));
+    await settle();
+    expect(f.linkReplies).toEqual([]);
+    expect(f.server.calls.length).toBe(0);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('answers done even when the code is refused; the reason goes to the game as a note', async () => {
+    const f = framePair();
+    const link = await f.client.connect();
+    link?.sync?.begin();
+    f.fromLink({ p: LINK_PROTOCOL, code: 'NOSUCHCODE', n: 4 });
+    await settle();
+    expect(f.linkReplies.map((r) => r.message)).toEqual([{ p: LINK_PROTOCOL, done: true, n: 4 }]);
+    expect(f.notes.length).toBe(1);
+  });
+
+  it('answers done with nothing tried where the build has no cloud save', async () => {
+    const f = framePair({ cloud: false });
+    f.fromLink({ p: LINK_PROTOCOL, code: 'ABCDEFGH10', n: 1 });
+    await settle();
+    expect(f.linkReplies.map((r) => r.message)).toEqual([{ p: LINK_PROTOCOL, done: true, n: 1 }]);
+    expect(f.server.calls.length).toBe(0);
+  });
+});
+
 describe('the frame host on its own', () => {
   it('needs a matching parent: a host built for one game ignores the frame origin itself', async () => {
     const posted: unknown[] = [];
@@ -286,6 +339,9 @@ describe('the frame host on its own', () => {
       itchOrigin: ITCH,
       parent,
       post: (m) => posted.push(m),
+      self: FRAME,
+      isSibling: () => false,
+      reply: (_, m) => posted.push(m),
       storage: memory(),
       backup: { read: async () => null, put: async () => true, clear: async () => true },
       makeSync: null,

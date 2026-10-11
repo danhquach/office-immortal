@@ -507,7 +507,30 @@ save and its cloud save in a **storage frame**: a page without visible content
   allow-list, as for the save: exact keys, known storage keys only (the cloud's
   own key is never one), text of a save's size at most, known message codes.
   A conflict's two saves travel as save text and go through the load check
-  again on arrival. Anything off is dropped without an answer.
+  again on arrival. Anything off is dropped without an answer. No message
+  carries a link code, either way.
+- **Link codes.** The game page never sees one. On itch.io, two visible frames
+  of the same page take the place of the game's own controls, and the game
+  shows only their captions:
+  - `store.html#code` (Menu, while cloud save is on) has the **Get link code**
+    button. It makes the code itself, on a real click inside it (a script's
+    click is ignored), and shows it there. It uses the sign-in the storage
+    frame keeps (same origin, same storage) and posts nothing.
+  - `store.html#link` (Menu while cloud save is off or signed out, and the
+    Path choice) has
+    the field for a code from another device. On a real click or Enter it
+    hands the code straight to the storage frame beside it in the game, which
+    links as before; the storage frame takes it only from a frame of the same
+    game page on our own origin, through the same allow-list. How it went
+    reaches the game as a status or a note, never the code.
+
+  Both answer only where the storage frame would and follow the game's theme
+  and language from that storage. Another page can't read or type into a
+  frame on another origin, so a game scripting ours (below) can't read a code
+  or link on its own.
+  Each frame is added when its part of the Menu shows and removed when it
+  hides (cloud save turned off, or signed out), so a code shown or typed
+  before never shows again.
 - **Fallback.** Where the frame refuses, or isn't linked within 7 s (2 s
   once loaded), the game runs on its own itch.io storage and IndexedDB
   copy, without the cloud save, as before. A browser without
@@ -530,10 +553,14 @@ save and its cloud save in a **storage frame**: a page without visible content
 - **Known limit.** itch.io sends no Cross-Origin-Opener-Policy, so another
   itch.io game that opens our itch.io page in a popup can script our game
   (they share an origin) and act through it: upload over or delete the cloud
-  save, or ask the frame for a link code. It can't read the token, but a link
-  code redeemed on its own device joins the player's cloud save, which is as
-  good as the token for that save. Showing the link code inside the frame, so
-  the game page never sees it, is the follow-up (#88).
+  save. It can't read the token, read a link code or link on its own (above).
+  It can still fake or cover the frames to trick the player: a look-alike
+  field on its own origin that catches a typed code, a fake code of its own,
+  or text dragged into a hidden link frame. Each needs the attack running
+  while the player links; a frame can't show its origin, so no frame can
+  prevent it. The storage frame shares its origin with every GitHub Pages
+  site of the same account (`<user>.github.io`), so those sites must stay
+  free of script injection; a custom domain for the frame would isolate it.
 
 ## 12. Out of scope (v1)
 

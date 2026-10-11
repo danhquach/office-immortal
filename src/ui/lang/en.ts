@@ -279,6 +279,7 @@ const messages = {
   'cloud.startNew': 'Start a new cloud save',
   'cloud.syncNow': 'Sync now',
   'cloud.getCode': 'Get link code',
+  'cloud.codeFrame': 'Link code',
   'cloud.code':
     'Link code: {code}. Enter it on your other device within {minutes} minutes. It works once.',
   'cloud.turnOff': 'Turn off on this device',

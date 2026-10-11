@@ -15,8 +15,10 @@ import {
   event,
   helloReply,
   isMirrorKey,
+  LINK_PROTOCOL,
   MIRROR_KEYS,
   PROTOCOL,
+  readLinkMessage,
   readRequest,
   type MirrorKey,
   type Request,
@@ -70,6 +72,12 @@ export interface HostDeps {
   parent: unknown;
   /** Posts to the parent at `origin` (the checked one, never "*"). */
   post(message: unknown, origin: string): void;
+  /** The frame's own origin: a link frame beside it (code-frame.ts) is on it too. */
+  self: string;
+  /** Whether `source` is another frame of the same game page (a link frame). */
+  isSibling(source: unknown): boolean;
+  /** Answers a link frame, at the frame's own origin only. */
+  reply(source: unknown, message: unknown): void;
   /** The frame's browser storage; null where blocked. */
   storage: SaveStorage | null;
   /** The frame's IndexedDB copy of the save. */
@@ -85,7 +93,7 @@ export interface Hooks {
 }
 
 export interface Host {
-  /** A message posted to the frame. */
+  /** A message posted to the frame: a request from the game, or a typed code from a link frame. */
   receive(e: Incoming): void;
   /** A storage event from another tab of the frame (key null: storage cleared). */
   otherTab(key: string | null, value: string | null): void;
@@ -99,8 +107,6 @@ const ANSWERED: readonly Request['op'][] = [
   'backup.clear',
   'sync.syncNow',
   'sync.turnOn',
-  'sync.link',
-  'sync.linkCode',
   'sync.keepLocal',
   'sync.deleteCloud',
 ];
@@ -173,8 +179,6 @@ export function createHost(deps: HostDeps): Host | null {
         return deps.backup.clear();
       case 'sync.deleteCloud':
         return sync ? sync.deleteCloud() : { ok: true };
-      case 'sync.linkCode':
-        return sync ? sync.linkCode() : null;
     }
     if (!sync) return null;
     switch (r.op) {
@@ -196,9 +200,6 @@ export function createHost(deps: HostDeps): Host | null {
       case 'sync.turnOn':
         await sync.turnOn();
         break;
-      case 'sync.link':
-        await sync.link(r.code);
-        break;
       case 'sync.keepLocal':
         await sync.keepLocal();
         break;
@@ -214,6 +215,13 @@ export function createHost(deps: HostDeps): Host | null {
 
   return {
     receive(e) {
+      if (e.origin === deps.self && e.source !== deps.parent && deps.isSibling(e.source)) {
+        const m = readLinkMessage(e.data);
+        if (!m) return;
+        const done = (): void => deps.reply(e.source, { p: LINK_PROTOCOL, done: true, n: m.n });
+        void (sync ? sync.link(m.code) : Promise.resolve()).then(done, done);
+        return;
+      }
       if (e.source !== deps.parent || e.origin !== origin) return;
       const r = readRequest(e.data);
       if (!r) return;

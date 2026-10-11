@@ -6,7 +6,16 @@ import { BAG_REVERSE_KEY, BAG_SORT_KEY } from '../ui/sort.ts';
 import { ADOPT_KEY, CLOUD_KEY } from './cloud-meta.ts';
 import { readCloudConfig } from './cloud-config.ts';
 import { readFrameConfig, readItchOrigin } from './frame-config.ts';
-import { MIRROR_KEYS, PROTOCOL, readFrameMessage, readRequest, toWire } from './frame-protocol.ts';
+import {
+  LINK_PROTOCOL,
+  MIRROR_KEYS,
+  PROTOCOL,
+  readFrameMessage,
+  readLinkDone,
+  readLinkMessage,
+  readRequest,
+  toWire,
+} from './frame-protocol.ts';
 import { decodeSave, encodeSave, REJECTED_KEY, SAVE_KEY } from './save.ts';
 
 const T = 1_800_000_000_000;
@@ -57,11 +66,41 @@ describe('requests', () => {
     expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.offer', raw: 'x' })).toBeNull();
   });
 
-  it('refuses a huge or non-text code, and keeps a code with odd characters for the server to refuse', () => {
-    expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.link', code: 'x'.repeat(65) })).toBeNull();
-    expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.link', code: ['A'] })).toBeNull();
+  it('refuses link code requests either way: the game never sees a code (code frames do)', () => {
+    expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.linkCode' })).toBeNull();
+    expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.link', code: 'ABCDEFGH12' })).toBeNull();
+  });
+});
+
+describe('a typed code from the link frame', () => {
+  it('reads exactly a tagged code; refuses a huge or non-text one, and extra or missing keys', () => {
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'abcd-efgh-12', n: 3 })).toEqual({
+      code: 'abcd-efgh-12',
+      n: 3,
+    });
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'A' })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'A', n: 0 })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'A', n: 1.5 })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'x'.repeat(65), n: 1 })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: ['A'], n: 1 })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL })).toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'A', n: 1, extra: 1 })).toBeNull();
+    expect(readLinkMessage({ p: PROTOCOL, code: 'A', n: 1 })).toBeNull();
+    expect(
+      readLinkMessage(JSON.parse(`{"p":"${LINK_PROTOCOL}","code":"A","n":1,"__proto__":{}}`)),
+    ).toBeNull();
+    expect(readLinkMessage(null)).toBeNull();
     // Only sent on to the server in a JSON body, never shown or put in a URL.
-    expect(readRequest({ p: PROTOCOL, id: 1, op: 'sync.link', code: 'AB‮CD' })).not.toBeNull();
+    expect(readLinkMessage({ p: LINK_PROTOCOL, code: 'AB‮CD', n: 1 })).not.toBeNull();
+  });
+
+  it('reads the answer and its attempt only when exactly done', () => {
+    expect(readLinkDone({ p: LINK_PROTOCOL, done: true, n: 2 })).toBe(2);
+    expect(readLinkDone({ p: LINK_PROTOCOL, done: true })).toBeNull();
+    expect(readLinkDone({ p: LINK_PROTOCOL, done: 'yes', n: 2 })).toBeNull();
+    expect(readLinkDone({ p: LINK_PROTOCOL, done: true, n: 2, code: 'A' })).toBeNull();
+    expect(readLinkDone({ p: PROTOCOL, done: true, n: 2 })).toBeNull();
+    expect(readLinkDone('done')).toBeNull();
   });
 });
 

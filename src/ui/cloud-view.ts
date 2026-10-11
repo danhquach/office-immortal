@@ -50,3 +50,14 @@ export function cloudStatusLine(status: SyncStatus, now: number): string {
 export function needsChoice(status: SyncStatus): boolean {
   return status.kind === 'conflict' || status.kind === 'unreadable';
 }
+
+/**
+ * Whether to add or drop one of the itch.io link code frames (code-frame.ts)
+ * as its part of the Menu shows or hides: added when shown, dropped when not,
+ * so a code shown or typed before never shows again; the next is a fresh frame.
+ */
+export function frameStep(hasFrame: boolean, shown: boolean): 'add' | 'drop' | 'keep' {
+  if (shown && !hasFrame) return 'add';
+  if (!shown && hasFrame) return 'drop';
+  return 'keep';
+}

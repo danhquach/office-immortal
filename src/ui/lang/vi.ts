@@ -283,6 +283,7 @@ const vi: Pack = {
     'cloud.startNew': 'Tạo bản lưu đám mây mới',
     'cloud.syncNow': 'Đồng bộ ngay',
     'cloud.getCode': 'Lấy mã liên kết',
+    'cloud.codeFrame': 'Mã liên kết',
     'cloud.code':
       'Mã liên kết: {code}. Nhập mã này trên thiết bị kia trong {minutes} phút. Chỉ dùng được một lần.',
     'cloud.turnOff': 'Tắt trên thiết bị này',

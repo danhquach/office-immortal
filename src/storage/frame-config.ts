@@ -11,6 +11,11 @@ const FRAME_URL =
 /** The itch.io page origin: https://<user>.itch.io, no path. */
 const ITCH_ORIGIN = /^https:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.itch\.io$/;
 
+/** Added to the frame's address, it shows the cloud link code instead (ui/code-frame.ts). */
+export const CODE_HASH = '#code';
+/** Added to the frame's address, it takes a link code from another device (ui/code-frame.ts). */
+export const LINK_HASH = '#link';
+
 export interface FrameConfig {
   /** The frame page's address. */
   readonly url: string;

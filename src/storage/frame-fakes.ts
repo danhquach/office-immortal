@@ -58,6 +58,10 @@ export function framePair(
   const backup = memoryBackup();
   const parentWindow = { name: 'game' };
   const frameWindow = { name: 'frame' };
+  /** A link frame beside the storage frame in the game (ui/code-frame.ts). */
+  const linkWindow = { name: 'link frame' };
+  /** What the storage frame answered link frames. */
+  const linkReplies: { source: unknown; message: unknown }[] = [];
   /** Everything the frame posted, with the origin it was posted to. */
   const posted: Posted[] = [];
   const adopted = vi.fn();
@@ -72,6 +76,9 @@ export function framePair(
       const data = structuredClone(message);
       setTimeout(() => client?.receive({ data, origin: FRAME, source: frameWindow }));
     },
+    self: FRAME,
+    isSibling: (source) => source === linkWindow,
+    reply: (source, message) => linkReplies.push({ source, message: structuredClone(message) }),
     storage,
     backup,
     makeSync:
@@ -114,6 +121,12 @@ export function framePair(
     notes,
     parentWindow,
     frameWindow,
+    linkWindow,
+    linkReplies,
+    /** Posts `data` to the storage frame from the link frame (or `source`) at `origin`. */
+    fromLink(data: unknown, origin = FRAME, source: unknown = linkWindow) {
+      host?.receive({ data, origin, source });
+    },
     /** Posts `data` to the frame as `source` from `origin` (an attacker, by default). */
     inject(data: unknown, origin = GAME, source: unknown = { name: 'other game' }) {
       host?.receive({ data, origin, source });
