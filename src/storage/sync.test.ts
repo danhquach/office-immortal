@@ -261,7 +261,7 @@ describe('startup check', () => {
     reopened.sync.begin();
     await until(() => expect(reopened.adopted).toHaveBeenCalledOnce());
     expect(reopened.storage.getItem(SAVE_KEY)).toBe(theirs);
-    expect(reopened.notes).toEqual(['Loaded your cloud save.']);
+    expect(reopened.notes).toEqual(['loaded']);
     // The restart's own check finds nothing new: no loop.
     const restarted = w.device(a.storage);
     restarted.sync.begin();
@@ -321,7 +321,7 @@ describe('startup check', () => {
     await until(() => expect(kind(again)).toBe('off'));
     expect(again.storage.getItem(SAVE_KEY)).toBe(text);
     expect(again.storage.getItem(CLOUD_KEY)).toBeNull();
-    expect(again.notes[0]).toContain('deleted on another device');
+    expect(again.notes[0]).toBe('deleted-elsewhere');
   });
 
   it('starts the run unchanged when the cloud is unreachable, and retries later', async () => {
@@ -615,7 +615,7 @@ describe('a cloud save that cannot be read', () => {
     await b.sync.link(code);
     expect(kind(b)).toBe('unreadable');
     expect(b.storage.getItem(SAVE_KEY)).toBe(mine);
-    expect(b.notes[0]).toContain("can't be read");
+    expect(b.notes[0]).toBe('unreadable-kept');
   });
 });
 
@@ -670,7 +670,7 @@ describe('linking', () => {
     const mine = play(b, T + 1, 2);
     await b.sync.link('ZZZZZZZZZZ');
     expect(kind(b)).toBe('off');
-    expect(b.notes).toEqual(['That link code is not valid. Check it and try again.']);
+    expect(b.notes).toEqual(['link_code_invalid']);
     expect(b.storage.getItem(CLOUD_KEY)).toBeNull();
     expect(b.storage.getItem(SAVE_KEY)).toBe(mine);
   });
@@ -701,7 +701,7 @@ describe('linking', () => {
     play(c, T + 1, 3);
     await c.sync.link(code);
     expect(kind(c)).toBe('off');
-    expect(c.notes[0]).toContain('not valid');
+    expect(c.notes[0]).toBe('link_code_invalid');
   });
 
   it('a failed link while on keeps the cloud save as it was', async () => {
@@ -1029,7 +1029,7 @@ describe('races and edge cases', () => {
     expect(a.storage.getItem(SAVE_KEY)).toBe(mine);
     expect(a.storage.getItem(CLOUD_KEY)).toBe(metaBefore);
     expect(reopened.adopted).not.toHaveBeenCalled();
-    expect(reopened.notes.at(-1)).toContain('refused');
+    expect(reopened.notes.at(-1)).toBe('refused-save');
   });
 
   it('only taking the cloud save signals the other tabs, not uploads or autosaves', async () => {
@@ -1064,7 +1064,7 @@ describe('linking from the Path choice (no run yet)', () => {
     expect(d.storage.getItem(SAVE_KEY)).toBe(text);
     expect(readMeta(d.storage)?.pendingLink).toBe(false);
     expect(readMeta(d.storage)?.baseRev).toBe(1);
-    expect(d.notes).toEqual(['Loaded your cloud save.']);
+    expect(d.notes).toEqual(['loaded']);
     const restarted = w.device(d.storage);
     restarted.sync.begin();
     await until(() => expect(kind(restarted)).toBe('synced'));
@@ -1078,7 +1078,7 @@ describe('linking from the Path choice (no run yet)', () => {
     d.sync.begin();
     await d.sync.link('ZZZZZZZZZZ');
     expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
-    expect(d.notes[0]).toContain('not valid');
+    expect(d.notes[0]).toBe('link_code_invalid');
     w.server.down = true;
     await d.sync.link(code);
     expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
@@ -1099,7 +1099,7 @@ describe('linking from the Path choice (no run yet)', () => {
     expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
     expect(d.storage.getItem(SAVE_KEY)).toBeNull();
     expect(kind(d)).toBe('off');
-    expect(d.notes[0]).toContain("can't be read");
+    expect(d.notes[0]).toBe('cant-read');
   });
 });
 
@@ -1132,7 +1132,7 @@ describe('link robustness', () => {
     await d.sync.link(code);
     expect(d.adopted).not.toHaveBeenCalled();
     expect(kind(d)).toBe('offline');
-    expect(d.notes.at(-1)).toContain('refused');
+    expect(d.notes.at(-1)).toBe('refused-save');
     expect(d.storage.getItem(SAVE_KEY)).toBeNull();
   });
 

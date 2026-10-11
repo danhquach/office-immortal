@@ -597,6 +597,62 @@
     "size": [64, 80],
     "prompt": "pixel art game sprite, a plain featureless grey mannequin figure, full body, straight front view, arms slightly away from the body with open hands level with the hips, legs slightly apart, no face, no clothes, bold dark outline, magenta background"
   },
+  "summary": [
+    {
+      "id": "stones",
+      "source": "summary/stones.jpg",
+      "seed": 6601,
+      "prompt": "game inventory icon, a single glowing spirit stone: a faceted cut crystal gem of pale cyan-blue light with a bright inner glow and small sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "essence",
+      "source": "summary/essence.jpg",
+      "seed": 6602,
+      "prompt": "game inventory icon, a single drop of spirit essence: a round teardrop-shaped wisp of warm golden-orange liquid light with a curling flame-like tip and a bright highlight, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-0",
+      "source": "summary/realm-0.jpg",
+      "seed": 6603,
+      "prompt": "game icon, a small simple swirl of pale white and soft grey qi mist curling into a spiral, humble and plain, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-1",
+      "source": "summary/realm-1.jpg",
+      "seed": 6604,
+      "prompt": "game icon, a sturdy square jade green stone foundation platform with carved edges and a soft green glow rising from its top, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-2",
+      "source": "summary/realm-2.jpg",
+      "seed": 6605,
+      "prompt": "game icon, a shining golden core: a perfect round glowing gold sphere with bright rays and a small orbiting ring of light, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-3",
+      "source": "summary/realm-3.jpg",
+      "seed": 6606,
+      "prompt": "game icon, a blooming white and gold lotus flower with a radiant golden spirit flame glowing in its centre, ornate petals, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-4",
+      "source": "summary/realm-4.jpg",
+      "seed": 6607,
+      "prompt": "game icon, a radiant azure blue and white flying sword of light pointing upward, slicing through a glowing crescent arc of blue spirit energy, ornate gold hilt, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-5",
+      "source": "summary/realm-5.jpg",
+      "seed": 6608,
+      "prompt": "game icon, a white crane with spread wings soaring upward above swirling white and gold clouds, a bright beam of golden heavenly light behind it, grand and majestic, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-6",
+      "source": "summary/realm-6.jpg",
+      "seed": 6609,
+      "prompt": "game icon, a magnificent crimson and gold immortal emblem: a blazing golden sun disc with a crimson jewel at its centre, surrounded by an ornate gold halo of flames and rays, the grandest and most radiant, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    }
+  ],
   "icon_size": 32,
   "icon_scale": 2
 }

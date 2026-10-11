@@ -463,7 +463,7 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 
 - A generic spreadsheet / dashboard look: a title bar with a file name
   (`Q3_Cultivation_Report`), a formula bar, faint cell lines behind the
-  panels, KPI tiles, panels with header bars, tabs and a status bar. The
+  panels, summary chips, panels with header bars, tabs and a status bar. The
   combat strip sits in it like an embedded chart, with its own header bar.
 - **Title stamp:** the game's name sits in the title bar as a red rubber
   stamp (like "CONFIDENTIAL"): capitals, double border, tilted, in the
@@ -471,8 +471,14 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - **Generic, never a copy.** No real software names, logos, icons, ribbon
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.
-- Stats are KPI tiles (Realm, Job title, Floor, Qi to next breakthrough),
-  the log is a "Cultivation Log" panel.
+- The summary is a band of one-line chips ("Label value"): Path, Realm with
+  its job title, Spirit Stones and Spirit Essence. Realm, Spirit Stones and
+  Spirit Essence open with a small icon (decorative, hidden from screen
+  readers); the Realm icon changes at each breakthrough. Level and XP to the next
+  level are a yellow progress bar along the foot of the combat strip ("Lv 14"
+  at its left end, "37 / 60" inside; full with "Tribulation due" when one is
+  due). The strip header shows floor, best floor, wave and kills
+  ("Floor 12 (best 15) · Wave 2 / 3 · Kills 340").
 - **Inventory is a grid**, as loot games do it: a fixed grid of bag cells
   (empty ones shown), each item cell marked by grade colour and grade initial.
   A page holds the starting 40 cells; bought cells go on page 2, reached with
@@ -493,6 +499,14 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   choice is a display preference, so Reset progress keeps it, and the page
   paints in it from the first frame. Text 4.5:1 or more on its background in
   both.
+- Languages: English and Vietnamese. A globe button beside Menu shows the
+  code (EN / VI) and opens the list; the default is the browser's language
+  when there is a pack for it, else English. Like the theme it is a display
+  preference (Reset progress keeps it), and a switch changes the page in
+  place, with no reload. Vietnamese uses the genre's Sino-Vietnamese terms
+  (Luyện Khí, Trúc Cơ, Kim Đan, Nguyên Anh…). Numbers keep one format in both.
+  The sim keeps its English names as ids; the UI translates them
+  (`src/ui/lang/`, one file per language).
 
 ### Combat strip (pixel art)
 
@@ -515,6 +529,11 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   to its source art (256 colours picked from the icons themselves, not the
   shared palette). The grade stays on the cell border and its initial, never
   on the icon alone.
+- **Summary icons:** in the item icons' style, 64×64 in one atlas row
+  (`summary.png`), shown at the chip's text size: a glowing cyan spirit stone,
+  an orange essence drop, and one per realm, each grander than the last (qi
+  swirl, jade foundation, golden core, lotus with a spirit flame, azure flying
+  sword, crane over the clouds, crimson and gold sun emblem).
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
@@ -523,7 +542,8 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - The sim decides every outcome; the strip only plays it back. Reduced motion
   shows a still pose.
 - The Full view shows the whole stage at 3/4 (156 px tall) in the left half
-  of the page, with the KPI tiles beside it, so the panels fit one screen; the
+  of the page, with the summary chips and Recent drops beside it, so the
+  panels fit one screen; the
   Mini view at 3/8 so it fits its 160 px window. Narrow shows it at 1×, whole
   pixels.
 
@@ -544,10 +564,11 @@ Grade is also written as text, never shown by colour alone.
 
 | View | When | Shows |
 |---|---|---|
-| **Full** | Normal tab, 768 px wide or more | Title bar, KPI tiles, combat strip, loot table, Cultivation Log, side panels; compact, to fit a 768 px tall screen |
-| **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then KPI tiles, loot, log |
-| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars, one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
+| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details; compact, to fit an 800 px tall screen |
+| **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
+| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
 
+- The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
   which asks first and then deletes the save) and Help (how to play).
 - Full and Narrow are chosen by width; Mini is chosen by height or by being

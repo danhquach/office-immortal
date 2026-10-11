@@ -15,6 +15,7 @@ import {
   iconCell,
   SPRITE_SIZE,
   stripEvents,
+  SUMMARY_ICONS,
 } from './view.ts';
 
 /** Every shipped art file as a base64 data URL, to weigh them. */
@@ -34,6 +35,7 @@ const manifest = JSON.parse(manifestText) as {
     renders?: string[];
     source?: string;
   }[];
+  summary: { id: string; source: string }[];
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -49,6 +51,7 @@ describe('shipped art', () => {
       ...ZONES.map((z) => `bg-${z.id}`),
       'icons',
       'paperdoll',
+      'summary',
     ];
     for (const name of sheets) expect(exists(name), name).toBe(true);
   });
@@ -102,6 +105,19 @@ describe('enemySprite', () => {
 
   it('keeps an odd name from a save to a plain, harmless file name', () => {
     expect(enemySprite('demon', '"); background:url(x) <b>')).toMatch(/^demon-[a-z0-9-]*$/);
+  });
+});
+
+describe('summary icons', () => {
+  it('uses the atlas columns in the manifest order', () => {
+    expect(manifest.summary.map((s) => s.id)).toEqual(SUMMARY_ICONS);
+  });
+
+  it('is one row of item icon cells, one per icon', () => {
+    const png = atob((INLINE['../assets/art/summary.png'] ?? '').split(',')[1] ?? '');
+    const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect([u32(16), u32(20)]).toEqual([cell * SUMMARY_ICONS.length, cell]);
   });
 });
 

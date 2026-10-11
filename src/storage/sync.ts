@@ -8,7 +8,13 @@
 // overwrites a cloud save it has not looked at. A save the player has not
 // decided about is never replaced in either direction.
 
-import { CloudError, describeError, fitsKeepalive, type Cloud } from './cloud.ts';
+import {
+  CloudError,
+  describeError,
+  fitsKeepalive,
+  type Cloud,
+  type CloudMessage,
+} from './cloud.ts';
 import {
   ADOPT_KEY,
   clearMeta,
@@ -31,7 +37,7 @@ export type SyncStatus =
   /** Both sides agree as of `at` (ms since the epoch). */
   | { kind: 'synced'; at: number }
   /** The last request failed; it retries by itself. */
-  | { kind: 'offline'; message: string }
+  | { kind: 'offline'; message: CloudMessage }
   /** The sign-in can't be renewed; the player links again or starts a new cloud save. */
   | { kind: 'relink' }
   /** Both saves moved on: the player chooses. */
@@ -48,8 +54,8 @@ export interface SyncDeps {
   visible(): boolean;
   /** The local save was replaced by the cloud's: restart the run from it. */
   onAdopt(): void;
-  /** A one-time message for the player. */
-  onNote(text: string): void;
+  /** A one-time message for the player, as a code (the UI words it). */
+  onNote(note: CloudMessage): void;
 }
 
 export interface Sync {
@@ -76,10 +82,8 @@ export interface Sync {
   /** Forgets the cloud on this device; the server's save stays for other devices. */
   turnOff(): void;
   /** Deletes the cloud save for every device. ok=false means nothing was deleted. */
-  deleteCloud(): Promise<{ ok: true } | { ok: false; message: string }>;
+  deleteCloud(): Promise<{ ok: true } | { ok: false; message: CloudMessage }>;
 }
-
-const STORAGE_TEXT = 'Cloud save could not store its settings in this browser, so it paused.';
 
 interface Server {
   saveId: string;
@@ -119,7 +123,7 @@ export function createSync(deps: SyncDeps): Sync {
   function store(meta: CloudMeta): boolean {
     if (writeMeta(storage, meta)) return true;
     broken = true;
-    setStatus({ kind: 'offline', message: STORAGE_TEXT });
+    setStatus({ kind: 'offline', message: 'storage' });
     return false;
   }
 
@@ -169,15 +173,14 @@ export function createSync(deps: SyncDeps): Sync {
       storage.setItem(SAVE_KEY, server.data);
     } catch {
       writeMeta(storage, meta);
-      const message = 'The browser refused the cloud save, so this device keeps its own.';
-      deps.onNote(message);
+      deps.onNote('refused-save');
       // Not stuck on "checking" or "syncing": say so, and try again after a pause.
       nextAt = deps.now() + UPLOAD_EVERY_MS;
-      setStatus({ kind: 'offline', message });
+      setStatus({ kind: 'offline', message: 'refused-save' });
       return;
     }
     choice = null;
-    deps.onNote('Loaded your cloud save.');
+    deps.onNote('loaded');
     deps.onAdopt();
   }
 
@@ -211,10 +214,7 @@ export function createSync(deps: SyncDeps): Sync {
     if (!decoded) {
       if (meta.rejectedRev !== server.rev) {
         if (!store({ ...meta, saveId: server.saveId, rejectedRev: server.rev })) return;
-        deps.onNote(
-          "The cloud save can't be read, so this device's save was kept. " +
-            "Open the Menu to overwrite the cloud with this device's save.",
-        );
+        deps.onNote('unreadable-kept');
       }
       setStatus({ kind: 'unreadable' });
       return;
@@ -242,7 +242,7 @@ export function createSync(deps: SyncDeps): Sync {
         if (meta.saveId !== null) {
           clearMeta(storage);
           setStatus({ kind: 'off' });
-          deps.onNote('Your cloud save was deleted on another device. Cloud save is off here.');
+          deps.onNote('deleted-elsewhere');
           return;
         }
         // Nothing in the cloud yet: the first upload creates it.
@@ -499,7 +499,7 @@ export function createSync(deps: SyncDeps): Sync {
           // Nothing local to keep and nothing readable to load: leave cloud off here.
           undo();
           setStatus(prev);
-          deps.onNote("That cloud save can't be read.");
+          deps.onNote('cant-read');
           return;
         }
         // Remembered before asking the player, so closing the page mid-choice asks again next time.
@@ -577,7 +577,7 @@ export function createSync(deps: SyncDeps): Sync {
     },
     turnOff() {
       if (!clearMeta(storage)) {
-        deps.onNote('The browser refused to change its storage. Cloud save is still on.');
+        deps.onNote('refused-settings');
         return;
       }
       checked = false;
@@ -588,7 +588,7 @@ export function createSync(deps: SyncDeps): Sync {
       const meta = readMeta(storage);
       if (!meta) return { ok: true };
       if (meta.relink) {
-        return { ok: false, message: 'Link this device or turn cloud save off here first.' };
+        return { ok: false, message: 'relink-first' };
       }
       inflight = true;
       try {

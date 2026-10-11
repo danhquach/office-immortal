@@ -4,8 +4,12 @@
 // title, the favicon or a notification, so nothing there can leak or inject.
 
 import { GRADES, quality, type GradeId, type Item } from '../core/loot.ts';
+import { t, tn } from './i18n.ts';
 
-export const GAME_TITLE = 'Office Immortal';
+/** The game's name, in the player's language. */
+export function gameTitle(): string {
+  return t('game.title');
+}
 
 const GRADE_ORDER = Object.keys(GRADES) as GradeId[];
 
@@ -27,7 +31,7 @@ export function bestGrade(items: readonly Item[]): GradeId | null {
 }
 
 function dropsLabel(drops: number): string {
-  return drops === 1 ? '1 drop' : `${drops} drops`;
+  return drops === 1 ? t('hud.drop') : t('hud.drops', { n: drops });
 }
 
 /** Drops kept while the tab was hidden, and the best Heaven-or-better grade among them. */
@@ -63,10 +67,10 @@ export function noteUnseen(
  * a due Tribulation goes first: `F12 · Tribulation due · 3 drops`.
  */
 export function tabTitle(floor: number, unseen: number, due = false): string {
-  const parts = [`F${floor}`];
-  if (due) parts.push('Tribulation due');
+  const parts = [t('hud.floor', { n: floor })];
+  if (due) parts.push(t('hud.due'));
   if (unseen > 0) parts.push(dropsLabel(unseen));
-  else if (!due) parts.push(GAME_TITLE);
+  else if (!due) parts.push(gameTitle());
   return parts.join(' · ');
 }
 
@@ -76,13 +80,17 @@ export function tabTitle(floor: number, unseen: number, due = false): string {
  * Tribulation is due it says so in place of the realm.
  */
 export function miniStatus(floor: number, realm: string, unseen: number, due = false): string {
-  const head = due ? `F${floor} · Tribulation due` : `F${floor} · ${realm}`;
+  const head = `${t('hud.floor', { n: floor })} · ${due ? t('hud.due') : realm}`;
   return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
 }
 
 /** The pop-out's latest-drop toast, e.g. `Jade Serpent Blade · Earth · 87%`. Shown on the page only, never in the title. */
 export function dropToast(item: Item): string {
-  return `${item.name} · ${GRADES[item.grade].name} · ${quality(item)}%`;
+  return t('hud.toast', {
+    name: tn('item', item.name),
+    grade: tn('grade', GRADES[item.grade].name),
+    quality: quality(item),
+  });
 }
 
 /** Favicon colours: fixed, since the tab strip is not themed by page.css. */
@@ -126,10 +134,10 @@ export function faviconHref(hpShare: number, mark: GradeId | null): string {
 
 /** The notification for an Immortal-grade drop. Says the floor, never the item. */
 export function immortalNotice(floor: number): { title: string; body: string; tag: string } {
-  return { title: GAME_TITLE, body: `Immortal-grade drop on floor ${floor}`, tag: 'drop' };
+  return { title: gameTitle(), body: t('notice.immortal', { n: floor }), tag: 'drop' };
 }
 
 /** The notification for a Tribulation falling due. Says the floor only. */
 export function tribulationNotice(floor: number): { title: string; body: string; tag: string } {
-  return { title: GAME_TITLE, body: `Tribulation due on floor ${floor}`, tag: 'tribulation' };
+  return { title: gameTitle(), body: t('notice.tribulation', { n: floor }), tag: 'tribulation' };
 }

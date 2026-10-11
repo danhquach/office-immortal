@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { CloudMessage } from '../storage/cloud.ts';
 import { newGame } from '../core/sim.ts';
 import { decodeSave, encodeSave } from '../storage/save.ts';
 import type { SyncStatus } from '../storage/sync.ts';
-import { agoLabel, cloudStatusLine, needsChoice, saveSummary } from './cloud-view.ts';
+import { setLang, DEFAULT_LANG, PACKS } from './i18n.ts';
+import { agoLabel, cloudText, cloudStatusLine, needsChoice, saveSummary } from './cloud-view.ts';
 
 const NOW = 1_800_000_000_000;
 
@@ -39,7 +41,7 @@ describe('cloud status text', () => {
       { kind: 'checking' },
       { kind: 'syncing' },
       { kind: 'synced', at: NOW - 120_000 },
-      { kind: 'offline', message: 'Cannot reach the cloud.' },
+      { kind: 'offline', message: 'offline' },
       { kind: 'relink' },
       { kind: 'conflict', local: save, server: save },
       { kind: 'unreadable' },
@@ -47,5 +49,51 @@ describe('cloud status text', () => {
     for (const s of all) expect(cloudStatusLine(s, NOW).length).toBeGreaterThan(5);
     expect(cloudStatusLine({ kind: 'synced', at: NOW - 120_000 }, NOW)).toBe('Synced 2 min ago.');
     expect(all.filter(needsChoice).map((s) => s.kind)).toEqual(['conflict', 'unreadable']);
+  });
+});
+
+describe('cloud texts in the language packs', () => {
+  const CODES: CloudMessage[] = [
+    'already_member',
+    'not_a_member',
+    'bad_data',
+    'save_too_large',
+    'link_code_invalid',
+    'link_code_expired',
+    'generic',
+    'offline',
+    'auth',
+    'server',
+    'bad-response',
+    'storage',
+    'loaded',
+    'deleted-elsewhere',
+    'unreadable-kept',
+    'cant-read',
+    'refused-save',
+    'refused-settings',
+    'relink-first',
+  ];
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  it('has every code and status in every pack, with the same placeholders', () => {
+    const holes = (x: string): (string | undefined)[] =>
+      [...x.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
+    const [english, ...others] = PACKS;
+    for (const code of CODES) {
+      const key = `cloud.msg.${code}` as const;
+      expect(english?.messages[key].trim()).not.toBe('');
+      for (const o of others) expect(holes(o.messages[key])).toEqual(holes(english!.messages[key]));
+    }
+  });
+
+  it('words a status in the current language and again after a switch', () => {
+    const status: SyncStatus = { kind: 'synced', at: NOW - 120_000 };
+    expect(cloudStatusLine(status, NOW)).toBe('Synced 2 min ago.');
+    setLang('vi');
+    expect(cloudStatusLine(status, NOW)).toBe('Đã đồng bộ 2 phút trước.');
+    expect(cloudText('link_code_expired')).not.toBe(
+      'That link code has expired. Get a new one on the other device.',
+    );
   });
 });

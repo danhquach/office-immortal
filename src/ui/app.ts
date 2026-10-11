@@ -1,6 +1,7 @@
 // The page: a saved run (after its Overtime Cultivation catch-up) or the
-// first-run Path choice, then the combat strip, KPI tiles, character panel,
-// inventory grid with its auto filter, item details and recent drops
+// first-run Path choice, then the combat strip with its XP bar, the summary
+// chips and recent drops beside it, character panel, inventory grid with its
+// auto filter and item details
 // (docs/design.md §5–§8, §10, §14). Text reaches the page only through
 // textContent. The sim decides everything; this file only shows state, passes
 // the player's choices (equip, sell, salvage, filter, spending) back in and
@@ -59,7 +60,7 @@ import {
   tick,
   type GameState,
 } from '../core/sim.ts';
-import { createCloud } from '../storage/cloud.ts';
+import { createCloud, type CloudMessage } from '../storage/cloud.ts';
 import { readCloudConfig } from '../storage/cloud-config.ts';
 import { ADOPT_KEY } from '../storage/cloud-meta.ts';
 import {
@@ -75,7 +76,7 @@ import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
 import {
   dropToast,
   faviconHref,
-  GAME_TITLE,
+  gameTitle,
   immortalNotice,
   miniStatus,
   noteUnseen,
@@ -85,9 +86,32 @@ import {
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
-import { CLOUD_HINT, cloudStatusLine, needsChoice, saveSummary } from './cloud-view.ts';
+import { cloudStatusLine, cloudText, needsChoice, saveSummary } from './cloud-view.ts';
+import {
+  enemyName,
+  lang,
+  PACKS,
+  readLang,
+  setLang,
+  t,
+  tn,
+  writeLang,
+  type MessageKey,
+} from './i18n.ts';
 import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
+import {
+  BAG_SORT_DIRS,
+  BAG_SORT_NAMES,
+  BAG_SORTS,
+  bagOrder,
+  type BagSort,
+  pickBagSort,
+  readBagReverse,
+  readBagSort,
+  writeBagReverse,
+  writeBagSort,
+} from './sort.ts';
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
 import {
@@ -106,7 +130,7 @@ import {
   overtimeLines,
   pageOf,
   passiveRow,
-  PATH_BLURBS,
+  pathBlurb,
   soulsLine,
   enemySprite,
   ICON_COLUMNS,
@@ -114,6 +138,8 @@ import {
   iconCell,
   realmLabel,
   retireLabel,
+  SUMMARY_ICONS,
+  summaryIcon,
   retireLines,
   sellBelowLabel,
   SPRITE_SIZE,
@@ -127,7 +153,7 @@ import {
   tribulationCall,
   tribulationFellDue,
   waveLabel,
-  xpLabel,
+  xpBar,
 } from './view.ts';
 
 const TICK_MS = 200;
@@ -142,9 +168,8 @@ const ICON_PX = 32;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
 const SUMMARY_MIN_SECONDS = 60;
 const RECENT_DROPS = 8;
-const FILE_NAME = 'Q3_Cultivation_Report';
-/** The formula bar's joke formula: set dressing, so screen readers skip it. */
-const FORMULA = '=INNER_PEACE() + DAILY_GRIND() + LUCK()';
+/** How long the live regions stay quiet after a language switch rewrites them. */
+const LIVE_QUIET_MS = 500;
 /** The favicon's drop dot blinks at most this often, well under any flashing threshold. */
 const BLINK_MS = 900;
 /** How long a Tribulation banner stays over the stage. */
@@ -155,21 +180,17 @@ const ARRAY_SETUP_MS = 1200;
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
 /** The Help tab of the main menu: how the game plays, in short. */
-const HELP_LINES: readonly string[] = [
-  'Your cultivator fights on their own, floor after floor. A floor is waves of demons, an elite and a boss.',
-  'Losing a fight sends you back one floor to grow stronger.',
-  'Drops land in the Inventory. Select one to compare it with what you wear, then equip it with its Equip button, a double-click or by dragging it onto your character.',
-  'Sell drops for Spirit Stones or salvage them into Spirit Essence. The Auto filter does it for you as drops land.',
-  'Spirit Stones buy bag space, stat resets and Path changes (Character, Stats tab).',
-  'At each realm cap a Tribulation falls due: face it at once with the flashing alert above the fight, or it joins the end of the floor. Beat it to break through to the next realm.',
-  'Early Retirement (Character, Retirement tab) starts again at floor 1 and pays Dao Insight, spent on passives that last every run.',
-  'Progress saves on its own and keeps going while you are away (Overtime Cultivation).',
+const HELP_LINES: readonly MessageKey[] = [
+  'help.1',
+  'help.2',
+  'help.3',
+  'help.4',
+  'help.5',
+  'help.6',
+  'help.7',
+  'help.8',
 ];
-const STAT_NAMES: readonly [StatId, string][] = [
-  ['body', 'Body'],
-  ['agility', 'Agility'],
-  ['spirit', 'Spirit'],
-];
+const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
 type Tag = keyof HTMLElementTagNameMap;
 
@@ -178,6 +199,30 @@ function el<K extends Tag>(tag: K, className = '', text = ''): HTMLElementTagNam
   if (className) node.className = className;
   if (text) node.textContent = text;
   return node;
+}
+
+/**
+ * Every fixed text on the page, as a function that puts it there in the current
+ * language: run once now, and again on a language switch, so the page changes
+ * in place (no reload, focus and the pop-out kept). A new page starts a new list.
+ */
+let labels: (() => void)[] = [];
+
+function say(fn: () => void): void {
+  fn();
+  labels.push(fn);
+}
+
+/** An element whose text is message `key`, kept in the current language. */
+function elt<K extends Tag>(tag: K, className: string, key: MessageKey): HTMLElementTagNameMap[K] {
+  const node = el(tag, className);
+  say(() => (node.textContent = t(key)));
+  return node;
+}
+
+/** Keeps attribute `name` of `node` as message `key` in the current language. */
+function attr(node: HTMLElement, name: string, key: MessageKey): void {
+  say(() => node.setAttribute(name, t(key)));
 }
 
 function button(text: string, className = '', onClick?: () => void): HTMLButtonElement {
@@ -193,19 +238,29 @@ function button(text: string, className = '', onClick?: () => void): HTMLButtonE
   return b;
 }
 
-/** A labelled <select> of `options` ([value, text] pairs). */
+/** A button whose text is message `key`, kept in the current language. */
+function buttonT(key: MessageKey, className = '', onClick?: () => void): HTMLButtonElement {
+  const b = button('', className, onClick);
+  say(() => (b.textContent = t(key)));
+  return b;
+}
+
+/** A labelled <select> of `options` ([value, text] pairs, the text worked out in the current language). */
 function choice(
-  label: string,
-  options: readonly (readonly [string, string])[],
+  label: MessageKey,
+  options: readonly (readonly [string, () => string])[],
 ): { box: HTMLLabelElement; select: HTMLSelectElement } {
-  const box = el('label', 'field', label);
+  const box = el('label', 'field');
+  const caption = document.createTextNode('');
+  say(() => (caption.data = t(label)));
   const select = el('select');
   for (const [value, text] of options) {
-    const o = el('option', '', text);
+    const o = el('option');
+    say(() => (o.textContent = text()));
     o.value = value;
     select.append(o);
   }
-  box.append(select);
+  box.append(caption, select);
   return { box, select };
 }
 
@@ -237,8 +292,8 @@ const run = runs();
 /** The cloud save's sync, made on first use; null where the build has no cloud config or storage is blocked. */
 let sync: Sync | null = null;
 /** A message from the cloud save for the player, shown over the game until dismissed. */
-let cloudNote: string | null = null;
-let showCloudNote: ((text: string) => void) | null = null;
+let cloudNote: CloudMessage | null = null;
+let showCloudNote: ((note: CloudMessage) => void) | null = null;
 /** Where the run is drawn, so the sync can restart it when it takes the cloud's save. */
 let current: { root: HTMLElement; storage: SaveStorage } | null = null;
 
@@ -261,9 +316,9 @@ function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null 
     now: Date.now,
     visible: () => !document.hidden,
     onAdopt: () => current && start(current.root, current.storage),
-    onNote: (text) => {
-      cloudNote = text;
-      showCloudNote?.(text);
+    onNote: (code) => {
+      cloudNote = code;
+      showCloudNote?.(code);
     },
   });
   return sync;
@@ -274,7 +329,10 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
   run.stop();
   // Before play() saves over the local run: the cloud check compares against it.
   cloudSync(root, storage)?.begin();
+  labels = [];
   showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
+  setLang(pickedLang ?? readLang(storage, navigator.languages ?? []));
+  document.documentElement.lang = lang().code;
   const saved = storage && loadSave(storage);
   if (saved) {
     const { state, summary } = catchUp(saved.state, offlineSeconds(saved.savedAt, Date.now()));
@@ -282,33 +340,177 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
     play(root, state, storage, summary);
     return;
   }
-  document.title = GAME_TITLE;
-  // No run, no HP ring: the browser's default icon.
-  document.querySelector('link[rel="icon"]')?.remove();
-  const cloud = sync;
-  root.replaceChildren(
-    titleBar(),
-    pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
-    ...(cloud ? [pathLink(cloud)] : []),
-  );
+  showPaths(root, storage);
   root.querySelector<HTMLButtonElement>('.paths button')?.focus();
 }
 
-function titleBar(): HTMLElement {
+/** The link code typed on the Path choice, kept across a language switch; cleared when a run starts. */
+let typedLink = '';
+
+/** Draws the Path choice. A language switch calls this alone: no restart, so the cloud check isn't redone. */
+function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
+  labels = [];
+  document.title = gameTitle();
+  // No run, no HP ring: the browser's default icon.
+  document.querySelector('link[rel="icon"]')?.remove();
+  const cloud = sync;
+  const bar = titleBar(storage, () => {
+    // Nothing to keep before a run starts: the choice is drawn again in the new language.
+    showPaths(root, storage);
+    root.querySelector<HTMLButtonElement>('.lang > button')?.focus();
+  });
+  root.replaceChildren(
+    bar,
+    pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
+    ...(cloud ? [pathLink(cloud)] : []),
+  );
+}
+
+/** The title bar; its language switch calls `relabel` once the language has changed. */
+function titleBar(storage: SaveStorage | null, relabel: () => void): HTMLElement {
   const bar = el('header', 'titlebar');
   // A generic sheet glyph, drawn in CSS: no real product's logo.
   const glyph = el('span', 'glyph');
   glyph.setAttribute('aria-hidden', 'true');
   // The game's name as a red rubber stamp; CSS sets the capitals, so screen readers say the words.
-  bar.append(glyph, el('h1', 'file', FILE_NAME), el('span', 'stamp', GAME_TITLE));
+  const tools = el('div', 'tools');
+  tools.append(langSwitch(storage, relabel));
+  bar.append(glyph, elt('h1', 'file', 'game.file'), elt('span', 'stamp', 'game.title'), tools);
   return bar;
+}
+
+/** A globe, drawn as SVG nodes (never markup); decorative, the code beside it is the text. */
+function globe(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'globe');
+  for (const d of [
+    'M8 1.5a6.5 6.5 0 1 0 0 13a6.5 6.5 0 1 0 0-13',
+    'M1.5 8h13',
+    'M8 1.5c-3.5 3.5-3.5 9.5 0 13',
+    'M8 1.5c3.5 3.5 3.5 9.5 0 13',
+  ]) {
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+}
+
+/**
+ * The language switch beside Menu: a globe and the language's code, opening a
+ * short list of the packs. Mouse, touch and keyboard (arrows, Home / End,
+ * Enter / Space, Escape) all work. Picking one saves it and calls `relabel`.
+ */
+function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLElement {
+  const box = el('div', 'lang');
+  const code = el('span');
+  const open = el('button');
+  open.type = 'button';
+  open.setAttribute('aria-haspopup', 'menu');
+  open.setAttribute('aria-expanded', 'false');
+  open.setAttribute('aria-controls', 'lang-list');
+  open.append(globe(), code);
+  say(() => {
+    code.textContent = lang().short;
+    open.setAttribute('aria-label', t('lang.button'));
+  });
+  const list = el('ul', 'lang-list');
+  list.id = 'lang-list';
+  list.setAttribute('role', 'menu');
+  say(() => list.setAttribute('aria-label', t('lang.button')));
+  // The title bar clips what spills past it (its edge-to-edge shadow), so the
+  // list opens in the top layer as a popover, placed under the button.
+  list.popover = 'manual';
+  let isOpen = false;
+  const items = PACKS.map((pack) => {
+    const item = el('li', '', pack.label);
+    item.setAttribute('role', 'menuitemradio');
+    // Each name in its own language, so a screen reader says it right.
+    item.lang = pack.code;
+    item.tabIndex = -1;
+    item.addEventListener('click', () => pick(pack.code));
+    list.append(item);
+    return item;
+  });
+  const outside = (e: PointerEvent): void => {
+    if (!box.contains(e.target as Node)) close(false);
+  };
+  // The list is placed once, where it opened: a resize or scroll closes it.
+  const moved = (): void => close(false);
+  function show(): void {
+    const at = Math.max(0, PACKS.indexOf(lang()));
+    items.forEach((item, i) => item.setAttribute('aria-checked', String(i === at)));
+    isOpen = true;
+    list.showPopover();
+    const r = open.getBoundingClientRect();
+    list.style.top = `${r.bottom + 2}px`;
+    list.style.left = `${Math.max(4, r.right - list.offsetWidth)}px`;
+    open.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', outside);
+    window.addEventListener('resize', moved);
+    window.addEventListener('scroll', moved);
+    items[at]?.focus({ preventScroll: true });
+  }
+  function close(refocus: boolean): void {
+    if (!isOpen) return;
+    isOpen = false;
+    list.hidePopover();
+    open.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', outside);
+    window.removeEventListener('resize', moved);
+    window.removeEventListener('scroll', moved);
+    if (refocus) open.focus();
+  }
+  function pick(next: string): void {
+    close(true);
+    if (next === lang().code) return;
+    pickedLang = next;
+    setLang(next);
+    // Blocked storage still changes it for this visit.
+    writeLang(storage, next);
+    document.documentElement.lang = lang().code;
+    relabel();
+  }
+  open.addEventListener('click', () => (isOpen ? close(true) : show()));
+  open.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    show();
+  });
+  list.addEventListener('keydown', (e) => {
+    const at = items.indexOf(document.activeElement as HTMLLIElement);
+    const to: Record<string, number> = {
+      ArrowDown: (at + 1) % items.length,
+      ArrowUp: (at - 1 + items.length) % items.length,
+      Home: 0,
+      End: items.length - 1,
+    };
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      close(true);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      const pack = PACKS[at];
+      if (pack) pick(pack.code);
+      // Back on the button first, so Tab moves on from there in every browser.
+    } else if (e.key === 'Tab') close(true);
+    else if (to[e.key] !== undefined) {
+      e.preventDefault();
+      items[to[e.key] as number]?.focus({ preventScroll: true });
+    }
+  });
+  box.append(open, list);
+  return box;
 }
 
 /** The office shell's set dressing: a formula bar. */
 function formulaBar(): HTMLElement {
   const bar = el('div', 'formula');
   bar.setAttribute('aria-hidden', 'true');
-  bar.append(el('span', 'ref', 'A1'), el('span', 'fx', 'fx'), el('span', 'expr', FORMULA));
+  bar.append(el('span', 'ref', 'A1'), el('span', 'fx', 'fx'), elt('span', 'expr', 'game.formula'));
   return bar;
 }
 
@@ -316,9 +518,9 @@ function formulaBar(): HTMLElement {
 function statusBar(): HTMLElement {
   const bar = el('footer', 'statusbar');
   bar.append(
-    el('span', '', 'Ready'),
-    el('span', 'sheet-tab', 'Dashboard'),
-    el('span', 'muted', 'Autosave on'),
+    elt('span', '', 'status.ready'),
+    elt('span', 'sheet-tab', 'status.sheet'),
+    elt('span', 'muted', 'status.autosave'),
   );
   return bar;
 }
@@ -326,21 +528,17 @@ function statusBar(): HTMLElement {
 function pathChoice(onPick: (path: PathId) => void): HTMLElement {
   const box = el('section', 'panel choose');
   box.setAttribute('aria-labelledby', 'choose-title');
-  const h = el('h2', '', 'Choose your Path');
+  const h = elt('h2', '', 'choose.title');
   h.id = 'choose-title';
   const list = el('div', 'paths');
   for (const id of Object.keys(PATHS) as PathId[]) {
     const b = el('button');
     b.type = 'button';
-    b.append(el('strong', '', PATHS[id].name), el('span', 'muted', PATH_BLURBS[id]));
+    b.append(el('strong', '', tn('path', PATHS[id].name)), el('span', 'muted', pathBlurb(id)));
     b.addEventListener('click', () => onPick(id));
     list.append(b);
   }
-  box.append(
-    h,
-    el('p', 'muted', 'Your cultivator fights on their own. Pick how they fight.'),
-    list,
-  );
+  box.append(h, elt('p', 'muted', 'choose.intro'), list);
   return box;
 }
 
@@ -410,16 +608,35 @@ function setIcon(icon: HTMLElement, item: Item | undefined): void {
   s.backgroundPosition = `${-col * px}px ${-row * px}px`;
 }
 
-function kpi(label: string): { box: HTMLElement; value: HTMLElement } {
-  const box = el('div', 'panel kpi');
-  const value = el('span', 'value');
-  box.append(el('span', 'label', label), value);
-  return { box, value };
+/** Shows column `col` of the summary atlas on `icon`; sized in em, so it follows the chip's text. */
+function setSummaryIcon(icon: HTMLElement, col: number): void {
+  const s = icon.style;
+  s.backgroundImage = cssUrl(artUrl('summary'));
+  s.backgroundSize = `${SUMMARY_ICONS.length * 100}% 100%`;
+  s.backgroundPosition = `${(col / (SUMMARY_ICONS.length - 1)) * 100}% 0`;
 }
 
-function panel(className: string, title: string): { box: HTMLElement; heading: HTMLElement } {
+/** A summary chip: an optional decorative icon, the label, then the value. */
+function kpi(
+  label: MessageKey,
+  iconCol?: number,
+): { box: HTMLElement; icon: HTMLElement | null; value: HTMLElement } {
+  const box = el('div', 'kpi');
+  let icon: HTMLElement | null = null;
+  if (iconCol !== undefined) {
+    icon = el('span', 'kpi-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    setSummaryIcon(icon, iconCol);
+    box.append(icon);
+  }
+  const value = el('span', 'value');
+  box.append(elt('span', 'label', label), value);
+  return { box, icon, value };
+}
+
+function panel(className: string, title: MessageKey): { box: HTMLElement; heading: HTMLElement } {
   const box = el('section', `panel ${className}`);
-  const heading = el('h2', '', title);
+  const heading = elt('h2', '', title);
   heading.tabIndex = -1;
   box.append(heading);
   return { box, heading };
@@ -439,7 +656,7 @@ function cell(): HTMLButtonElement {
 function fillCell(b: HTMLButtonElement, item: Item | undefined, emptyText: string): void {
   const [grade, icon, q] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
   b.className = item ? `cell grade-${item.grade}` : 'cell empty';
-  grade.textContent = item ? (GRADES[item.grade].name[0] as string) : '';
+  grade.textContent = item ? t(`grade.initial.${item.grade}`) : '';
   setIcon(icon, item);
   q.textContent = item ? `${quality(item)}%` : '';
   b.setAttribute('aria-label', item ? cellLabel(item) : emptyText);
@@ -449,7 +666,7 @@ function fillCell(b: HTMLButtonElement, item: Item | undefined, emptyText: strin
  * Tabs inside a panel: one tab stop, arrow keys (and Home / End) switch, only the chosen body
  * shows. The first tab starts selected.
  */
-function tabs(list: { id: string; label: string; body: HTMLElement }[]): {
+function tabs(list: { id: string; label: MessageKey; body: HTMLElement }[]): {
   bar: HTMLElement;
   panels: HTMLElement[];
   show: (id: string) => void;
@@ -459,20 +676,20 @@ function tabs(list: { id: string; label: string; body: HTMLElement }[]): {
   const buttons: HTMLButtonElement[] = [];
   const panels: HTMLElement[] = [];
   const show = (id: string): void => {
-    list.forEach((t, i) => {
-      const on = t.id === id;
+    list.forEach((tab, i) => {
+      const on = tab.id === id;
       buttons[i]?.setAttribute('aria-selected', String(on));
       if (buttons[i]) buttons[i].tabIndex = on ? 0 : -1;
       if (panels[i]) panels[i].hidden = !on;
     });
   };
-  list.forEach((t, i) => {
-    const b = el('button', 'tab', t.label);
+  list.forEach((tab, i) => {
+    const b = elt('button', 'tab', tab.label);
     b.type = 'button';
-    b.id = `tab-${t.id}`;
+    b.id = `tab-${tab.id}`;
     b.setAttribute('role', 'tab');
-    b.setAttribute('aria-controls', `tabpanel-${t.id}`);
-    b.addEventListener('click', () => show(t.id));
+    b.setAttribute('aria-controls', `tabpanel-${tab.id}`);
+    b.addEventListener('click', () => show(tab.id));
     b.addEventListener('keydown', (e) => {
       const to: Record<string, number> = {
         ArrowRight: (i + 1) % list.length,
@@ -488,10 +705,10 @@ function tabs(list: { id: string; label: string; body: HTMLElement }[]): {
       buttons[list.indexOf(next)]?.focus();
     });
     const panel = el('div', 'tabpanel');
-    panel.id = `tabpanel-${t.id}`;
+    panel.id = `tabpanel-${tab.id}`;
     panel.setAttribute('role', 'tabpanel');
     panel.setAttribute('aria-labelledby', b.id);
-    panel.append(t.body);
+    panel.append(tab.body);
     buttons.push(b);
     panels.push(panel);
     bar.append(b);
@@ -514,6 +731,11 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const osDark = matchMedia('(prefers-color-scheme: dark)');
 /** The theme picked this visit: kept across runs even where storage is blocked. */
 let pickedTheme: Theme | null = null;
+/** The bag sort picked this visit: kept across runs even where storage is blocked. */
+let pickedSort: BagSort | null = null;
+let pickedReverse: boolean | null = null;
+/** The language picked this visit: kept across runs even where storage is blocked. */
+let pickedLang: string | null = null;
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
@@ -521,22 +743,20 @@ type Selection = { bag: number } | { slot: EquipSlotId } | null;
 function overtimePanel(summary: OvertimeSummary): HTMLElement {
   const box = el('section', 'panel overtime');
   box.setAttribute('aria-labelledby', 'overtime-title');
-  const h = el('h2', '', 'Overtime Cultivation');
+  const h = elt('h2', '', 'overtime.title');
   h.id = 'overtime-title';
   const lines = el('ul', 'lines');
-  for (const line of overtimeLines(summary)) lines.append(el('li', '', line));
-  const ok = el('button', 'primary', 'Back to work');
-  ok.type = 'button';
-  ok.addEventListener('click', () => box.remove());
-  box.append(h, el('p', 'muted', 'Your cultivator kept fighting while you were away.'), lines, ok);
+  say(() => lines.replaceChildren(...overtimeLines(summary).map((line) => el('li', '', line))));
+  const ok = buttonT('overtime.ok', 'primary', () => box.remove());
+  box.append(h, elt('p', 'muted', 'overtime.intro'), lines, ok);
   return box;
 }
 
 /**
  * The cloud save's parts of the page: a note and the choice between two saves
  * (both over the game, since a choice must not wait for the Menu), and the
- * Menu's Cloud save section. All text goes in as text; the sync's state is the
- * only input, and every redraw comes from its status.
+ * Menu's Cloud save section. All text goes in as text, in the current language
+ * (rewritten on a language switch); the sync's status is the only other input.
  */
 function cloudPanels(
   cloud: Sync,
@@ -547,18 +767,21 @@ function cloudPanels(
   const noteText = el('p');
   note.append(
     noteText,
-    button('OK', '', () => {
+    buttonT('confirm.ok', '', () => {
       note.hidden = true;
       cloudNote = null;
     }),
   );
-  const showNote = (text: string): void => {
-    noteText.textContent = text;
+  note.hidden = true;
+  const showNote = (code: CloudMessage): void => {
+    noteText.textContent = cloudText(code);
     note.hidden = false;
   };
-  note.hidden = true;
   if (cloudNote) showNote(cloudNote);
   showCloudNote = showNote;
+  say(() => {
+    if (cloudNote) noteText.textContent = cloudText(cloudNote);
+  });
 
   const choice = el('section', 'panel cloud-panel');
   choice.setAttribute('role', 'alert');
@@ -566,51 +789,62 @@ function cloudPanels(
   const localLine = el('p', 'muted');
   const cloudLine = el('p', 'muted');
   const keep = button('', '', () => void cloud.keepLocal());
-  const use = button('Use cloud save', 'primary', () => cloud.useCloud());
+  const use = buttonT('cloud.useCloud', 'primary', () => cloud.useCloud());
   choice.append(choiceText, localLine, cloudLine, keep, use);
   choice.hidden = true;
 
   const statusLine = el('p');
   statusLine.setAttribute('aria-live', 'polite');
   const turnOn = button('', 'primary', () => void cloud.turnOn());
-  const syncNow = button('Sync now', '', () => void cloud.syncNow());
+  const syncNow = button('', '', () => void cloud.syncNow());
   const codeLine = el('p', 'muted');
-  const getCode = button('Get link code', '', () => {
+  /** The link code on show, kept so a language switch can word it again. */
+  let shownCode: { code: string; ttl: number } | null = null;
+  say(() => {
+    codeLine.textContent = shownCode
+      ? t('cloud.code', { code: shownCode.code, minutes: Math.round(shownCode.ttl / 60) })
+      : '';
+  });
+  const getCode = buttonT('cloud.getCode', '', () => {
     void cloud.linkCode().then((made) => {
-      if (made) {
-        codeLine.textContent =
-          `Link code: ${made.code}. Enter it on your other device within ` +
-          `${Math.round(made.ttl / 60)} minutes. It works once.`;
-      }
+      if (!made) return;
+      shownCode = made;
+      codeLine.textContent = t('cloud.code', {
+        code: made.code,
+        minutes: Math.round(made.ttl / 60),
+      });
     });
   });
-  const turnOff = button('Turn off on this device', '', () => {
+  const turnOff = buttonT('cloud.turnOff', '', () => {
+    shownCode = null;
     codeLine.textContent = '';
     cloud.turnOff();
   });
-  const linkBox = el('label', 'field', 'Link code from your other device');
+  const linkBox = el('label', 'field');
+  const linkCaption = document.createTextNode('');
+  say(() => (linkCaption.data = t('cloud.linkField')));
   const linkInput = el('input');
   linkInput.type = 'text';
   linkInput.maxLength = 32;
   linkInput.autocomplete = 'off';
   linkInput.spellcheck = false;
-  linkBox.append(linkInput);
-  const link = button('Link this device', '', () => {
+  linkBox.append(linkCaption, linkInput);
+  const link = buttonT('cloud.link', '', () => {
     const code = linkInput.value.trim();
     if (!code) return;
-    setButton(link, 'Link this device', true);
+    setButton(link, t('cloud.link'), true);
     void cloud.link(code).then(() => {
       linkInput.value = '';
-      setButton(link, 'Link this device', false);
+      setButton(link, t('cloud.link'), false);
     });
   });
-  const linkHint = el('p', 'muted hint', 'Linking asks which save to keep.');
+  const linkHint = elt('p', 'muted hint', 'cloud.linkHint');
   const linkRow = el('div', 'cloud-row');
   linkRow.append(linkBox, link);
 
   const menu = [
-    el('h3', '', 'Cloud save'),
-    el('p', 'muted hint', CLOUD_HINT),
+    elt('h3', '', 'cloud.title'),
+    elt('p', 'muted hint', 'cloud.hint'),
     statusLine,
     turnOn,
     syncNow,
@@ -627,34 +861,28 @@ function cloudPanels(
     const off = status.kind === 'off';
     const relink = status.kind === 'relink';
     const on = !off && !relink;
-    setText(turnOn, relink ? 'Start a new cloud save' : 'Turn on cloud save');
+    setText(turnOn, t(relink ? 'cloud.startNew' : 'cloud.turnOn'));
     turnOn.hidden = !(off || relink);
     linkRow.hidden = linkHint.hidden = !(off || relink);
     const syncing = status.kind === 'syncing' || status.kind === 'checking';
     syncNow.hidden = getCode.hidden = !on;
-    setButton(syncNow, 'Sync now', syncing || needsChoice(status));
+    setButton(syncNow, t('cloud.syncNow'), syncing || needsChoice(status));
     turnOff.hidden = off;
     codeLine.hidden = !on;
     choice.hidden = !needsChoice(status);
     if (status.kind === 'conflict') {
-      setText(
-        choiceText,
-        "This device's save and the cloud save have both changed. Choose which to keep. The other is replaced.",
-      );
-      setText(localLine, `This device: ${saveSummary(status.local, now)}`);
-      setText(cloudLine, `Cloud: ${saveSummary(status.server, now)}`);
+      setText(choiceText, t('cloud.conflict'));
+      setText(localLine, t('cloud.localLine', { summary: saveSummary(status.local, now) }));
+      setText(cloudLine, t('cloud.cloudLine', { summary: saveSummary(status.server, now) }));
       localLine.hidden = cloudLine.hidden = use.hidden = false;
-      setText(keep, "Keep this device's");
+      setText(keep, t('cloud.keepLocal'));
     } else if (status.kind === 'unreadable') {
-      setText(
-        choiceText,
-        "The cloud save can't be read, so this device's save is kept. You can replace the cloud save with it.",
-      );
+      setText(choiceText, t('cloud.unreadable'));
       localLine.hidden = cloudLine.hidden = use.hidden = true;
-      setText(keep, "Overwrite cloud with this device's save");
+      setText(keep, t('cloud.overwrite'));
     }
   }
-  draw(cloud.status);
+  say(() => draw(cloud.status));
   const unsubscribe = cloud.subscribe(draw);
   // "Synced 2 min ago" ages while nothing else changes.
   scope.every(30_000, () => draw(cloud.status));
@@ -668,32 +896,41 @@ function cloudPanels(
 /** On the Path choice, where there is no Menu: load a cloud save with a link code. */
 function pathLink(cloud: Sync): HTMLElement {
   const box = el('section', 'panel cloud-panel');
+  /** What the line under the field says now: progress or the last problem. */
+  let shown: (() => string) | null = null;
   const msg = el('p', 'muted');
   msg.setAttribute('role', 'status');
-  const field = el('label', 'field', 'Have a link code? Enter it to load your cloud save');
+  const show = (text: (() => string) | null): void => {
+    shown = text;
+    msg.textContent = text ? text() : '';
+  };
+  const field = el('label', 'field');
+  const caption = document.createTextNode('');
+  say(() => (caption.data = t('cloud.pathLink')));
   const input = el('input');
   input.type = 'text';
   input.maxLength = 32;
   input.autocomplete = 'off';
   input.spellcheck = false;
-  field.append(input);
-  const go = button('Link this device', '', () => {
+  input.value = typedLink;
+  input.addEventListener('input', () => (typedLink = input.value));
+  field.append(caption, input);
+  const go = buttonT('cloud.link', '', () => {
     const code = input.value.trim();
     if (!code) return;
-    msg.textContent = 'Linking…';
-    setButton(go, 'Link this device', true);
+    show(() => t('cloud.linking'));
+    setButton(go, t('cloud.link'), true);
     void cloud.link(code).then(() => {
-      setButton(go, 'Link this device', false);
+      setButton(go, t('cloud.link'), false);
       if (!msg.isConnected) return;
-      // Still on the Path choice: the message above was shown here; don't repeat it over the new run.
+      // Still on the Path choice: the problem was shown here; don't repeat it over the new run.
       cloudNote = null;
-      if (msg.textContent === 'Linking…') msg.textContent = '';
+      if (msg.textContent === t('cloud.linking')) show(null);
     });
   });
-  // Errors come back as notes; here they show beside the field.
-  showCloudNote = (text) => {
-    msg.textContent = text;
-  };
+  // Problems come back as notes; here they show beside the field.
+  showCloudNote = (code) => show(() => cloudText(code));
+  say(() => (msg.textContent = shown ? shown() : ''));
   box.append(field, go, msg);
   return box;
 }
@@ -704,14 +941,20 @@ function play(
   storage: SaveStorage | null,
   summary: OvertimeSummary | null,
 ): void {
+  typedLink = '';
   const scope = run.next();
   const { signal } = scope;
+  labels = [];
   let state = initial;
   let selected: Selection = null;
   /** The bag cell that holds the grid's one tab stop; always on the shown page. */
   let cursor = 0;
   /** The inventory page shown; a run always starts on the first. */
   let page = 0;
+  /** How the bag is ordered, and the inventory index shown in each cell. */
+  let sort = pickedSort ?? readBagSort(storage);
+  let reverse = pickedReverse ?? readBagReverse(storage);
+  let order: number[] = [];
   /** Bumped by every equip, so gear redraws only when it changes. */
   let gearVersion = 0;
   let drawnGear = '';
@@ -723,11 +966,11 @@ function play(
 
   // Combat strip
   const strip = el('section', 'strip');
-  strip.setAttribute('aria-label', 'Combat');
+  attr(strip, 'aria-label', 'strip.label');
   const where = el('div', 'where');
   const floorText = el('span');
   const killText = el('span');
-  const live = el('span', 'live', 'Live');
+  const live = elt('span', 'live', 'strip.live');
   where.append(floorText, killText, live);
   const you = fighter('you');
   const foe = fighter('foe');
@@ -738,12 +981,12 @@ function play(
   corpse.sprite.hidden = true;
   stage.append(you.sprite, corpse.sprite, foe.sprite);
   const fighters = el('div', 'fighters');
-  fighters.append(you.box, el('span', 'vs', 'vs'), foe.box);
+  fighters.append(you.box, elt('span', 'vs', 'strip.vs'), foe.box);
   // The Tribulation alert: flashes while one is due; a click starts the fight now.
   const trialCall = el('button', 'trial-call');
   trialCall.type = 'button';
   trialCall.hidden = true;
-  const trialHead = el('strong', '', 'Tribulation due');
+  const trialHead = elt('strong', '', 'trial.due');
   const trialText = el('span');
   trialCall.append(trialHead, trialText);
   trialCall.addEventListener('click', () => {
@@ -767,27 +1010,39 @@ function play(
   arrayMark.setAttribute('aria-hidden', 'true');
   let arrayTimer = 0;
   stage.append(arrayMark);
-  strip.append(where, trialCall, stage, fighters);
+  // XP to the next level, with the level at its left end. The text is drawn
+  // twice: light on the dark track, and dark on the yellow fill, which is
+  // clipped to the XP so far. Screen readers get aria-valuetext instead.
+  const xp = el('div', 'xp');
+  xp.setAttribute('role', 'progressbar');
+  attr(xp, 'aria-label', 'strip.xp');
+  xp.setAttribute('aria-valuemin', '0');
+  xp.setAttribute('aria-valuemax', '100');
+  const xpLevel = el('span', 'xp-level');
+  const xpText = el('span', 'xp-text');
+  const xpFill = el('span', 'xp-fill');
+  const xpFillLevel = el('span', 'xp-level');
+  const xpFillText = el('span', 'xp-text');
+  xpFill.append(xpFillLevel, xpFillText);
+  xp.append(xpLevel, xpText, xpFill);
+  strip.append(where, trialCall, stage, fighters, xp);
   let zone = '';
 
-  // KPI tiles
+  // Summary chips, one line each
   const kpis = el('section', 'kpis');
-  kpis.setAttribute('aria-label', 'Summary');
-  const kPath = kpi('Path');
-  const kRealm = kpi('Realm');
-  kRealm.box.classList.add('realm');
-  const kLevel = kpi('Level');
-  const kFloor = kpi('Floor');
-  const kXp = kpi('XP to next level');
-  const kStones = kpi('Spirit Stones');
-  const kEssence = kpi('Spirit Essence');
-  kpis.append(kPath.box, kRealm.box, kLevel.box, kFloor.box, kXp.box, kStones.box, kEssence.box);
+  attr(kpis, 'aria-label', 'kpi.label');
+  const kPath = kpi('kpi.path');
+  const kRealm = kpi('kpi.realm', summaryIcon('realm', state.cultivator.level));
+  const kStones = kpi('kpi.stones', summaryIcon('stones'));
+  const kEssence = kpi('kpi.essence', summaryIcon('essence'));
+  let realmIcon = summaryIcon('realm', state.cultivator.level);
+  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
-  const character = panel('character', 'Character');
+  const character = panel('character', 'character.title');
   const slots = el('div', 'doll');
   slots.setAttribute('role', 'group');
-  slots.setAttribute('aria-label', 'Equipped');
+  attr(slots, 'aria-label', 'character.equipped');
   slots.append(figure());
   const slotCells = {} as Record<EquipSlotId, HTMLButtonElement>;
   for (const slot of SLOT_IDS) {
@@ -796,14 +1051,16 @@ function play(
     b.dataset.slot = slot;
     b.addEventListener('click', () => select(state.cultivator.equipment[slot] ? { slot } : null));
     slotCells[slot] = b;
-    box.append(b, el('span', 'slot-name', EQUIP_SLOTS[slot].name));
+    const slotName = el('span', 'slot-name');
+    say(() => (slotName.textContent = tn('equipSlot', EQUIP_SLOTS[slot].name)));
+    box.append(b, slotName);
     slots.append(box);
   }
   // Stats: base stats with their spend buttons on the same row, the derived
   // numbers in groups, then Respec (stat reset and Path change).
   const base = el('section', 'base');
   const baseHead = el('div', 'head');
-  const baseTitle = el('h3', '', 'Base stats');
+  const baseTitle = elt('h3', '', 'stats.base');
   baseTitle.id = 'base-stats';
   baseTitle.tabIndex = -1;
   const unspentText = el('span', 'unspent');
@@ -811,16 +1068,19 @@ function play(
   const baseList = el('ul', 'base-list');
   baseList.setAttribute('aria-labelledby', 'base-stats');
   const baseValues = {} as Record<StatId, HTMLElement>;
-  for (const [id, name] of STAT_NAMES) {
+  for (const id of STAT_IDS) {
     const row = el('li');
     const value = el('b', 'value');
     baseValues[id] = value;
     // Hidden (not off) with no points to spend; the words name the stat.
     const one = button('+1', 'spend', () => spend(id, 1));
-    one.setAttribute('aria-label', `+1 ${name}`);
-    const all = button('All', 'spend', () => spend(id, state.cultivator.unspent));
-    all.setAttribute('aria-label', `All to ${name}`);
-    row.append(el('span', 'name', name), value, one, all);
+    const all = buttonT('stats.all', 'spend', () => spend(id, state.cultivator.unspent));
+    say(() => {
+      const stat = t(`stat.${id}`);
+      one.setAttribute('aria-label', t('stats.plusOne', { stat }));
+      all.setAttribute('aria-label', t('stats.allTo', { stat }));
+    });
+    row.append(elt('span', 'name', `stat.${id}`), value, one, all);
     baseList.append(row);
   }
   base.append(baseHead, baseList);
@@ -828,8 +1088,9 @@ function play(
   const derived = el('div', 'derived');
   const derivedLists = {} as Record<StatGroup, HTMLElement>;
   const derivedValues: HTMLElement[] = [];
+  const derivedLabels: HTMLElement[] = [];
   for (const group of STAT_GROUPS) {
-    const head = el('h3', '', group);
+    const head = elt('h3', '', `group.${group}`);
     const list = el('dl');
     derivedLists[group] = list;
     derived.append(head, list);
@@ -840,22 +1101,17 @@ function play(
   const respecInfo = el('button', 'info', '?');
   respecInfo.type = 'button';
   // The name starts with the visible "?", so voice control can say it.
-  respecInfo.setAttribute('aria-label', '? How Respec works');
+  attr(respecInfo, 'aria-label', 'respec.info');
   respecInfo.setAttribute('aria-expanded', 'false');
   respecInfo.setAttribute('aria-controls', 'respec-info');
-  const respecNote = el(
-    'p',
-    'muted hint',
-    'Reset takes back every stat point to spend as you choose. A Path change puts them all ' +
-      'into the new Path’s primary stat.',
-  );
+  const respecNote = elt('p', 'muted hint', 'respec.note');
   respecNote.id = 'respec-info';
   respecNote.hidden = true;
   respecInfo.addEventListener('click', () => {
     respecNote.hidden = !respecNote.hidden;
     respecInfo.setAttribute('aria-expanded', String(!respecNote.hidden));
   });
-  respecHead.append(el('h3', '', 'Respec'), respecInfo);
+  respecHead.append(elt('h3', '', 'respec.title'), respecInfo);
   /** A Respec line: the controls, then the cost and why it is off; the button is described by both. */
   function respecLine(key: string, ...controls: HTMLElement[]) {
     const line = el('div', 'line');
@@ -868,13 +1124,13 @@ function play(
     line.append(...controls, meta);
     return { line, cost, why };
   }
-  const resetBtn = button('Reset stats', '', () => act(resetStats(state)));
+  const resetBtn = buttonT('respec.reset', '', () => act(resetStats(state)));
   resetBtn.setAttribute('aria-describedby', 'reset-cost reset-why');
   const resetLine = respecLine('reset', resetBtn);
   // The button beside it says what the choice is for; the name says it too.
   const pathPick = el('select');
-  pathPick.setAttribute('aria-label', 'New Path');
-  const pathBtn = button('Change Path', '', () => {
+  attr(pathPick, 'aria-label', 'respec.newPath');
+  const pathBtn = buttonT('respec.change', '', () => {
     const to = pathPick.value as PathId;
     if (to) act(changePath(state, to));
   });
@@ -890,7 +1146,7 @@ function play(
   const insightTotal = el('div', 'insight');
   const insightCount = el('b');
   const retiredText = el('small', 'muted');
-  insightTotal.append(gem(), insightCount, el('span', '', 'Dao Insight'), retiredText);
+  insightTotal.append(gem(), insightCount, elt('span', '', 'retire.insight'), retiredText);
   const passiveRows = {} as Record<
     PassiveId,
     {
@@ -902,7 +1158,7 @@ function play(
     }
   >;
   const passiveList = el('ul', 'passives');
-  passiveList.setAttribute('aria-label', 'Passives');
+  attr(passiveList, 'aria-label', 'retire.passives');
   for (const id of PASSIVE_IDS) {
     const row = el('li', 'passive');
     const toggle = el('button', 'more');
@@ -929,10 +1185,10 @@ function play(
   // them instead, and focus lands there.
   const retireBox = el('div', 'confirm');
   const keptList = el('ul', 'lines');
-  const keptHead = el('h4', 'keep', 'You keep');
+  const keptHead = elt('h4', 'keep', 'retire.kept');
   keptHead.id = 'retire-kept';
   keptList.id = 'retire-kept-list';
-  const lostHead = el('h4', 'lose', 'You lose');
+  const lostHead = elt('h4', 'lose', 'retire.lost');
   lostHead.id = 'retire-lost';
   const lostList = el('ul', 'lines');
   lostList.id = 'retire-lost-list';
@@ -942,7 +1198,7 @@ function play(
   lostCol.append(lostHead, lostList);
   const cols = el('div', 'cols');
   cols.append(keptCol, lostCol);
-  const retireYes = button('Retire', 'primary', () => {
+  const retireYes = buttonT('retire.yes', 'primary', () => {
     // A new run on a fresh page; play() saves it straight away.
     play(root, retire(state), storage, null);
     // The old page is gone with its focus: land on the new run's Retirement tab.
@@ -954,11 +1210,11 @@ function play(
     'aria-describedby',
     'retire-kept retire-kept-list retire-lost retire-lost-list',
   );
-  const retireNo = button('Cancel', '', () => {
+  const retireNo = buttonT('confirm.cancel', '', () => {
     retireBox.hidden = true;
     retireBtn.focus();
   });
-  retireBox.append(el('p', 'ask', 'Retire early?'), cols, retireYes, retireNo);
+  retireBox.append(elt('p', 'ask', 'retire.ask'), cols, retireYes, retireNo);
   retireBox.hidden = true;
   const retireBtn = button('', '', askRetire);
   function askRetire(): void {
@@ -984,29 +1240,24 @@ function play(
   }
   const reward = el('span', 'reward');
   const retireHead = el('div', 'head');
-  retireHead.append(el('h3', '', 'Early Retirement'), reward);
+  retireHead.append(elt('h3', '', 'retire.title'), reward);
   const retireSection = el('section', 'early');
-  retireSection.append(
-    retireHead,
-    el('p', 'muted hint', 'Back to floor 1, level 1. Pays for your highest floor.'),
-    retireBtn,
-    retireBox,
-  );
+  retireSection.append(retireHead, elt('p', 'muted hint', 'retire.hint'), retireBtn, retireBox);
   const retireBody = el('div', 'retire');
   retireBody.append(insightTotal, passiveList, retireSection);
 
   const charTabs = tabs([
-    { id: 'gear', label: 'Equipment', body: slots },
-    { id: 'stats', label: 'Stats', body: statsBody },
-    { id: 'retire', label: 'Retirement', body: retireBody },
+    { id: 'gear', label: 'tab.gear', body: slots },
+    { id: 'stats', label: 'tab.stats', body: statsBody },
+    { id: 'retire', label: 'tab.retire', body: retireBody },
   ]);
   character.box.append(charTabs.bar, ...charTabs.panels);
 
   // Inventory grid
-  const inventory = panel('inventory', 'Inventory');
+  const inventory = panel('inventory', 'inventory.title');
   const grid = el('div', 'bag');
   grid.setAttribute('role', 'group');
-  grid.setAttribute('aria-label', 'Inventory slots. Arrow keys move, Enter shows details.');
+  attr(grid, 'aria-label', 'inventory.grid');
   const bagCells: HTMLButtonElement[] = [];
   /** Invisible cells that pad a short last page, so every page is the same size. */
   const fillers: HTMLElement[] = [];
@@ -1017,11 +1268,13 @@ function play(
       b.tabIndex = i === 0 ? 0 : -1;
       b.addEventListener('click', () => {
         setCursor(i);
-        select(state.inventory[i] ? { bag: i } : null);
+        const index = order[i];
+        select(index === undefined ? null : { bag: index });
         if (selected) revealDetails();
       });
       b.addEventListener('dblclick', () => {
-        if (state.inventory[i]) equipFromBag(i);
+        const index = order[i];
+        if (index !== undefined) equipFromBag(index);
       });
       b.addEventListener('pointerdown', (e) => startPress(e, i));
       bagCells.push(b);
@@ -1044,14 +1297,16 @@ function play(
       f.hidden = i >= pad;
     });
     pager.classList.toggle('single', pages === 1);
-    setText(pageText, `Page ${page + 1} of ${pages}`);
-    setButton(prevPage, 'Previous', page === 0);
-    setButton(nextPage, 'Next', page === pages - 1);
+    setText(pageText, t('inventory.page', { n: page + 1, of: pages }));
+    setButton(prevPage, t('inventory.prev'), page === 0);
+    setButton(nextPage, t('inventory.next'), page === pages - 1);
   }
   /** Turns to page `to`; a bag selection left on another page is cleared. */
   function showPage(to: number): void {
     page = to;
-    if (selected && 'bag' in selected && pageOf(selected.bag) !== page) selected = null;
+    if (selected && 'bag' in selected && pageOf(order.indexOf(selected.bag)) !== page) {
+      selected = null;
+    }
     setCursor(page * BAG_PAGE);
     draw(null);
   }
@@ -1059,12 +1314,12 @@ function play(
   // never make the panel taller.
   const pager = el('div', 'pager');
   pager.setAttribute('role', 'group');
-  pager.setAttribute('aria-label', 'Inventory pages');
-  const prevPage = button('Previous', '', () => showPage(page - 1));
+  attr(pager, 'aria-label', 'inventory.pages');
+  const prevPage = button('', '', () => showPage(page - 1));
   // Announced on a turn, as the focused button's name does not change.
   const pageText = el('span', 'muted');
   pageText.setAttribute('aria-live', 'polite');
-  const nextPage = button('Next', '', () => showPage(page + 1));
+  const nextPage = button('', '', () => showPage(page + 1));
   pager.append(prevPage, pageText, nextPage);
   grid.addEventListener('keydown', (e) => {
     // The column count is set by the stylesheet (fewer on a narrow screen).
@@ -1081,16 +1336,17 @@ function play(
 
   // Bulk sell: pick a grade, then confirm a message naming the count and the
   // highest grade sold.
+  const gradeName = (g: GradeId): string => tn('grade', GRADES[g].name);
   const below = choice(
-    'Sell everything below',
-    GRADE_IDS.slice(1).map((g) => [g, GRADES[g].name] as const),
+    'inventory.sellBelow',
+    GRADE_IDS.slice(1).map((g) => [g, () => gradeName(g)] as const),
   );
   /** The grade and preview the player is confirming; null when no confirmation is open. */
   let pending: { grade: GradeId; text: string } | null = null;
   const confirmBox = el('div', 'confirm');
   confirmBox.setAttribute('role', 'alert');
   const confirmText = el('p');
-  const confirmYes = button('Sell', 'primary', () => {
+  const confirmYes = buttonT('confirm.sell', 'primary', () => {
     if (!pending) return;
     const text = sellBelowLabel(sellBelowPreview(state, pending.grade));
     // A drop since the preview changed what would go: show the new numbers first.
@@ -1102,23 +1358,26 @@ function play(
     act(sellBelow(state, grade));
     sellBelowBtn.focus();
   });
-  const confirmNo = button('Cancel', '', () => {
+  const confirmNo = button('', '', () => {
     closeConfirm();
     sellBelowBtn.focus();
   });
   confirmBox.append(confirmText, confirmYes, confirmNo);
   confirmBox.hidden = true;
-  const sellBelowBtn = button('Sell…', '', () => askSellBelow(below.select.value as GradeId));
+  const sellBelowBtn = buttonT('inventory.sell', '', () =>
+    askSellBelow(below.select.value as GradeId),
+  );
   below.select.addEventListener('change', closeConfirm);
-  function askSellBelow(grade: GradeId): void {
+  /** Opens (or, on a language switch, refills) the confirmation for selling below `grade`. */
+  function askSellBelow(grade: GradeId, focus = true): void {
     const preview = sellBelowPreview(state, grade);
     const text = sellBelowLabel(preview);
     pending = preview.count > 0 ? { grade, text } : null;
     confirmText.textContent = text;
     confirmYes.hidden = !pending;
-    confirmNo.textContent = pending ? 'Cancel' : 'OK';
+    confirmNo.textContent = t(pending ? 'confirm.cancel' : 'confirm.ok');
     confirmBox.hidden = false;
-    (pending ? confirmYes : confirmNo).focus();
+    if (focus) (pending ? confirmYes : confirmNo).focus();
   }
   function closeConfirm(): void {
     pending = null;
@@ -1129,30 +1388,63 @@ function play(
   const bagBtn = button('', '', () => act(buyBagSpace(state)));
   const bagTools = el('div', 'tools');
   bagTools.append(bulkRow, confirmBox, bagBtn);
+  // Sorting reorders the cells only: the bag itself stays in drop order.
+  const sortPick = choice(
+    'sort.by',
+    BAG_SORTS.map((s) => [s, () => t(BAG_SORT_NAMES[s])] as const),
+  );
+  sortPick.box.classList.add('sort');
+  sortPick.select.value = sort;
+  sortPick.select.addEventListener('change', () => {
+    sort = pickedSort = pickBagSort(sortPick.select.value);
+    writeBagSort(storage, sort);
+    draw(null);
+  });
+  // Flips the sort's direction; its text names the direction shown.
+  const sortDir = button('', '', () => {
+    reverse = pickedReverse = !reverse;
+    writeBagReverse(storage, reverse);
+    draw(null);
+  });
+  // The arrow is decorative; the words name the direction.
+  const sortArrow = el('span');
+  sortArrow.setAttribute('aria-hidden', 'true');
+  const sortDirText = el('span');
+  sortDir.append(sortArrow, sortDirText);
+  const sortRow = el('div', 'sort-row');
+  sortRow.append(sortPick.box, sortDir);
   const bagBody = el('div');
-  bagBody.append(grid, pager, bagTools);
+  bagBody.append(sortRow, grid, pager, bagTools);
 
   // Auto filter: a minimum grade, the item types kept, and what happens to the rest.
   const minGrade = choice(
-    'Keep drops of grade',
-    GRADE_IDS.map((g, i) => [g, i === 0 ? 'Any grade' : `${GRADES[g].name} and above`] as const),
+    'filter.minGrade',
+    GRADE_IDS.map(
+      (g, i) =>
+        [
+          g,
+          () => (i === 0 ? t('filter.anyGrade') : t('filter.andAbove', { grade: gradeName(g) })),
+        ] as const,
+    ),
   );
-  const actionPick = choice('Drops that fail are', [
-    ['sell', 'Sold for Spirit Stones'],
-    ['salvage', 'Salvaged into Spirit Essence'],
+  const actionPick = choice('filter.action', [
+    ['sell', () => t('filter.sell')],
+    ['salvage', () => t('filter.salvage')],
   ]);
   const types = el('fieldset', 'types');
-  types.append(el('legend', '', 'Keep these item types'));
+  types.append(elt('legend', '', 'filter.types'));
   const typeBoxes = {} as Record<SlotId, HTMLInputElement>;
   for (const id of ITEM_TYPES) {
     const label = el('label');
     const box = el('input');
     box.type = 'checkbox';
     typeBoxes[id] = box;
-    label.append(box, ` ${SLOTS[id].name}`);
+    const name = document.createTextNode('');
+    say(() => (name.data = ` ${tn('slot', SLOTS[id].name)}`));
+    label.append(box, name);
     types.append(label);
   }
-  const filterNote = el('p', 'muted hint', 'A full bag always sells what does not fit.');
+  const filterNote = elt('p', 'muted hint', 'filter.note');
   const filterBody = el('div', 'filter');
   filterBody.append(minGrade.box, types, actionPick.box, filterNote);
   const readFilterForm = (): void => {
@@ -1164,27 +1456,29 @@ function play(
   };
   filterBody.addEventListener('change', readFilterForm);
   const bagTabs = tabs([
-    { id: 'bag', label: 'Bag', body: bagBody },
-    { id: 'filter', label: 'Auto filter', body: filterBody },
+    { id: 'bag', label: 'tab.bag', body: bagBody },
+    { id: 'filter', label: 'tab.filter', body: filterBody },
   ]);
   inventory.box.append(bagTabs.bar, ...bagTabs.panels);
 
   // Item details
-  const details = panel('details', 'Details');
+  const details = panel('details', 'details.title');
   const detailBody = el('div');
   details.box.append(detailBody);
 
   // Recent drops
-  const log = panel('log', 'Recent drops');
+  const log = panel('log', 'drops.title');
   const drops = el('ul', 'drops');
   drops.setAttribute('aria-live', 'polite');
-  const noDrops = el('p', 'muted', 'Nothing yet.');
+  const noDrops = elt('p', 'muted', 'drops.none');
+  /** The drops in the log, newest first, so a language switch can write them again. */
+  const recent: Item[] = [];
   const handledText = el('p', 'muted');
   log.box.append(noDrops, drops, handledText);
 
   const columns = el('div', 'columns');
   const mainCol = el('div', 'game side');
-  mainCol.append(details.box, log.box);
+  mainCol.append(details.box);
   columns.append(character.box, inventory.box, mainCol);
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
@@ -1192,29 +1486,46 @@ function play(
   const cloud = sync;
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
-  game.append(strip, kpis, columns);
+  // Beside the strip: the summary chips over Recent drops.
+  const beside = el('div', 'beside');
+  beside.append(kpis, log.box);
+  game.append(strip, beside, columns);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);
   const noticeBtn = button('', '', () => {
     void notices.toggle().then(() => drawTools());
   });
-  const popBtn = button('Pop out', '', () => void togglePopOut());
+  const popBtn = button('', '', () => void togglePopOut());
   // Each control is left out where the browser lacks its feature.
   if (canPopOut(window)) tools.append(popBtn);
-  const menuBtn = button('Menu', '', () => {
+  const menuBtn = buttonT('tools.menu', '', () => {
     resetBox.hidden = true;
     menu.showModal();
   });
   menuBtn.setAttribute('aria-haspopup', 'dialog');
   tools.append(menuBtn);
-  const bar = titleBar();
-  bar.append(tools);
+  const bar = titleBar(storage, relabel);
+  // The title bar's own tools hold the language switch; Pop out and Menu go before it.
+  bar.querySelector('.tools')?.prepend(...tools.children);
 
   // Reset progress: asks first, then deletes the save and starts a new run.
+  /** What the confirmation says instead of its question (a refusal, progress); null for the question. */
+  let resetShown: (() => string) | null = null;
   const resetText = el('p');
+  say(
+    () =>
+      (resetText.textContent = resetShown
+        ? resetShown()
+        : t(cloud && cloud.status.kind !== 'off' ? 'menu.resetTextCloud' : 'menu.resetText')),
+  );
+  const refuse = (text: () => string): void => {
+    resetShown = text;
+    resetText.textContent = text();
+    resetYes.hidden = true;
+  };
   let resetting = false;
-  const resetYes = button('Reset everything', 'primary', () => {
+  const resetYes = buttonT('menu.resetYes', 'primary', () => {
     if (resetting) return;
     resetting = true;
     void resetAll().finally(() => (resetting = false));
@@ -1223,24 +1534,23 @@ function play(
     // The cloud save goes first, so a failure leaves everything as it was; a
     // local-only reset would just be undone by the next cloud check.
     if (cloud && cloud.status.kind !== 'off') {
-      resetText.textContent = 'Deleting the cloud save…';
+      resetShown = () => t('cloud.resetting');
+      resetText.textContent = resetShown();
       const gone = await cloud.deleteCloud();
       if (!gone.ok) {
-        resetText.textContent = `${gone.message} Nothing was reset.`;
-        resetYes.hidden = true;
+        refuse(() => t('cloud.resetFailed', { reason: cloudText(gone.message) }));
         return;
       }
     }
     if (storage && !clearSave(storage)) {
-      resetText.textContent = 'The browser refused to delete the save. Nothing was reset.';
-      resetYes.hidden = true;
+      refuse(() => t('menu.resetRefused'));
       return;
     }
     menu.close();
     // start() stops this run (timers, autosave, pop-out) before anything is saved again.
     start(root, storage);
   }
-  const resetNo = button('Cancel', '', () => {
+  const resetNo = buttonT('confirm.cancel', '', () => {
     resetBox.hidden = true;
     resetAsk.focus();
   });
@@ -1248,13 +1558,11 @@ function play(
   resetBox.setAttribute('role', 'alert');
   resetBox.append(resetText, resetYes, resetNo);
   resetBox.hidden = true;
-  const resetAsk = button('Reset progress…', '', () => {
-    resetText.textContent =
-      'Delete all progress, including Dao Insight and passives' +
-      (cloud && cloud.status.kind !== 'off'
-        ? ', and the cloud save (other devices linked to it lose it too)'
-        : '') +
-      '? This cannot be undone.';
+  const resetAsk = buttonT('menu.resetAsk', '', () => {
+    resetShown = null;
+    resetText.textContent = t(
+      cloud && cloud.status.kind !== 'off' ? 'menu.resetTextCloud' : 'menu.resetText',
+    );
     resetBox.hidden = false;
     resetYes.hidden = false;
     resetNo.focus();
@@ -1271,17 +1579,17 @@ function play(
     const dialog = el('dialog', 'menu');
     dialog.setAttribute('aria-labelledby', 'menu-title');
     const head = el('div', 'menu-head');
-    const h = el('h2', '', 'Menu');
+    const h = elt('h2', '', 'menu.title');
     h.id = 'menu-title';
     head.append(
       h,
-      button('Close', '', () => dialog.close()),
+      buttonT('menu.close', '', () => dialog.close()),
     );
     const settings = el('div', 'settings');
-    const themePick = choice('Theme', [
-      ['dark', 'Dark'],
-      ['light', 'Light'],
-      ['system', 'Match system'],
+    const themePick = choice('menu.theme', [
+      ['dark', () => t('menu.dark')],
+      ['light', () => t('menu.light')],
+      ['system', () => t('menu.system')],
     ]);
     themePick.select.value = theme;
     themePick.select.addEventListener('change', () => {
@@ -1292,24 +1600,20 @@ function play(
     });
     settings.append(themePick.box);
     if (notices.state() !== 'unsupported') {
-      settings.append(el('h3', '', 'Notifications'), noticeBtn);
+      settings.append(elt('h3', '', 'menu.notifications'), noticeBtn);
     }
     if (cloudUi) settings.append(...cloudUi.menu);
     settings.append(
-      el('h3', '', 'Reset progress'),
-      el(
-        'p',
-        'muted hint',
-        'Starts over from the Path choice. Every run, item and passive is lost.',
-      ),
+      elt('h3', '', 'menu.reset'),
+      elt('p', 'muted hint', 'menu.resetHint'),
       resetAsk,
       resetBox,
     );
     const help = el('ul', 'lines help');
-    for (const line of HELP_LINES) help.append(el('li', '', line));
+    for (const line of HELP_LINES) help.append(elt('li', '', line));
     const menuTabs = tabs([
-      { id: 'settings', label: 'Settings', body: settings },
-      { id: 'help', label: 'Help', body: help },
+      { id: 'settings', label: 'tab.settings', body: settings },
+      { id: 'help', label: 'tab.help', body: help },
     ]);
     dialog.append(head, menuTabs.bar, ...menuTabs.panels);
     return dialog;
@@ -1317,8 +1621,10 @@ function play(
 
   // Mini view, shown in the pop-out: the strip moves in, plus one status line and the latest drop.
   const mini = el('div', 'mini');
+  const miniFile = elt('div', 'file', 'game.file');
   const miniLine = el('p', 'status');
-  const miniToast = el('p', 'toast muted', 'No drops yet.');
+  const miniToast = el('p', 'toast muted');
+  say(() => (miniToast.textContent = recent[0] ? dropToast(recent[0]) : t('hud.noDrops')));
   miniToast.setAttribute('aria-live', 'polite');
   // A click on the pop-out brings the game's tab forward (docs/design.md §14).
   mini.addEventListener('click', () => window.focus());
@@ -1335,19 +1641,23 @@ function play(
 
   function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
     f.name.textContent = name;
-    f.hp.textContent = `HP ${Math.max(0, Math.ceil(hp))} / ${maxHp}`;
+    f.hp.textContent = t('strip.hp', { hp: Math.max(0, Math.ceil(hp)), max: maxHp });
     f.bar.style.width = `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%`;
   }
 
   function drawStrip(prev: GameState | null): void {
     const c = state.cultivator;
     const enemy = state.enemies[0];
-    floorText.textContent = `Floor ${state.floor} · ${waveLabel(state)}`;
-    killText.textContent = `Kills ${state.kills}`;
-    setFighter(you, PATHS[c.path].name, c.hp, derive(c).maxHp);
+    floorText.textContent = t('strip.floor', {
+      floor: state.floor,
+      best: state.highestFloor,
+      wave: waveLabel(state),
+    });
+    killText.textContent = t('strip.kills', { n: state.kills });
+    setFighter(you, tn('path', PATHS[c.path].name), c.hp, derive(c).maxHp);
     if (enemy) {
       foe.box.dataset.kind = enemy.kind;
-      setFighter(foe, enemy.name, enemy.hp, enemy.maxHp);
+      setFighter(foe, enemyName(enemy.kind, enemy.name), enemy.hp, enemy.maxHp);
     }
     const z = zoneOf(state.floor);
     if (z !== zone) {
@@ -1357,9 +1667,7 @@ function play(
     useSheet(you, `path-${c.path}`, SPRITE_SIZE.path);
     const call = tribulationCall(state);
     trialCall.hidden = !call;
-    const callText = call
-      ? `${call.name}: win it to reach ${call.next}. Click to face it now.`
-      : '';
+    const callText = call ? t('trial.call', call) : '';
     if (trialText.textContent !== callText) trialText.textContent = callText;
     strip.classList.toggle('trial', enemy?.kind === 'tribulation');
     if (prev) {
@@ -1462,12 +1770,21 @@ function play(
 
   function drawSummary(): void {
     const c = state.cultivator;
-    kPath.value.textContent = PATHS[c.path].name;
+    kPath.value.textContent = tn('path', PATHS[c.path].name);
     kRealm.value.textContent = realmLabel(c.level);
-    kLevel.value.textContent = String(c.level);
-    kFloor.value.textContent = `${state.floor} (best ${state.highestFloor})`;
-    kXp.value.textContent = xpLabel(c);
-    for (const [id] of STAT_NAMES) setText(baseValues[id], String(c.stats[id]));
+    // A breakthrough swaps the realm's icon.
+    const icon = summaryIcon('realm', c.level);
+    if (icon !== realmIcon && kRealm.icon) {
+      realmIcon = icon;
+      setSummaryIcon(kRealm.icon, icon);
+    }
+    const bar = xpBar(c);
+    xp.style.setProperty('--xp', `${bar.percent}%`);
+    for (const n of [xpLevel, xpFillLevel]) setText(n, bar.level);
+    for (const n of [xpText, xpFillText]) setText(n, bar.text);
+    xp.setAttribute('aria-valuenow', String(Math.round(bar.percent)));
+    xp.setAttribute('aria-valuetext', bar.spoken);
+    for (const id of STAT_IDS) setText(baseValues[id], String(c.stats[id]));
     const rows = statRows(c, state.passives);
     // Built once, then only the values change, so selecting text doesn't flicker.
     if (derivedValues.length === 0) {
@@ -1476,6 +1793,7 @@ function play(
         const dt = el('dt', '', r.short);
         // The full name where the group shortens it ("Treasure" under Find).
         if (r.short !== r.label) dt.title = r.label;
+        derivedLabels.push(dt);
         derivedLists[r.group].append(dt, dd);
         derivedValues.push(dd);
       }
@@ -1483,6 +1801,11 @@ function play(
     rows.forEach((r, i) => {
       const dd = derivedValues[i];
       if (dd) setText(dd, r.value);
+      const dt = derivedLabels[i];
+      if (dt) {
+        setText(dt, r.short);
+        if (r.short !== r.label && dt.title !== r.label) dt.title = r.label;
+      }
     });
   }
 
@@ -1505,20 +1828,35 @@ function play(
     }
     const item = selectedItem();
     if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
-    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}`;
+    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}|${sort}|${reverse}`;
     if (key === drawnGear) return;
     drawnGear = key;
+    order = bagOrder(state.inventory, sort, reverse);
+    setText(sortArrow, reverse ? '↑ ' : '↓ ');
+    setText(sortDirText, t(BAG_SORT_DIRS[sort][reverse ? 1 : 0]));
 
     growBag();
     drawPage();
-    inventory.heading.textContent = `Inventory (${state.inventory.length} / ${state.bagSize})`;
+    inventory.heading.textContent = t('inventory.count', {
+      n: state.inventory.length,
+      size: state.bagSize,
+    });
     bagCells.forEach((b, i) => {
-      fillCell(b, state.inventory[i], `Empty slot ${i + 1}`);
-      b.setAttribute('aria-pressed', String(!!selected && 'bag' in selected && selected.bag === i));
+      const index = order[i];
+      fillCell(
+        b,
+        index === undefined ? undefined : state.inventory[index],
+        t('inventory.emptyCell', { n: i + 1 }),
+      );
+      b.setAttribute(
+        'aria-pressed',
+        String(index !== undefined && !!selected && 'bag' in selected && selected.bag === index),
+      );
     });
     for (const slot of SLOT_IDS) {
       const b = slotCells[slot];
-      fillCell(b, c.equipment[slot], `${EQUIP_SLOTS[slot].name}: empty`);
+      const name = tn('equipSlot', EQUIP_SLOTS[slot].name);
+      fillCell(b, c.equipment[slot], t('inventory.emptySlot', { slot: name }));
       // fillCell resets classes; a drag in progress keeps its target slots marked.
       b.classList.toggle('target', !!drag?.ghost && canDrop(state.inventory[drag.index], slot));
       b.setAttribute(
@@ -1532,7 +1870,7 @@ function play(
     const item = selectedItem();
     soulsText = null;
     if (!item || !selected) {
-      detailBody.replaceChildren(el('p', 'muted', 'Select an item to see its details.'));
+      detailBody.replaceChildren(el('p', 'muted', t('details.none')));
       return;
     }
     const lines = el('ul', 'lines');
@@ -1543,7 +1881,7 @@ function play(
     setIcon(icon, item);
     const name = el('div');
     name.append(
-      el('div', `title grade-${item.grade}`, item.name),
+      el('div', `title grade-${item.grade}`, tn('item', item.name)),
       el('div', `tag grade-${item.grade}`, itemTag(item)),
     );
     const tier = treasureTier(item);
@@ -1557,12 +1895,12 @@ function play(
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
     if ('slot' in selected) {
-      parts.push(el('p', 'muted', 'Equipped.'));
+      parts.push(el('p', 'muted', t('details.equipped')));
     } else {
       const index = selected.bag;
       const blocked = equipBlock(state.cultivator, item);
       if (blocked) {
-        const why = el('p', 'down', `${blocked} to equip.`);
+        const why = el('p', 'down', t('details.blocked', { why: blocked }));
         why.id = 'equip-why';
         parts.push(why);
       }
@@ -1571,15 +1909,16 @@ function play(
       const fits = slotsFor(item.slot);
       const first = defaultSlot(state.cultivator.equipment, item);
       for (const to of [first, ...fits.filter((p) => p !== first)]) {
-        const name = EQUIP_SLOTS[to].name;
+        const name = tn('equipSlot', EQUIP_SLOTS[to].name);
         const current = state.cultivator.equipment[to];
         const diff = compareToEquipped(state.cultivator, item, to);
         const compare = el('ul', 'compare');
         for (const d of diff) compare.append(el('li', d.better ? 'up' : 'down', d.text));
-        if (!diff.length) compare.append(el('li', 'muted', 'No change'));
+        if (!diff.length) compare.append(el('li', 'muted', t('details.noChange')));
         // The line it sits on already names the position.
-        const equipBtn = el('button', 'primary', 'Equip');
-        if (fits.length > 1) equipBtn.setAttribute('aria-label', `Equip in ${name}`);
+        const equipBtn = el('button', 'primary', t('details.equip'));
+        if (fits.length > 1)
+          equipBtn.setAttribute('aria-label', t('details.equipIn', { slot: name }));
         equipBtn.type = 'button';
         // aria-disabled, as everywhere here; equipFromBag ignores the click.
         if (blocked) {
@@ -1590,15 +1929,23 @@ function play(
         equipBtn.addEventListener('click', () => equipFromBag(index, to));
         const cmp = el('div', 'cmp');
         cmp.append(
-          el('h3', '', current ? `${name}: vs ${current.name}` : `${name}: empty`),
+          el(
+            'h3',
+            '',
+            current
+              ? t('details.vs', { slot: name, item: tn('item', current.name) })
+              : t('details.empty', { slot: name }),
+          ),
           equipBtn,
         );
         parts.push(cmp, compare);
       }
       const row = el('div', 'row');
-      const sellBtn = button(`Sell: ${sellPrice(item)} Stones`, '', () => dispose(index, 'sell'));
+      const sellBtn = button(t('details.sell', { n: sellPrice(item) }), '', () =>
+        dispose(index, 'sell'),
+      );
       sellBtn.dataset.action = 'sell';
-      const salvageBtn = button(`Salvage: ${essenceValue(item)} Essence`, '', () =>
+      const salvageBtn = button(t('details.salvage', { n: essenceValue(item) }), '', () =>
         dispose(index, 'salvage'),
       );
       salvageBtn.dataset.action = 'salvage';
@@ -1663,19 +2010,21 @@ function play(
   }
 
   /**
-   * Sells or salvages the bag item at `index`. The selection stays on that
+   * Sells or salvages the bag item at `index`. The selection stays on its
    * cell, so the next item can be handled straight away; focus stays on the
    * same button, or goes to the cell when the bag has nothing left there.
    */
   function dispose(index: number, action: 'sell' | 'salvage'): void {
+    const at = order.indexOf(index);
     const next = (action === 'sell' ? sell : salvage)(state, index);
-    selected = next.inventory[index] ? { bag: index } : null;
+    const now = bagOrder(next.inventory, sort, reverse)[at];
+    selected = now === undefined ? null : { bag: now };
     act(next);
     const again = detailBody.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
     if (again) again.focus();
     else {
-      setCursor(index);
-      bagCells[index]?.focus();
+      setCursor(at);
+      bagCells[at]?.focus();
     }
   }
 
@@ -1691,8 +2040,9 @@ function play(
   // Drag to equip, for mouse and pen. Touch has tap to select and the Equip
   // button instead, so swiping over the grid still scrolls the page.
 
-  function startPress(e: PointerEvent, index: number): void {
-    if (e.pointerType === 'touch' || e.button !== 0 || !state.inventory[index]) return;
+  function startPress(e: PointerEvent, cell: number): void {
+    const index = order[cell];
+    if (e.pointerType === 'touch' || e.button !== 0 || index === undefined) return;
     drag = { index, x: e.clientX, y: e.clientY, ghost: null };
   }
 
@@ -1712,7 +2062,8 @@ function play(
         if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < DRAG_START_PX) return;
         const item = state.inventory[drag.index];
         if (!item) return endDrag();
-        const ghost = bagCells[drag.index]?.cloneNode(true) as HTMLElement;
+        // A drop since the press may have re-sorted the bag: clone the item's cell now.
+        const ghost = bagCells[order.indexOf(drag.index)]?.cloneNode(true) as HTMLElement;
         ghost.classList.add('ghost');
         ghost.setAttribute('aria-hidden', 'true');
         document.body.append(ghost);
@@ -1776,12 +2127,15 @@ function play(
   function logDrops(items: Item[]): void {
     if (!items.length) return;
     noDrops.remove();
-    drops.prepend(
-      ...items.map((item) =>
-        el('li', `grade-${item.grade}`, `${item.name} — ${GRADES[item.grade].name}`),
-      ),
-    );
+    recent.unshift(...items);
+    recent.splice(RECENT_DROPS);
+    drops.prepend(...items.map(dropLine));
     while (drops.children.length > RECENT_DROPS) drops.lastElementChild?.remove();
+  }
+
+  function dropLine(item: Item): HTMLElement {
+    const text = t('drops.line', { name: tn('item', item.name), grade: gradeName(item.grade) });
+    return el('li', `grade-${item.grade}`, text);
   }
 
   /** Spending controls: their costs and whether they can be paid change with every kill. */
@@ -1793,12 +2147,12 @@ function play(
     const bag = bagCost(state);
     setButton(
       bagBtn,
-      bag === null ? 'Bag is full size' : `Buy ${BAG_ROW} more bag slots: ${bag} Spirit Stones`,
+      bag === null ? t('inventory.bagFull') : t('inventory.buyBag', { n: BAG_ROW, cost: bag }),
       bag === null || state.stones < bag,
     );
 
     const reset = respecView(statResetCost(c), state.stones, !canResetStats(c));
-    setButton(resetBtn, 'Reset stats', reset.off);
+    setButton(resetBtn, t('respec.reset'), reset.off);
     setText(resetLine.cost, reset.cost);
     setText(resetLine.why, reset.why);
     const others = (Object.keys(PATHS) as PathId[]).filter((p) => p !== c.path);
@@ -1807,19 +2161,19 @@ function play(
       pathPick.dataset.paths = pathKey;
       pathPick.replaceChildren(
         ...others.map((p) => {
-          const o = el('option', '', PATHS[p].name);
+          const o = el('option', '', tn('path', PATHS[p].name));
           o.value = p;
           return o;
         }),
       );
     }
     const change = respecView(pathChangeCost(c), state.stones);
-    setButton(pathBtn, 'Change Path', change.off);
+    setButton(pathBtn, t('respec.change'), change.off);
     setText(pathLine.cost, change.cost);
     setText(pathLine.why, change.why);
 
     setText(insightCount, String(state.insight));
-    setText(retiredText, `Retirements: ${state.retirements}`);
+    setText(retiredText, t('retire.count', { n: state.retirements }));
     for (const id of PASSIVE_IDS) {
       const view = passiveRow(state.passives, state.insight, id);
       const r = passiveRows[id];
@@ -1835,9 +2189,13 @@ function play(
     if (reward.dataset.insight !== String(preview.insight)) {
       reward.dataset.insight = String(preview.insight);
       if (preview.insight > 0) {
-        reward.replaceChildren(`+${preview.insight}`, gem(), el('span', 'sr-only', ' Dao Insight'));
+        reward.replaceChildren(
+          `+${preview.insight}`,
+          gem(),
+          el('span', 'sr-only', ` ${t('retire.insight')}`),
+        );
       } else {
-        reward.replaceChildren(el('span', 'muted', 'Locked'));
+        reward.replaceChildren(el('span', 'muted', t('retire.locked')));
       }
     }
     setButton(retireBtn, retireLabel(preview), !canRetire(state));
@@ -1846,7 +2204,7 @@ function play(
     // Shown once, highlighted while there are points to spend.
     const none = c.unspent === 0;
     if (base.classList.contains('none') !== none) base.classList.toggle('none', none);
-    setText(unspentText, none ? 'No unspent points' : `${c.unspent} unspent`);
+    setText(unspentText, none ? t('stats.noUnspent') : t('stats.unspent', { n: c.unspent }));
 
     // The form shows the saved filter; the player's own change already matches it.
     const f = state.filter;
@@ -1857,15 +2215,11 @@ function play(
 
   function drawTools(): void {
     const n = notices.state();
-    setButton(
-      noticeBtn,
-      n === 'blocked' ? 'Notifications blocked' : 'Notify on Immortal drops and Tribulations',
-      n === 'blocked',
-    );
+    setButton(noticeBtn, t(n === 'blocked' ? 'menu.blocked' : 'menu.notify'), n === 'blocked');
     noticeBtn.setAttribute('aria-pressed', String(n === 'on'));
-    if (n === 'blocked') noticeBtn.title = 'Allow notifications in your browser settings.';
+    if (n === 'blocked') noticeBtn.title = t('menu.blockedHint');
     else noticeBtn.removeAttribute('title');
-    setButton(popBtn, pip ? 'Close pop-out' : 'Pop out', false);
+    setButton(popBtn, t(pip ? 'tools.closePopOut' : 'tools.popOut'), false);
   }
 
   /** Title, favicon and the pop-out's status line, refreshed while the tab is in the background too. */
@@ -1908,9 +2262,9 @@ function play(
     if (noted.notify) notices.show(immortalNotice(state.floor));
   }
 
-  /** Puts the strip back above the KPI tiles, unless this run has ended. */
+  /** Puts the strip back above the summary chips, unless this run has ended. */
   function restoreStrip(): void {
-    if (!signal.aborted && !game.contains(strip)) kpis.before(strip);
+    if (!signal.aborted && !game.contains(strip)) beside.before(strip);
   }
 
   async function togglePopOut(): Promise<void> {
@@ -1923,7 +2277,7 @@ function play(
     const opened = await popOut(
       window,
       () => {
-        mini.replaceChildren(el('div', 'file', FILE_NAME), strip, miniLine, miniToast);
+        mini.replaceChildren(miniFile, strip, miniLine, miniToast);
         return mini;
       },
       (closed) => {
@@ -1980,10 +2334,38 @@ function play(
     drawGear();
     drawShop();
     const handled = [];
-    if (state.dropsSold > 0) handled.push(`Sold on pickup: ${state.dropsSold}`);
-    if (state.dropsSalvaged > 0) handled.push(`Salvaged on pickup: ${state.dropsSalvaged}`);
+    if (state.dropsSold > 0) handled.push(t('drops.soldOnPickup', { n: state.dropsSold }));
+    if (state.dropsSalvaged > 0) {
+      handled.push(t('drops.salvagedOnPickup', { n: state.dropsSalvaged }));
+    }
     handledText.textContent = handled.join(' · ');
     drawHud();
+  }
+
+  /**
+   * A language switch: every fixed text again, then every drawn one. Drawn
+   * parts that skip unchanged state are made to draw in full.
+   */
+  let liveTimer = 0;
+  function relabel(): void {
+    // Rewritten, not new: the live regions stay quiet while their text changes.
+    const live = [drops, pageText, miniToast];
+    for (const node of live) node.setAttribute('aria-live', 'off');
+    // A second switch inside the window restarts it.
+    clearTimeout(liveTimer);
+    liveTimer = window.setTimeout(() => {
+      for (const node of live) node.setAttribute('aria-live', 'polite');
+    }, LIVE_QUIET_MS);
+    for (const fn of labels) fn();
+    if (pip) pip.document.documentElement.lang = document.documentElement.lang;
+    drawnGear = drawnDetails = '';
+    delete pathPick.dataset.paths;
+    delete reward.dataset.insight;
+    drops.replaceChildren(...recent.map(dropLine));
+    if (!confirmBox.hidden) askSellBelow(pending?.grade ?? (below.select.value as GradeId), false);
+    drawRetire();
+    drawTools();
+    draw(null);
   }
 
   drawTools();

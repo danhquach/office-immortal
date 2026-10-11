@@ -200,11 +200,11 @@ describe('hostile replies', () => {
     });
     const known = await failure(cloud.redeemLinkCode('X'));
     expect(known.code).toBe('link_code_invalid');
-    expect(describeError(known)).toBe('That link code is not valid. Check it and try again.');
+    expect(describeError(known)).toBe('link_code_invalid');
     const unknown = await failure(cloud.getSave());
     expect(unknown.code).toBeNull();
-    expect(describeError(unknown)).not.toContain('script');
-    expect(describeError(new Error('<b>x</b>'))).toBe('Cloud save hit a problem.');
+    expect(describeError(unknown)).toBe('bad-response');
+    expect(describeError(new Error('<b>x</b>'))).toBe('generic');
   });
 });
 

@@ -2,7 +2,7 @@
 // Supabase's auth and function endpoints, no SDK. Nothing secret or personal
 // goes in a URL (tokens in headers, everything else in JSON bodies), every
 // request times out, and every reply is shape-checked before anything reads it.
-// Server text is never shown: errors map to our own messages.
+// Server text is never shown: errors map to message codes (CloudMessage).
 
 import type { CloudConfig } from './cloud-config.ts';
 import { isToken, isUuid, MAX_REV, readMeta, writeMeta, type Session } from './cloud-meta.ts';
@@ -53,29 +53,33 @@ export class CloudError extends Error {
   }
 }
 
-const SERVER_TEXT: Record<ServerCode, string> = {
-  already_member: 'This browser already has a cloud save.',
-  not_a_member: 'There is no cloud save for this browser.',
-  bad_data: 'The cloud save was refused.',
-  save_too_large: 'The save is too large for the cloud.',
-  link_code_invalid: 'That link code is not valid. Check it and try again.',
-  link_code_expired: 'That link code has expired. Get a new one on the other device.',
-};
+/**
+ * What the player can be told about the cloud save, as a code. This layer stays
+ * language-neutral: the UI turns a code into words (src/ui/lang, `cloud.msg.<code>`),
+ * and never the server's own text.
+ */
+export type CloudMessage =
+  | ServerCode
+  | 'generic'
+  | 'offline'
+  | 'auth'
+  | 'server'
+  | 'bad-response'
+  /** The browser would not store the cloud save's settings. */
+  | 'storage'
+  | 'loaded'
+  | 'deleted-elsewhere'
+  | 'unreadable-kept'
+  | 'cant-read'
+  | 'refused-save'
+  | 'refused-settings'
+  | 'relink-first';
 
-/** Words for the player; fixed text, never the server's own. */
-export function describeError(e: unknown): string {
-  if (!(e instanceof CloudError)) return 'Cloud save hit a problem.';
-  if (e.code) return SERVER_TEXT[e.code];
-  switch (e.kind) {
-    case 'offline':
-      return 'Cannot reach the cloud. Playing continues; it will retry.';
-    case 'auth':
-      return 'The cloud sign-in was refused.';
-    case 'server':
-      return 'The cloud is busy. It will retry.';
-    default:
-      return 'The cloud sent an unexpected reply.';
-  }
+/** The code for a failure; never the server's own text. */
+export function describeError(e: unknown): CloudMessage {
+  if (!(e instanceof CloudError)) return 'generic';
+  if (e.code) return e.code;
+  return e.kind === 'rejected' ? 'bad-response' : e.kind;
 }
 
 /** The part of the browser's Web Locks API the client uses. */
