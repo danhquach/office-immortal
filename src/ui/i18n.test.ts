@@ -4,11 +4,13 @@ import { tabTitle } from './hud.ts';
 import {
   browserLang,
   DEFAULT_LANG,
-  enemyName,
+  enemyNameParts,
   LANG_KEY,
   lang,
+  nameSpans,
   PACKS,
   pickLang,
+  plainName,
   readLang,
   setLang,
   t,
@@ -16,10 +18,13 @@ import {
   writeLang,
   type MessageKey,
 } from './i18n.ts';
+import { BOSSES, DEMONS, TRIBULATIONS } from '../core/floors.ts';
 import { NAME_KINDS, type NameKind } from './names.ts';
 import { realmLabel, realmRows, waveLabel } from './view.ts';
 
 const english = PACKS[0]!;
+/** An enemy's name as the tooltip shows it, tier first. */
+const enemyName = (kind: string, name: string) => plainName(enemyNameParts(kind, name));
 const keys = (o: object) => Object.keys(o).sort();
 const holes = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -130,12 +135,135 @@ describe('t and tn', () => {
     );
   });
 
-  it('names elites in the language, from the sim’s "Elite <demon>"', () => {
-    expect(enemyName('elite', 'Elite Inbox Hydra')).toBe('Elite Inbox Hydra');
+  it('names elites in the language, tier first, from the sim’s "Elite <demon>"', () => {
+    expect(enemyName('elite', 'Elite Inbox Hydra')).toBe('(Elite) Inbox Hydra');
+    expect(enemyName('elite', 'Elite Reply-All Swarm')).toBe('(Elite) Reply-All Swarm');
+    expect(enemyName('boss', 'The Auditor')).toBe('(Boss) The Auditor');
+    expect(enemyName('tribulation', 'Heavenly Audit')).toBe('(Tribulation) Heavenly Audit');
+    expect(enemyName('demon', 'Inbox Hydra')).toBe('Inbox Hydra');
     setLang('vi');
-    expect(enemyName('elite', 'Elite Inbox Hydra')).toBe('Cửu Đầu Xà Hộp Thư Tinh Anh');
-    expect(enemyName('boss', 'The Auditor')).toBe('Kiểm Toán Viên');
-    expect(enemyName('elite', 'Elite Nobody')).toBe('Nobody Tinh Anh');
+    expect(enemyName('elite', 'Elite Inbox Hydra')).toBe('(Tinh Anh) Cửu Đầu Xà Hộp Thư');
+    expect(enemyName('boss', 'The Auditor')).toBe('(Trùm) Kiểm Toán Viên');
+    expect(enemyName('boss', 'Middle Manager')).toBe('(Trùm) Quản Lý Cấp Trung');
+    expect(enemyName('tribulation', 'Heavenly Audit')).toBe('(Độ Thiên Kiếp) Thiên Đình Kiểm Toán');
+    expect(enemyName('demon', 'Inbox Hydra')).toBe('Cửu Đầu Xà Hộp Thư');
+    // A name the pack lacks stays English, still behind the tier.
+    expect(enemyName('elite', 'Elite Nobody')).toBe('(Tinh Anh) Nobody');
+    expect(enemyName('boss', 'Nobody')).toBe('(Trùm) Nobody');
+  });
+
+  it('splits every ranked enemy into its tier unit, then its name, in every language', () => {
+    const tiers = {
+      en: ['Elite', 'Boss', 'Tribulation'],
+      vi: ['Tinh Anh', 'Trùm', 'Độ Thiên Kiếp'],
+    };
+    for (const [code, [elite, boss, trib]] of Object.entries(tiers)) {
+      setLang(code);
+      const cases = [
+        ...DEMONS.map((d) => ['elite', `Elite ${d}`, d, `(${elite})`] as const),
+        ...BOSSES.map((b) => ['boss', b, b, `(${boss})`] as const),
+        ...TRIBULATIONS.map((n) => ['tribulation', n, n, `(${trib})`] as const),
+      ];
+      for (const [kind, simName, bare, unit] of cases) {
+        const parts = enemyNameParts(kind, simName);
+        expect(parts).toEqual([{ text: unit, tier: kind }, { text: tn('enemy', bare) }]);
+        expect(plainName(parts)).toBe(`${unit} ${tn('enemy', bare)}`);
+      }
+      // Demons have no tier part and no brackets.
+      for (const d of DEMONS) {
+        const parts = enemyNameParts('demon', d);
+        expect(parts).toEqual([{ text: tn('enemy', d) }]);
+        expect(plainName(parts)).not.toMatch(/[()]/);
+      }
+      // A name missing from the pack keeps its English, behind the tier.
+      expect(enemyNameParts('elite', 'Elite Nobody')).toEqual([
+        { text: `(${elite})`, tier: 'elite' },
+        { text: 'Nobody' },
+      ]);
+    }
+  });
+
+  it('draws the tier span first, then a plain name span, with no tier for demons', () => {
+    expect(nameSpans(enemyNameParts('boss', 'The Auditor'))).toEqual([
+      { className: 'enemy-tier enemy-tier--boss', text: '(Boss)' },
+      { className: '', text: 'The Auditor' },
+    ]);
+    setLang('vi');
+    expect(nameSpans(enemyNameParts('tribulation', 'Heavenly Audit'))).toEqual([
+      { className: 'enemy-tier enemy-tier--tribulation', text: '(Độ Thiên Kiếp)' },
+      { className: '', text: 'Thiên Đình Kiểm Toán' },
+    ]);
+    expect(nameSpans(enemyNameParts('elite', 'Elite Inbox Hydra'))[0]?.className).toBe(
+      'enemy-tier enemy-tier--elite',
+    );
+    expect(nameSpans(enemyNameParts('demon', 'Inbox Hydra'))).toEqual([
+      { className: '', text: 'Cửu Đầu Xà Hộp Thư' },
+    ]);
+    // A hostile name is only ever text, never a class.
+    expect(nameSpans(enemyNameParts('elite', 'Elite x" onclick="y'))).toEqual([
+      { className: 'enemy-tier enemy-tier--elite', text: '(Tinh Anh)' },
+      { className: '', text: 'x" onclick="y' },
+    ]);
+  });
+
+  it('builds the longest names the fight strip has to fit', () => {
+    expect(enemyName('elite', 'Elite Reply-All Swarm')).toBe('(Elite) Reply-All Swarm');
+    expect(enemyName('boss', 'Quarterly Review')).toBe('(Boss) Quarterly Review');
+    expect(enemyName('tribulation', 'Shareholder Revolt')).toBe('(Tribulation) Shareholder Revolt');
+    setLang('vi');
+    expect(enemyName('elite', 'Elite Reply-All Swarm')).toBe('(Tinh Anh) Bầy Trả Lời Tất Cả');
+    expect(enemyName('tribulation', 'Regulatory Probe')).toBe('(Độ Thiên Kiếp) Thanh Tra Pháp Chế');
+  });
+
+  it('keeps hostile enemy names and kinds as plain text, with no tier for unknown kinds', () => {
+    const hostile = [
+      '<img src=x onerror=alert(1)>',
+      '{tier}',
+      '$&$1',
+      '\u202eevil\u200b',
+      '__proto__',
+      'Elite __proto__',
+      'x'.repeat(10_000),
+    ];
+    for (const name of hostile) {
+      for (const kind of ['demon', 'elite', 'boss', 'tribulation']) {
+        const parts = enemyNameParts(kind, name);
+        const last = parts[parts.length - 1]!;
+        // The name is passed through untouched (only the sim's "Elite " prefix comes off).
+        expect(last.text).toBe(kind === 'elite' ? name.replace(/^Elite /, '') : name);
+        expect(Object.hasOwn(last, 'tier')).toBe(false);
+      }
+    }
+    for (const kind of ['__proto__', 'constructor', 'toString', 'hasOwnProperty', '', 'Elite']) {
+      expect(enemyNameParts(kind, 'Inbox Hydra')).toEqual([{ text: 'Inbox Hydra' }]);
+    }
+    // The tier word is filled once: a tier text can't pull in another key.
+    setLang('vi');
+    const messages = lang().messages as Record<MessageKey, string>;
+    const kept = messages['enemy.tier.boss'];
+    messages['enemy.tier.boss'] = '{tier}<b>';
+    try {
+      expect(enemyName('boss', 'The Auditor')).toBe('({tier}<b>) Kiểm Toán Viên');
+    } finally {
+      messages['enemy.tier.boss'] = kept;
+    }
+  });
+
+  it('uses the same tier words for the floor label and the enemy’s tier', () => {
+    for (const pack of PACKS) {
+      expect(pack.messages['enemy.tier.elite']).toBe(pack.messages['strip.elite']);
+      expect(pack.messages['enemy.tier.boss']).toBe(pack.messages['strip.boss']);
+      expect(pack.messages['enemy.tier.tribulation']).toBe(pack.messages['strip.tribulation']);
+    }
+    setLang('vi');
+    expect(t('strip.elite')).toBe('Tinh Anh');
+    expect(t('enemy.tier.elite')).toBe('Tinh Anh');
+    expect(t('strip.boss')).toBe('Trùm');
+    expect(t('strip.tribulation')).toBe('Độ Thiên Kiếp');
+    const atElite = { enemies: [{ kind: 'elite' }, { kind: 'boss' }] } as Parameters<
+      typeof waveLabel
+    >[0];
+    expect(waveLabel(atElite)).toBe('Tinh Anh');
   });
 
   it('puts the cultivation terms on the page in Vietnamese', () => {

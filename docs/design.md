@@ -651,6 +651,15 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - **Elites and Tribulations are variants:** an elite reuses its demon's poses
   and a Tribulation a boss's, rebuilt at its own size with a colour swap and a
   glow drawn around it. No art of their own.
+- **Names under the stage:** each fighter's name has its own row (name, HP
+  bar, then HP) at every width, with 2 lines always reserved, so the strip
+  never changes height between enemies. A ranked enemy's tier, in brackets,
+  bold and in its tier colour, sits on line 1 by itself and the name on line 2,
+  in every language: "(Elite)" over "Inbox Hydra", "(Boss)" over "The
+  Auditor", "(Tribulation)" over "Heavenly Audit". A demon's name takes line 1.
+  The foe's side is right-aligned, the player's left. Under 480 px the name
+  (never the tier) is set a step smaller so the longest fits one line. The
+  full name, e.g. "(Boss) The Auditor", is also the tooltip.
 - **Backgrounds:** one tiling layer per tower zone, 208 px tall, with office
   props in pixel form: filing cabinets, cubicles, water cooler, KPI whiteboard,
   city windows at night, a boardroom above the clouds. Dimmed so the fighters

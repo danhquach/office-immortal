@@ -103,15 +103,18 @@ import {
 import { artUrl } from './art.ts';
 import { cloudStatusLine, cloudText, frameStep, needsChoice, saveSummary } from './cloud-view.ts';
 import {
-  enemyName,
+  enemyNameParts,
   lang,
+  nameSpans,
   PACKS,
+  plainName,
   readLang,
   setLang,
   t,
   tn,
   writeLang,
   type MessageKey,
+  type NamePart,
 } from './i18n.ts';
 import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
@@ -681,6 +684,8 @@ interface Fighter extends StageSprite {
   name: HTMLElement;
   bar: HTMLElement;
   hp: HTMLElement;
+  /** The language, kind and name last drawn (see setFighter), so a frame with the same ones touches nothing. */
+  nameKey: string;
 }
 
 function fighter(side: 'you' | 'foe'): Fighter {
@@ -692,7 +697,7 @@ function fighter(side: 'you' | 'foe'): Fighter {
   track.append(bar);
   const hp = el('div', 'hp');
   box.append(name, track, hp);
-  return { box, name, bar, hp, ...stageSprite(side) };
+  return { box, name, bar, hp, nameKey: '', ...stageSprite(side) };
 }
 
 /** A CSS url() for art, or none when there is no such file (never url(""), which loads the page). */
@@ -1994,8 +1999,32 @@ function play(
   root.replaceChildren(bar, formulaBar(), game, statusBar(), menu);
   away?.querySelector('button')?.focus();
 
-  function setFighter(f: Fighter, name: string, hp: number, maxHp: number): void {
-    f.name.textContent = name;
+  /**
+   * `key` names what the name shows (who, in which language): the parts are
+   * only built, and the name only redrawn, when it changes, not every frame.
+   */
+  function setFighter(
+    f: Fighter,
+    key: string,
+    parts: () => readonly NamePart[],
+    hp: number,
+    maxHp: number,
+  ): void {
+    if (key !== f.nameKey) {
+      f.nameKey = key;
+      const shown = parts();
+      // The tier unit (a block: a line of its own), then the name, as DOM nodes
+      // and text only. The space between them collapses at the start of line 2;
+      // it is there so the element's text reads like the tooltip.
+      const nodes: Node[] = [];
+      for (const span of nameSpans(shown)) {
+        if (nodes.length) nodes.push(document.createTextNode(' '));
+        nodes.push(el('span', span.className, span.text));
+      }
+      f.name.replaceChildren(...nodes);
+      // The full name on hover, should one ever reach the 2-line clamp.
+      f.name.setAttribute('title', plainName(shown));
+    }
     f.hp.textContent = t('strip.hp', { hp: Math.max(0, Math.ceil(hp)), max: maxHp });
     f.bar.style.width = `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%`;
   }
@@ -2009,10 +2038,23 @@ function play(
       wave: waveLabel(state),
     });
     killText.textContent = t('strip.kills', { n: state.kills });
-    setFighter(you, tn('path', PATHS[c.path].name), c.hp, derive(c).maxHp);
+    const code = lang().code;
+    setFighter(
+      you,
+      `${code}\u0000${c.path}`,
+      () => [{ text: tn('path', PATHS[c.path].name) }],
+      c.hp,
+      derive(c).maxHp,
+    );
     if (enemy) {
       foe.box.dataset.kind = enemy.kind;
-      setFighter(foe, enemyName(enemy.kind, enemy.name), enemy.hp, enemy.maxHp);
+      setFighter(
+        foe,
+        `${code}\u0000${enemy.kind}\u0000${enemy.name}`,
+        () => enemyNameParts(enemy.kind, enemy.name),
+        enemy.hp,
+        enemy.maxHp,
+      );
     }
     const z = zoneOf(state.floor);
     if (z !== zone) {
