@@ -1,8 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { catchUp, offlineCap, offlineSeconds } from '../core/offline.ts';
 import { newGame } from '../core/sim.ts';
-import { CONFIG, clock, fakeLocks, fakeServer, memory, type FakeStorage } from './cloud-fakes.ts';
-import { ADOPT_KEY, CLOUD_KEY, readMeta } from './cloud-meta.ts';
+import {
+  CONFIG,
+  SAVE_ID,
+  clock,
+  fakeLocks,
+  fakeServer,
+  memory,
+  type FakeStorage,
+} from './cloud-fakes.ts';
+import { ADOPT_KEY, CLOUD_KEY, newMeta, readMeta, writeMeta } from './cloud-meta.ts';
 import { createCloud } from './cloud.ts';
 import { encodeSave, loadSave, MAX_SAVE_CHARS, SAVE_KEY } from './save.ts';
 import { createSync, UPLOAD_EVERY_MS, type SyncStatus } from './sync.ts';
@@ -1041,5 +1049,111 @@ describe('races and edge cases', () => {
     await until(() => expect(kind(again)).toBe('synced'));
     expect(a.storage.getItem(ADOPT_KEY)).toBe(signal);
     expect(again.adopted).not.toHaveBeenCalled();
+  });
+});
+
+describe('linking from the Path choice (no run yet)', () => {
+  it('loads the cloud save with no conflict', async () => {
+    const w = world();
+    const { d: host, text } = await enabled(w);
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    await d.sync.link(code.toLowerCase());
+    expect(d.adopted).toHaveBeenCalledOnce();
+    expect(d.storage.getItem(SAVE_KEY)).toBe(text);
+    expect(readMeta(d.storage)?.pendingLink).toBe(false);
+    expect(readMeta(d.storage)?.baseRev).toBe(1);
+    expect(d.notes).toEqual(['Loaded your cloud save.']);
+    const restarted = w.device(d.storage);
+    restarted.sync.begin();
+    await until(() => expect(kind(restarted)).toBe('synced'));
+  });
+
+  it('leaves no settings behind after a bad code or no connection', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    await d.sync.link('ZZZZZZZZZZ');
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    expect(d.notes[0]).toContain('not valid');
+    w.server.down = true;
+    await d.sync.link(code);
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    expect(d.storage.getItem(SAVE_KEY)).toBeNull();
+    expect(kind(d)).toBe('off');
+    expect(d.adopted).not.toHaveBeenCalled();
+  });
+
+  it('refuses an unreadable cloud save and stays off', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const id = [...w.server.saves.keys()][0] as string;
+    w.server.saves.set(id, { data: '{"__proto__":{}}', rev: 2 });
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    await d.sync.link(code);
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    expect(d.storage.getItem(SAVE_KEY)).toBeNull();
+    expect(kind(d)).toBe('off');
+    expect(d.notes[0]).toContain("can't be read");
+  });
+});
+
+describe('link robustness', () => {
+  it('two link calls at once sign up and redeem once, and the meta survives', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    play(d, T + 1, 2);
+    await Promise.all([d.sync.link(code), d.sync.link(code)]);
+    expect(w.server.calls.filter((c) => c.url.endsWith('/signup'))).toHaveLength(2);
+    expect(w.server.calls.filter((c) => c.url.endsWith('/redeem_link_code'))).toHaveLength(1);
+    expect(kind(d)).toBe('conflict');
+    expect(readMeta(d.storage)?.pendingLink).toBe(true);
+  });
+
+  it('a refused save write during a link leaves a sane status, not syncing', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    const set = d.storage.setItem;
+    d.storage.setItem = (k, v) => {
+      if (k === SAVE_KEY) throw new Error('quota');
+      set(k, v);
+    };
+    await d.sync.link(code);
+    expect(d.adopted).not.toHaveBeenCalled();
+    expect(kind(d)).toBe('offline');
+    expect(d.notes.at(-1)).toContain('refused');
+    expect(d.storage.getItem(SAVE_KEY)).toBeNull();
+  });
+
+  it("a failing link leaves another tab's settings alone", async () => {
+    const w = world();
+    const d = w.device();
+    d.sync.begin();
+    play(d, T + 1, 2);
+    let release = (): void => undefined;
+    w.server.hold.redeem_link_code = new Promise<void>((r) => (release = r));
+    const linking = d.sync.link('ZZZZZZZZZZ');
+    await until(() =>
+      expect(w.server.calls.some((c) => c.url.endsWith('/redeem_link_code'))).toBe(true),
+    );
+    const other = {
+      ...newMeta({ access: 'access-token-other1', refresh: 'refresh-token-other1', expiresAt: T }),
+      saveId: SAVE_ID,
+    };
+    writeMeta(d.storage, other);
+    release();
+    await linking;
+    expect(readMeta(d.storage)).toEqual(other);
   });
 });

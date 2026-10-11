@@ -285,9 +285,11 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
   document.title = GAME_TITLE;
   // No run, no HP ring: the browser's default icon.
   document.querySelector('link[rel="icon"]')?.remove();
+  const cloud = sync;
   root.replaceChildren(
     titleBar(),
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
+    ...(cloud ? [pathLink(cloud)] : []),
   );
   root.querySelector<HTMLButtonElement>('.paths button')?.focus();
 }
@@ -595,7 +597,12 @@ function cloudPanels(
   linkBox.append(linkInput);
   const link = button('Link this device', '', () => {
     const code = linkInput.value.trim();
-    if (code) void cloud.link(code).then(() => (linkInput.value = ''));
+    if (!code) return;
+    setButton(link, 'Link this device', true);
+    void cloud.link(code).then(() => {
+      linkInput.value = '';
+      setButton(link, 'Link this device', false);
+    });
   });
   const linkHint = el('p', 'muted hint', 'Linking asks which save to keep.');
   const linkRow = el('div', 'cloud-row');
@@ -656,6 +663,39 @@ function cloudPanels(
     if (showCloudNote === showNote) showCloudNote = null;
   });
   return { note, choice, menu };
+}
+
+/** On the Path choice, where there is no Menu: load a cloud save with a link code. */
+function pathLink(cloud: Sync): HTMLElement {
+  const box = el('section', 'panel cloud-panel');
+  const msg = el('p', 'muted');
+  msg.setAttribute('role', 'status');
+  const field = el('label', 'field', 'Have a link code? Enter it to load your cloud save');
+  const input = el('input');
+  input.type = 'text';
+  input.maxLength = 32;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  field.append(input);
+  const go = button('Link this device', '', () => {
+    const code = input.value.trim();
+    if (!code) return;
+    msg.textContent = 'Linking…';
+    setButton(go, 'Link this device', true);
+    void cloud.link(code).then(() => {
+      setButton(go, 'Link this device', false);
+      if (!msg.isConnected) return;
+      // Still on the Path choice: the message above was shown here; don't repeat it over the new run.
+      cloudNote = null;
+      if (msg.textContent === 'Linking…') msg.textContent = '';
+    });
+  });
+  // Errors come back as notes; here they show beside the field.
+  showCloudNote = (text) => {
+    msg.textContent = text;
+  };
+  box.append(field, go, msg);
+  return box;
 }
 
 function play(

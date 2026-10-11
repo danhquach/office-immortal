@@ -103,6 +103,7 @@ export function createSync(deps: SyncDeps): Sync {
   let broken = false;
   let generation = 0;
   let adoptions = 0;
+  let linking = false;
   /** The startup facts the check works from, kept so a failed check can retry. */
   let startup: { raw: string | null; local: Save | null; clean: boolean } | null = null;
   /** The last upload that failed without an answer: the cloud may hold it all the same. */
@@ -168,7 +169,11 @@ export function createSync(deps: SyncDeps): Sync {
       storage.setItem(SAVE_KEY, server.data);
     } catch {
       writeMeta(storage, meta);
-      deps.onNote('The browser refused the cloud save, so this device keeps its own.');
+      const message = 'The browser refused the cloud save, so this device keeps its own.';
+      deps.onNote(message);
+      // Not stuck on "checking" or "syncing": say so, and try again after a pause.
+      nextAt = deps.now() + UPLOAD_EVERY_MS;
+      setStatus({ kind: 'offline', message });
       return;
     }
     choice = null;
@@ -471,14 +476,32 @@ export function createSync(deps: SyncDeps): Sync {
     },
     async link(code) {
       const before = readMeta(storage);
+      // No run yet (the Path choice screen) is fine: the cloud save simply loads.
       const raw = latest?.raw ?? null;
-      if (broken || !raw) return;
+      // One attempt at a time: a double click must not sign up and redeem twice.
+      if (broken || linking) return;
+      linking = true;
       const prev = status;
       setStatus({ kind: 'syncing' });
+      /** The session this attempt works under; only meta still holding it is ours to undo. */
+      let mine: string | null = null;
+      const undo = (): void => {
+        if (!mine || readMeta(storage)?.session?.access !== mine) return;
+        if (before) store(before);
+        else clearMeta(storage);
+      };
       try {
         const meta = before && !before.relink ? before : await signUpFresh();
         if (!meta) return;
+        mine = meta.session?.access ?? null;
         const server = await cloud.redeemLinkCode(code);
+        if (!raw && !decodeSave(server.data)) {
+          // Nothing local to keep and nothing readable to load: leave cloud off here.
+          undo();
+          setStatus(prev);
+          deps.onNote("That cloud save can't be read.");
+          return;
+        }
         // Remembered before asking the player, so closing the page mid-choice asks again next time.
         if (
           !store({
@@ -492,13 +515,14 @@ export function createSync(deps: SyncDeps): Sync {
           return;
         }
         checked = false;
-        settle(server, raw, decodeSave(raw), false);
+        settle(server, raw, raw ? decodeSave(raw) : null, false);
       } catch (e) {
         // A failed attempt leaves things as they were (a sign-in made just for it is dropped).
-        if (before) store(before);
-        else clearMeta(storage);
+        undo();
         setStatus(prev);
         deps.onNote(describeError(e));
+      } finally {
+        linking = false;
       }
     },
     async linkCode() {

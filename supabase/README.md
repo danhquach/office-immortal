@@ -50,5 +50,5 @@ the page's Content-Security-Policy is unchanged.
 - Link codes are 10 characters from a 32-letter alphabet (50 random bits), single
   use, and expire after 15 minutes.
 
-Anonymous users that Supabase later purges leave their save behind without an
-owner; those rows are small and can be deleted by hand.
+When an anonymous user is deleted, their membership goes with them, and a save
+left with no members is deleted by a trigger.
