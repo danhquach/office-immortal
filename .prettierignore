@@ -5,3 +5,5 @@ package-lock.json
 docs/
 # Machine-local, git-ignored, and rewritten by the Claude Code harness.
 .claude/settings.local.json
+# Test saves, kept exactly as the game writes them (npm run marketing:saves).
+marketing/saves/

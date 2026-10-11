@@ -26,3 +26,5 @@ art-src/
 
 # itch.io upload (npm run zip)
 office-immortal-web.zip
+# Store-page video (npm run marketing:trailer): too big for the repo, uploaded to YouTube
+marketing/trailer-1080p.mp4

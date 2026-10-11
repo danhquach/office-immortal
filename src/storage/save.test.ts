@@ -8,6 +8,7 @@ import {
   ARRAY_TICK,
   ENEMY_ARRIVAL,
   equip,
+  faceTribulation,
   newGame,
   retire,
   tick,
@@ -1608,6 +1609,66 @@ describe('realm caps and the Tribulation', () => {
     expect(decodeSave(encodeSave(s, 0))?.state).toEqual(s);
   });
 
+  it('round-trips a Tribulation faced early, the floor it interrupted waiting behind it', () => {
+    // Face Tribulation puts it in front; the autosave that follows must load again.
+    for (const fought of [0, 5, 10]) {
+      const s = faceTribulation(held(fought));
+      expect(s.enemies[0]?.kind).toBe('tribulation');
+      expect(s.enemies).toHaveLength(12 - fought);
+      expect(decodeSave(encodeSave(s, 0))?.state).toEqual(s);
+    }
+  });
+
+  it('rejects a faced Tribulation whose floor behind it is out of order or not ready', () => {
+    const faced = () => JSON.parse(encodeSave(faceTribulation(held()), SAVED_AT));
+    const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
+    // Two Tribulations, one in front and one at the end.
+    expect(decodeChanged(faced(), (x) => void order(x).push(order(x)[0] as J))).toBeNull();
+    // The boss before the elite behind it.
+    expect(
+      decodeChanged(
+        faced(),
+        (x) => void order(x).splice(-2, 2, order(x).at(-1)!, order(x).at(-2)!),
+      ),
+    ).toBeNull();
+    // Not held at the cap, so no Tribulation can be in front.
+    expect(decodeChanged(faced(), (x) => void (cult(x).xp = 0))).toBeNull();
+    // A Tribulation in the middle of the floor.
+    expect(
+      decodeChanged(heldRaw(), (x) => void order(x).splice(5, 0, order(x).pop() as J)),
+    ).toBeNull();
+  });
+
+  it('rejects hostile payloads at the front of a faced floor', () => {
+    const faced = () => JSON.parse(encodeSave(faceTribulation(held()), SAVED_AT));
+    const front = (x: ReturnType<typeof heldRaw>) => (x.state.enemies as J[])[0] as J;
+    // Not an object where the Tribulation is looked for.
+    for (const junk of ['tribulation', null, ['tribulation'], 7]) {
+      expect(
+        decodeChanged(faced(), (x) => void ((x.state.enemies as unknown[])[0] = junk)),
+      ).toBeNull();
+    }
+    // Every field of the front Tribulation is still checked.
+    expect(decodeChanged(faced(), (x) => void (front(x).maxHp = 1))).toBeNull();
+    expect(decodeChanged(faced(), (x) => void (front(x).hp = 0))).toBeNull();
+    expect(decodeChanged(faced(), (x) => void (front(x).evil = 1))).toBeNull();
+    expect(decodeChanged(faced(), (x) => void (front(x).kind = 'tribulation\u200b'))).toBeNull();
+    // One enemy too many behind it.
+    expect(
+      decodeChanged(faced(), (x) => {
+        const list = x.state.enemies as J[];
+        list.splice(1, 0, list[1] as J);
+      }),
+    ).toBeNull();
+    // A kind smuggled in through __proto__ is an own key, not the kind.
+    const raw = encodeSave(faceTribulation(held()), SAVED_AT).replace(
+      '"kind":"tribulation"',
+      '"__proto__":{"kind":"tribulation"}',
+    );
+    expect(raw).toContain('__proto__');
+    expect(decodeSave(raw)).toBeNull();
+  });
+
   it('accepts XP held past the cap', () => {
     const save = heldRaw();
     expect(decodeChanged(save, (x) => void (cult(x).xp = 1e9))).not.toBeNull();
@@ -1654,7 +1715,10 @@ describe('realm caps and the Tribulation', () => {
 
   it('rejects a held cultivator whose Tribulation is out of place or misnamed', () => {
     const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
-    expect(decodeChanged(heldRaw(), (x) => void order(x).unshift(order(x).pop() as J))).toBeNull();
+    // In front is where Face Tribulation puts it (round-tripped above); one step in is wrong.
+    expect(
+      decodeChanged(heldRaw(), (x) => void order(x).splice(1, 0, order(x).pop() as J)),
+    ).toBeNull();
     expect(decodeChanged(heldRaw(), (x) => void order(x).push(order(x).at(-1) as J))).toBeNull();
     for (const name of [
       'Annual Appraisal',
