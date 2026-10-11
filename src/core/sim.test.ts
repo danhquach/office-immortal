@@ -552,13 +552,13 @@ describe('faceTribulation', () => {
     expect(next.enemyNextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL);
   });
 
-  it('faces the last realm cap, level 60, with its own Tribulation', () => {
+  it('faces the last realm cap, level 90, with its own Tribulation', () => {
     const s = newGame(7, 'sword');
-    s.cultivator.level = 60;
-    s.cultivator.xp = xpToNext(60);
+    s.cultivator.level = 90;
+    s.cultivator.xp = xpToNext(90);
     expect(canFaceTribulation(s)).toBe(true);
     const next = faceTribulation(s);
-    expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[5] });
+    expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[8] });
     expect(next.enemies).toHaveLength(s.enemies.length + 1);
   });
 

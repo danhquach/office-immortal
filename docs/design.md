@@ -55,15 +55,18 @@ in a Tribulation boss that must be beaten to advance.
 |---|---|---|
 | Qi Condensation | Intern | 1–10 |
 | Foundation Establishment | Associate | 11–20 |
-| Golden Core | Manager | 21–30 |
-| Nascent Soul | Director | 31–40 |
-| Spirit Severing | VP | 41–50 |
-| Immortal Ascension | CEO | 51–60 |
-| Immortal | — | 60+ (endless) |
+| Golden Core | Team Lead | 21–30 |
+| Nascent Soul | Manager | 31–40 |
+| Spirit Transformation | Senior Manager | 41–50 |
+| Void Refinement | Director | 51–60 |
+| Body Integration | VP | 61–70 |
+| Mahayana | CEO | 71–80 |
+| Tribulation Transcendence | Chairman | 81–90 |
+| Immortal Ascension | — | 91+ (endless) |
 
 The realm name is primary; the job title is shown beside it.
 
-- **The cap:** at level 10, 20, … 60 the level stops; XP keeps coming and is
+- **The cap:** at level 10, 20, … 90 the level stops; XP keeps coming and is
   held. Once the next level's XP is held, the realm's Tribulation falls due and
   joins the end of the current floor, so that floor can't be passed until it is
   won.
@@ -81,8 +84,12 @@ The realm name is primary; the job title is shown beside it.
   the Tribulation at its end. Gear is what beats it; a cultivator who stays
   stuck can start over through Early Retirement.
 - **Tribulations:** Probation Review, Annual Appraisal, Restructuring, Hostile
-  Takeover, Board Inquiry, Heavenly Audit. Each is 8× a demon's HP and 2.5×
-  its damage on the floor it is fought on.
+  Takeover, Shareholder Revolt, Board Inquiry, Regulatory Probe, Market Crash,
+  Heavenly Audit. Each is 8× a demon's HP and 2.5× its damage on the floor it
+  is fought on.
+- **Older saves:** a save from the seven-realm ladder keeps its level; its realm
+  is read from the table above. A Tribulation it had due is renamed for that
+  realm.
 
 ## 5. Floors and combat
 
@@ -474,7 +481,11 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - The summary is a band of one-line chips ("Label value"): Path, Realm with
   its job title, Spirit Stones and Spirit Essence. Realm, Spirit Stones and
   Spirit Essence open with a small icon (decorative, hidden from screen
-  readers); the Realm icon changes at each breakthrough. Level and XP to the next
+  readers); the Realm icon changes at each breakthrough. Hovering or focusing
+  the Realm chip lists every realm in order with its job title and levels
+  ("Lv 11–20"; Immortal Ascension "Lv 91+"), the current one highlighted; it
+  closes when the pointer and focus leave, or on Escape. A tap opens it on a
+  touch screen; tapping elsewhere closes it. Level and XP to the next
   level are a yellow progress bar along the foot of the combat strip ("Lv 14"
   at its left end, "37 / 60" inside; full with "Tribulation due" when one is
   due). The strip header shows floor, best floor, wave and kills

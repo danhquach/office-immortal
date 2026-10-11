@@ -74,6 +74,9 @@ const messages = {
   'kpi.stones': 'Spirit Stones',
   'kpi.essence': 'Spirit Essence',
   'realm.withTitle': '{realm} · {title}',
+  'realm.current': '(current)',
+  'realm.levels': 'Lv {from}–{to}',
+  'realm.levelsFrom': 'Lv {from}+',
 
   'character.title': 'Character',
   'character.equipped': 'Equipped',

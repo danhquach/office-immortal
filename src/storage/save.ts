@@ -32,6 +32,7 @@ import {
   DEMONS_PER_WAVE,
   makeEnemy,
   makeTribulation,
+  TRIBULATIONS,
   WAVES_PER_FLOOR,
   type Enemy,
   type EnemyKind,
@@ -64,13 +65,14 @@ import { arr, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
- * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners.
+ * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners;
+ * v6 had seven realms, so a due Tribulation may carry another realm's name.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -201,6 +203,8 @@ function readState(v: unknown, version: number): GameState {
   const before5 = version < 5;
   // Before v6 there were no Soul Banners, so no souls.
   const before6 = version < 6;
+  // Before v7 the realm ladder was shorter: a due Tribulation is renamed for its realm.
+  const before7 = version < 7;
   const slot: SlotName = before4 ? fromPants : (id) => id;
   const o = obj(v, [
     'time',
@@ -244,7 +248,7 @@ function readState(v: unknown, version: number): GameState {
     cultivator,
     floor,
     highestFloor,
-    enemies: readEnemies(o.enemies, floor, cultivator),
+    enemies: readEnemies(o.enemies, floor, cultivator, before7),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
     // Left behind while no Killing Array is equipped, so it may be in the past.
     arrayNextAt: before5
@@ -372,7 +376,7 @@ const NAMES: Readonly<Record<Exclude<EnemyKind, 'tribulation'>, readonly string[
   boss: BOSSES,
 };
 
-function readEnemies(v: unknown, floor: number, c: Cultivator): Enemy[] {
+function readEnemies(v: unknown, floor: number, c: Cultivator, oldLadder: boolean): Enemy[] {
   // A cultivator held at a cap has the realm's Tribulation at the end of the
   // floor, and only then.
   const ready = readyForTribulation(c);
@@ -390,8 +394,10 @@ function readEnemies(v: unknown, floor: number, c: Cultivator): Enemy[] {
       kind === 'tribulation'
         ? makeTribulation(floor, realmOf(c.level))
         : makeEnemy(floor, kind, oneOf(o.name, NAMES[kind]));
-    // The realm fixes the Tribulation's name; for the others oneOf already checked it.
-    if (o.name !== enemy.name) fail('enemy name');
+    // The realm fixes the Tribulation's name; for the others oneOf already checked
+    // it. An old ladder's Tribulation may have another realm's, but still one of ours.
+    if (oldLadder && kind === 'tribulation') oneOf(o.name, TRIBULATIONS);
+    else if (o.name !== enemy.name) fail('enemy name');
     for (const k of ['maxHp', 'damage', 'defence', 'attackInterval', 'xp'] as const) {
       if (o[k] !== enemy[k]) fail(`enemy ${k}`);
     }

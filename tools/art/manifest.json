@@ -385,6 +385,17 @@
       }
     },
     {
+      "id": "tribulation-shareholder-revolt",
+      "size": 192,
+      "base": "boss-middle-manager",
+      "aura": "5fd08a",
+      "recolor": {
+        "4a4a55": "1f4d3a",
+        "6e6e7a": "2f8a5a",
+        "9a9aa6": "5fd08a"
+      }
+    },
+    {
       "id": "tribulation-board-inquiry",
       "size": 192,
       "base": "boss-the-auditor",
@@ -394,6 +405,29 @@
         "3b2d4a": "b82e3a",
         "b82e3a": "5fd08a",
         "6e1b25": "2f8a5a"
+      }
+    },
+    {
+      "id": "tribulation-regulatory-probe",
+      "size": 192,
+      "base": "boss-the-auditor",
+      "aura": "b07ae0",
+      "recolor": {
+        "2b2b33": "3b2d4a",
+        "3b2d4a": "6a3fa0",
+        "b82e3a": "b07ae0",
+        "6e1b25": "6a3fa0"
+      }
+    },
+    {
+      "id": "tribulation-market-crash",
+      "size": 192,
+      "base": "boss-quarterly-review",
+      "aura": "5aa0f0",
+      "recolor": {
+        "6e1b25": "1e2f5c",
+        "b82e3a": "2f5fb3",
+        "f05a5a": "5aa0f0"
       }
     },
     {
@@ -637,20 +671,38 @@
     {
       "id": "realm-4",
       "source": "summary/realm-4.jpg",
-      "seed": 6607,
-      "prompt": "game icon, a radiant azure blue and white flying sword of light pointing upward, slicing through a glowing crescent arc of blue spirit energy, ornate gold hilt, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+      "seed": 6614,
+      "prompt": "game icon, a glowing pale cyan and white spirit figure with a golden halo rising out of a golden lotus, its legs dissolving into swirling cyan and gold sparks of light, transformation of body into spirit, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no purple, no text, no letters, no shadow"
     },
     {
       "id": "realm-5",
       "source": "summary/realm-5.jpg",
-      "seed": 6608,
-      "prompt": "game icon, a white crane with spread wings soaring upward above swirling white and gold clouds, a bright beam of golden heavenly light behind it, grand and majestic, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+      "seed": 6611,
+      "prompt": "game icon, a swirling dark indigo void portal ringed with a thin silver circle of light, small white stars and a bright white spark at its centre, refining emptiness, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
     },
     {
       "id": "realm-6",
       "source": "summary/realm-6.jpg",
+      "seed": 6612,
+      "prompt": "game icon, a taiji yin-yang disc of black and white jade merging with a ring of gold, small green and blue elemental orbs orbiting it and joining into one, union of body and dao, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-7",
+      "source": "summary/realm-7.jpg",
       "seed": 6609,
       "prompt": "game icon, a magnificent crimson and gold immortal emblem: a blazing golden sun disc with a crimson jewel at its centre, surrounded by an ornate gold halo of flames and rays, the grandest and most radiant, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-8",
+      "source": "summary/realm-8.jpg",
+      "seed": 6613,
+      "prompt": "game icon, a dark storm cloud crackling with bright yellow and white heavenly lightning bolts striking down onto a small glowing golden shield of light below, tribulation thunder, dramatic, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "realm-9",
+      "source": "summary/realm-9.jpg",
+      "seed": 6608,
+      "prompt": "game icon, a white crane with spread wings soaring upward above swirling white and gold clouds, a bright beam of golden heavenly light behind it, grand and majestic, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
     }
   ],
   "icon_size": 32,

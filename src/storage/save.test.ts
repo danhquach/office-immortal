@@ -1626,12 +1626,12 @@ describe('realm caps and the Tribulation', () => {
     expect(decodeChanged(heldRaw(), (x) => void (x.state.enemies as J[]).pop())).toBeNull();
   });
 
-  it('rejects a Tribulation on an Immortal', () => {
+  it('rejects a Tribulation past the last cap', () => {
     const s = newGame(7, 'sword');
-    s.cultivator.level = 61;
-    s.cultivator.stats.agility += 3 * 60;
+    s.cultivator.level = 91;
+    s.cultivator.stats.agility += 3 * 90;
     expect(decodeSave(encodeSave(s, 0))).not.toBeNull();
-    s.enemies.push(makeTribulation(1, 5));
+    s.enemies.push(makeTribulation(1, 8));
     expect(decodeSave(encodeSave(s, 0))).toBeNull();
   });
 
@@ -1668,6 +1668,50 @@ describe('realm caps and the Tribulation', () => {
     // Numbers must be the sim's own.
     expect(decodeChanged(heldRaw(), (x) => void (order(x).at(-1)!.maxHp = 1))).toBeNull();
     expect(decodeChanged(heldRaw(), (x) => void (order(x).at(-1)!.xp = 1e6))).toBeNull();
+  });
+
+  it('renames the due Tribulation of a v5 save too: every older version had the short ladder', () => {
+    const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
+    const loaded = decodeChanged(heldRaw(), (x) => {
+      x.v = 5;
+      delete x.state.souls;
+      order(x).at(-1)!.name = 'Heavenly Audit';
+    }) as ReturnType<typeof decodeSave>;
+    expect(loaded?.state.enemies.at(-1)?.name).toBe('Probation Review');
+  });
+
+  it("renames a v6 save's due Tribulation for its realm on the longer ladder", () => {
+    // v6 had seven realms: level 60's Tribulation was Heavenly Audit, now realm
+    // 5's is Board Inquiry. Any of our names loads, and the realm's replaces it.
+    const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
+    for (const name of ['Heavenly Audit', 'Annual Appraisal']) {
+      const loaded = decodeChanged(heldRaw(), (x) => {
+        x.v = 6;
+        order(x).at(-1)!.name = name;
+      }) as ReturnType<typeof decodeSave>;
+      expect(loaded?.state.enemies.at(-1)?.name).toBe('Probation Review');
+    }
+    // Still only our names, and still the sim's numbers.
+    for (const name of [
+      'Probation Review\u202e',
+      'Probation\u200bReview',
+      'Pr\u043ebation Review',
+      'Quarterly Review',
+      123,
+      null,
+    ]) {
+      const bad = decodeChanged(heldRaw(), (x) => {
+        x.v = 6;
+        order(x).at(-1)!.name = name;
+      });
+      expect(bad).toBeNull();
+    }
+    expect(
+      decodeChanged(heldRaw(), (x) => {
+        x.v = 6;
+        order(x).at(-1)!.maxHp = 1;
+      }),
+    ).toBeNull();
   });
 
   it('rejects a Tribulation with a pollution key', () => {

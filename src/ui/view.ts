@@ -3,6 +3,7 @@
 
 import {
   derive,
+  LEVELS_PER_REALM,
   readyForTribulation,
   realmOf,
   REALMS,
@@ -417,6 +418,31 @@ export function realmLabel(level: number): string {
   return realm.title
     ? t('realm.withTitle', { realm: name, title: tn('title', realm.title) })
     : name;
+}
+
+/** One row of the realm list: the realm, its job title, its levels, and whether `level` is in it. */
+export interface RealmRow {
+  readonly name: string;
+  readonly title: string;
+  readonly levels: string;
+  readonly current: boolean;
+}
+
+/** Every realm in order, for the Realm chip's hover list; the one `level` is in is current. */
+export function realmRows(level: number): RealmRow[] {
+  const at = realmOf(level);
+  return REALMS.map((realm, i) => {
+    const from = i * LEVELS_PER_REALM + 1;
+    return {
+      name: tn('realm', realm.name),
+      title: realm.title ? tn('title', realm.title) : '',
+      levels:
+        i === REALMS.length - 1
+          ? t('realm.levelsFrom', { from })
+          : t('realm.levels', { from, to: from + LEVELS_PER_REALM - 1 }),
+      current: i === at,
+    };
+  });
 }
 
 /** Icons in the summary atlas, in its column order (tools/art/manifest.json "summary"). */
