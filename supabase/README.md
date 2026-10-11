@@ -28,7 +28,7 @@ the page's Content-Security-Policy is unchanged.
 
 ## Verify
 
-- Anonymous sign-ins work (pending a first run against a real project):
+- Anonymous sign-ins work:
   `curl -s -X POST "$VITE_SUPABASE_URL/auth/v1/signup" -H "apikey: $VITE_SUPABASE_ANON_KEY" -H 'Content-Type: application/json' -d '{}'`
   returns an `access_token`.
 - Run the SQL tests locally (needs Docker and the
