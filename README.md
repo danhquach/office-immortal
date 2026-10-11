@@ -46,11 +46,35 @@ All shipped on `main`:
 
 - `src/core/`: the pure simulation. One `tick(state, dt)` step, no DOM, no
   storage; all randomness goes through the seeded RNG in `src/core/rng.ts`.
-- `src/storage/`: the save, validated against an allow-list on load.
+- `src/storage/`: the save, validated against an allow-list on load, and the
+  optional cloud save (REST client and sync logic).
+- `supabase/`: the cloud save's SQL migration and tests, with setup steps.
 - `src/ui/`: the DOM view. Text reaches the page only as text nodes.
 - `src/main.ts`: the entry point that mounts the UI.
 
 Layering rule: the UI imports core, never the reverse (enforced by ESLint).
+
+## Cloud save
+
+Optional. Menu, Settings, Cloud save keeps your cultivator on a server so you
+can load it in another browser or device. There is no account: this browser
+gets an anonymous save, and a one-time link code joins another browser to it.
+Without it, play is exactly as before, local only.
+
+- Uploads at most once a minute while playing, when the tab is hidden or left,
+  and on **Sync now**. Offline play uploads when the connection returns.
+- If this device and the cloud both changed, you choose which to keep.
+- **Warning:** an anonymous cloud save is lost if the site data is cleared on
+  every linked device. Link a second device to keep a copy.
+- Reset progress also deletes the cloud save.
+- If you played on past this device's last upload and another device moved the
+  cloud save meanwhile, you get the choice too; hidden-tab and page-leave
+  uploads keep that rare.
+
+Builds have it only when `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are
+set (a local `.env`, or GitHub Actions variables for the deployed site); see
+[`.env.example`](.env.example) and [`supabase/README.md`](supabase/README.md)
+for the one-time backend setup.
 
 ## Development
 

@@ -60,14 +60,19 @@ import {
   tick,
   type GameState,
 } from '../core/sim.ts';
+import { createCloud, type CloudMessage } from '../storage/cloud.ts';
+import { readCloudConfig } from '../storage/cloud-config.ts';
+import { ADOPT_KEY } from '../storage/cloud-meta.ts';
 import {
   browserStorage,
   clearSave,
+  encodeSave,
   loadSave,
   SAVE_KEY,
   writeSave,
   type SaveStorage,
 } from '../storage/save.ts';
+import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
 import {
   dropToast,
   faviconHref,
@@ -81,6 +86,7 @@ import {
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
+import { cloudStatusLine, cloudText, needsChoice, saveSummary } from './cloud-view.ts';
 import {
   enemyName,
   lang,
@@ -92,7 +98,7 @@ import {
   writeLang,
   type MessageKey,
 } from './i18n.ts';
-import { autosave, runs } from './run.ts';
+import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
 import {
   BAG_SORT_DIRS,
@@ -283,9 +289,46 @@ function newSeed(): number {
 /** The one run playing; starting or loading another stops its timers and listeners first. */
 const run = runs();
 
+/** The cloud save's sync, made on first use; null where the build has no cloud config or storage is blocked. */
+let sync: Sync | null = null;
+/** A message from the cloud save for the player, shown over the game until dismissed. */
+let cloudNote: CloudMessage | null = null;
+let showCloudNote: ((note: CloudMessage) => void) | null = null;
+/** Where the run is drawn, so the sync can restart it when it takes the cloud's save. */
+let current: { root: HTMLElement; storage: SaveStorage } | null = null;
+
+function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null {
+  const config = readCloudConfig(import.meta.env);
+  if (!config || !storage) return null;
+  current = { root, storage };
+  sync ??= createSync({
+    cloud: createCloud({
+      config,
+      storage,
+      fetch: (url, init) => fetch(url, init),
+      now: Date.now,
+      // Web Locks keep two tabs from renewing the sign-in at once; older browsers go without.
+      locks: navigator.locks
+        ? { request: (name, callback) => navigator.locks.request(name, callback) }
+        : null,
+    }),
+    storage,
+    now: Date.now,
+    visible: () => !document.hidden,
+    onAdopt: () => current && start(current.root, current.storage),
+    onNote: (code) => {
+      cloudNote = code;
+      showCloudNote?.(code);
+    },
+  });
+  return sync;
+}
+
 /** Loads the saved run and replays the time away, or offers a new run when there is none. */
 export function start(root: HTMLElement, storage: SaveStorage | null = browserStorage()): void {
   run.stop();
+  // Before play() saves over the local run: the cloud check compares against it.
+  cloudSync(root, storage)?.begin();
   labels = [];
   showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
   setLang(pickedLang ?? readLang(storage, navigator.languages ?? []));
@@ -297,19 +340,30 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
     play(root, state, storage, summary);
     return;
   }
+  showPaths(root, storage);
+  root.querySelector<HTMLButtonElement>('.paths button')?.focus();
+}
+
+/** The link code typed on the Path choice, kept across a language switch; cleared when a run starts. */
+let typedLink = '';
+
+/** Draws the Path choice. A language switch calls this alone: no restart, so the cloud check isn't redone. */
+function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
+  labels = [];
   document.title = gameTitle();
   // No run, no HP ring: the browser's default icon.
   document.querySelector('link[rel="icon"]')?.remove();
+  const cloud = sync;
   const bar = titleBar(storage, () => {
     // Nothing to keep before a run starts: the choice is drawn again in the new language.
-    start(root, storage);
+    showPaths(root, storage);
     root.querySelector<HTMLButtonElement>('.lang > button')?.focus();
   });
   root.replaceChildren(
     bar,
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
+    ...(cloud ? [pathLink(cloud)] : []),
   );
-  root.querySelector<HTMLButtonElement>('.paths button')?.focus();
 }
 
 /** The title bar; its language switch calls `relabel` once the language has changed. */
@@ -705,12 +759,196 @@ function overtimePanel(summary: OvertimeSummary): HTMLElement {
   return box;
 }
 
+/**
+ * The cloud save's parts of the page: a note and the choice between two saves
+ * (both over the game, since a choice must not wait for the Menu), and the
+ * Menu's Cloud save section. All text goes in as text, in the current language
+ * (rewritten on a language switch); the sync's status is the only other input.
+ */
+function cloudPanels(
+  cloud: Sync,
+  scope: RunScope,
+): { note: HTMLElement; choice: HTMLElement; menu: HTMLElement[] } {
+  const note = el('section', 'panel cloud-panel');
+  note.setAttribute('role', 'status');
+  const noteText = el('p');
+  note.append(
+    noteText,
+    buttonT('confirm.ok', '', () => {
+      note.hidden = true;
+      cloudNote = null;
+    }),
+  );
+  note.hidden = true;
+  const showNote = (code: CloudMessage): void => {
+    noteText.textContent = cloudText(code);
+    note.hidden = false;
+  };
+  if (cloudNote) showNote(cloudNote);
+  showCloudNote = showNote;
+  say(() => {
+    if (cloudNote) noteText.textContent = cloudText(cloudNote);
+  });
+
+  const choice = el('section', 'panel cloud-panel');
+  choice.setAttribute('role', 'alert');
+  const choiceText = el('p');
+  const localLine = el('p', 'muted');
+  const cloudLine = el('p', 'muted');
+  const keep = button('', '', () => void cloud.keepLocal());
+  const use = buttonT('cloud.useCloud', 'primary', () => cloud.useCloud());
+  choice.append(choiceText, localLine, cloudLine, keep, use);
+  choice.hidden = true;
+
+  const statusLine = el('p');
+  statusLine.setAttribute('aria-live', 'polite');
+  const turnOn = button('', 'primary', () => void cloud.turnOn());
+  const syncNow = button('', '', () => void cloud.syncNow());
+  const codeLine = el('p', 'muted');
+  /** The link code on show, kept so a language switch can word it again. */
+  let shownCode: { code: string; ttl: number } | null = null;
+  say(() => {
+    codeLine.textContent = shownCode
+      ? t('cloud.code', { code: shownCode.code, minutes: Math.round(shownCode.ttl / 60) })
+      : '';
+  });
+  const getCode = buttonT('cloud.getCode', '', () => {
+    void cloud.linkCode().then((made) => {
+      if (!made) return;
+      shownCode = made;
+      codeLine.textContent = t('cloud.code', {
+        code: made.code,
+        minutes: Math.round(made.ttl / 60),
+      });
+    });
+  });
+  const turnOff = buttonT('cloud.turnOff', '', () => {
+    shownCode = null;
+    codeLine.textContent = '';
+    cloud.turnOff();
+  });
+  const linkBox = el('label', 'field');
+  const linkCaption = document.createTextNode('');
+  say(() => (linkCaption.data = t('cloud.linkField')));
+  const linkInput = el('input');
+  linkInput.type = 'text';
+  linkInput.maxLength = 32;
+  linkInput.autocomplete = 'off';
+  linkInput.spellcheck = false;
+  linkBox.append(linkCaption, linkInput);
+  const link = buttonT('cloud.link', '', () => {
+    const code = linkInput.value.trim();
+    if (!code) return;
+    setButton(link, t('cloud.link'), true);
+    void cloud.link(code).then(() => {
+      linkInput.value = '';
+      setButton(link, t('cloud.link'), false);
+    });
+  });
+  const linkHint = elt('p', 'muted hint', 'cloud.linkHint');
+  const linkRow = el('div', 'cloud-row');
+  linkRow.append(linkBox, link);
+
+  const menu = [
+    elt('h3', '', 'cloud.title'),
+    elt('p', 'muted hint', 'cloud.hint'),
+    statusLine,
+    turnOn,
+    syncNow,
+    getCode,
+    codeLine,
+    linkRow,
+    linkHint,
+    turnOff,
+  ];
+
+  function draw(status: SyncStatus): void {
+    const now = Date.now();
+    setText(statusLine, cloudStatusLine(status, now));
+    const off = status.kind === 'off';
+    const relink = status.kind === 'relink';
+    const on = !off && !relink;
+    setText(turnOn, t(relink ? 'cloud.startNew' : 'cloud.turnOn'));
+    turnOn.hidden = !(off || relink);
+    linkRow.hidden = linkHint.hidden = !(off || relink);
+    const syncing = status.kind === 'syncing' || status.kind === 'checking';
+    syncNow.hidden = getCode.hidden = !on;
+    setButton(syncNow, t('cloud.syncNow'), syncing || needsChoice(status));
+    turnOff.hidden = off;
+    codeLine.hidden = !on;
+    choice.hidden = !needsChoice(status);
+    if (status.kind === 'conflict') {
+      setText(choiceText, t('cloud.conflict'));
+      setText(localLine, t('cloud.localLine', { summary: saveSummary(status.local, now) }));
+      setText(cloudLine, t('cloud.cloudLine', { summary: saveSummary(status.server, now) }));
+      localLine.hidden = cloudLine.hidden = use.hidden = false;
+      setText(keep, t('cloud.keepLocal'));
+    } else if (status.kind === 'unreadable') {
+      setText(choiceText, t('cloud.unreadable'));
+      localLine.hidden = cloudLine.hidden = use.hidden = true;
+      setText(keep, t('cloud.overwrite'));
+    }
+  }
+  say(() => draw(cloud.status));
+  const unsubscribe = cloud.subscribe(draw);
+  // "Synced 2 min ago" ages while nothing else changes.
+  scope.every(30_000, () => draw(cloud.status));
+  scope.signal.addEventListener('abort', () => {
+    unsubscribe();
+    if (showCloudNote === showNote) showCloudNote = null;
+  });
+  return { note, choice, menu };
+}
+
+/** On the Path choice, where there is no Menu: load a cloud save with a link code. */
+function pathLink(cloud: Sync): HTMLElement {
+  const box = el('section', 'panel cloud-panel');
+  /** What the line under the field says now: progress or the last problem. */
+  let shown: (() => string) | null = null;
+  const msg = el('p', 'muted');
+  msg.setAttribute('role', 'status');
+  const show = (text: (() => string) | null): void => {
+    shown = text;
+    msg.textContent = text ? text() : '';
+  };
+  const field = el('label', 'field');
+  const caption = document.createTextNode('');
+  say(() => (caption.data = t('cloud.pathLink')));
+  const input = el('input');
+  input.type = 'text';
+  input.maxLength = 32;
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.value = typedLink;
+  input.addEventListener('input', () => (typedLink = input.value));
+  field.append(caption, input);
+  const go = buttonT('cloud.link', '', () => {
+    const code = input.value.trim();
+    if (!code) return;
+    show(() => t('cloud.linking'));
+    setButton(go, t('cloud.link'), true);
+    void cloud.link(code).then(() => {
+      setButton(go, t('cloud.link'), false);
+      if (!msg.isConnected) return;
+      // Still on the Path choice: the problem was shown here; don't repeat it over the new run.
+      cloudNote = null;
+      if (msg.textContent === t('cloud.linking')) show(null);
+    });
+  });
+  // Problems come back as notes; here they show beside the field.
+  showCloudNote = (code) => show(() => cloudText(code));
+  say(() => (msg.textContent = shown ? shown() : ''));
+  box.append(field, go, msg);
+  return box;
+}
+
 function play(
   root: HTMLElement,
   initial: GameState,
   storage: SaveStorage | null,
   summary: OvertimeSummary | null,
 ): void {
+  typedLink = '';
   const scope = run.next();
   const { signal } = scope;
   labels = [];
@@ -1252,6 +1490,9 @@ function play(
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
+  const cloud = sync;
+  const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
+  if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   // Beside the strip: the summary chips over Recent drops.
   const beside = el('div', 'beside');
   beside.append(kpis, log.box);
@@ -1276,21 +1517,46 @@ function play(
   bar.querySelector('.tools')?.prepend(...tools.children);
 
   // Reset progress: asks first, then deletes the save and starts a new run.
-  /** The browser refused to delete the save: the confirmation says so instead. */
-  let resetRefused = false;
+  /** What the confirmation says instead of its question (a refusal, progress); null for the question. */
+  let resetShown: (() => string) | null = null;
   const resetText = el('p');
-  say(() => (resetText.textContent = t(resetRefused ? 'menu.resetRefused' : 'menu.resetText')));
+  say(
+    () =>
+      (resetText.textContent = resetShown
+        ? resetShown()
+        : t(cloud && cloud.status.kind !== 'off' ? 'menu.resetTextCloud' : 'menu.resetText')),
+  );
+  const refuse = (text: () => string): void => {
+    resetShown = text;
+    resetText.textContent = text();
+    resetYes.hidden = true;
+  };
+  let resetting = false;
   const resetYes = buttonT('menu.resetYes', 'primary', () => {
+    if (resetting) return;
+    resetting = true;
+    void resetAll().finally(() => (resetting = false));
+  });
+  async function resetAll(): Promise<void> {
+    // The cloud save goes first, so a failure leaves everything as it was; a
+    // local-only reset would just be undone by the next cloud check.
+    if (cloud && cloud.status.kind !== 'off') {
+      resetShown = () => t('cloud.resetting');
+      resetText.textContent = resetShown();
+      const gone = await cloud.deleteCloud();
+      if (!gone.ok) {
+        refuse(() => t('cloud.resetFailed', { reason: cloudText(gone.message) }));
+        return;
+      }
+    }
     if (storage && !clearSave(storage)) {
-      resetRefused = true;
-      resetText.textContent = t('menu.resetRefused');
-      resetYes.hidden = true;
+      refuse(() => t('menu.resetRefused'));
       return;
     }
     menu.close();
     // start() stops this run (timers, autosave, pop-out) before anything is saved again.
     start(root, storage);
-  });
+  }
   const resetNo = buttonT('confirm.cancel', '', () => {
     resetBox.hidden = true;
     resetAsk.focus();
@@ -1300,8 +1566,10 @@ function play(
   resetBox.append(resetText, resetYes, resetNo);
   resetBox.hidden = true;
   const resetAsk = buttonT('menu.resetAsk', '', () => {
-    resetRefused = false;
-    resetText.textContent = t('menu.resetText');
+    resetShown = null;
+    resetText.textContent = t(
+      cloud && cloud.status.kind !== 'off' ? 'menu.resetTextCloud' : 'menu.resetText',
+    );
     resetBox.hidden = false;
     resetYes.hidden = false;
     resetNo.focus();
@@ -1341,6 +1609,7 @@ function play(
     if (notices.state() !== 'unsupported') {
       settings.append(elt('h3', '', 'menu.notifications'), noticeBtn);
     }
+    if (cloudUi) settings.append(...cloudUi.menu);
     settings.append(
       elt('h3', '', 'menu.reset'),
       elt('p', 'muted hint', 'menu.resetHint'),
@@ -2046,9 +2315,11 @@ function play(
   window.addEventListener(
     'storage',
     (e) => {
-      if (storage && (e.key === null || e.key === SAVE_KEY) && e.newValue === null) {
-        start(root, storage);
-      }
+      if (!storage) return;
+      if ((e.key === null || e.key === SAVE_KEY) && e.newValue === null) start(root, storage);
+      // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
+      // Only an adoption writes this key, so autosaving tabs can't set each other off.
+      else if (e.key === ADOPT_KEY) start(root, storage);
     },
     { signal },
   );
@@ -2128,10 +2399,19 @@ function play(
   function save(): void {
     if (!storage) return;
     step();
-    writeSave(storage, state, Date.now());
+    const savedAt = Date.now();
+    if (writeSave(storage, state, savedAt)) cloud?.offer(encodeSave(state, savedAt), savedAt);
   }
 
   scope.every(TICK_MS, step);
   scope.every(FRAME_TICK_MS, drawSprites);
   autosave(scope, save, { doc: document, win: window }, SAVE_MS);
+  if (cloud) {
+    // After autosave's own listeners, so the upload sends the save they just wrote.
+    document.addEventListener('visibilitychange', () => document.hidden && cloud.flush('hidden'), {
+      signal,
+    });
+    window.addEventListener('pagehide', () => cloud.flush('pagehide'), { signal });
+    window.addEventListener('online', () => cloud.retry(), { signal });
+  }
 }

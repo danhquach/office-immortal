@@ -368,12 +368,79 @@ treasure find, a higher offline cap, more starting stat points.
 ## 11. Save
 
 Saved to browser storage, validated on load against an allow-list; a bad
-save starts a new run instead of crashing.
+save starts a new run instead of crashing. The save is versioned JSON, written
+on every autosave, and is always the copy the game plays from.
+
+### Cloud save
+
+Optional, off until the player turns it on (Menu, Settings, Cloud save). It
+keeps the same one-cultivator save on a server so it can be loaded in another
+browser or device. Browser storage stays the working copy; the game never
+waits on the network.
+
+- **Identity.** No account, no email. Turning it on makes this browser an
+  anonymous user on the backend (Supabase anonymous sign-in). To use the save
+  elsewhere, the first device shows a one-time **link code** (10 characters,
+  valid 15 minutes, used once); the other device enters it and joins the same
+  save. Letter case, spaces, dashes and look-alikes (O/0, I/L/1) don't matter.
+- **Server is storage only.** One text save per player with a revision number,
+  and size and shape checks (at most 200,000 characters, a JSON object). Each
+  player reads and writes only their own save, through a handful of database
+  functions; the tables themselves are closed to the browser. The simulation
+  runs on the client, so the server cannot stop tampering and does not try.
+- **Allow-list on the way back.** Everything downloaded goes through the same
+  load check as a local save (§11 above), plus checks on the reply's shape.
+  A rejected cloud save never replaces the local one: the player is told, the
+  local save is kept, and the cloud save is overwritten only if the player
+  asks ("Overwrite cloud with this device's save").
+- **Sync timing.** At most one upload a minute while playing, plus when the tab
+  is hidden or the page is left, plus a **Sync now** button. Nothing uploads
+  until the startup check (below) has answered. Failed requests back off from
+  one to five minutes and retry at once when the browser comes back online.
+  Playing offline just queues: the latest save goes up when the connection
+  returns.
+- **Ordering and conflicts.** The server's revision number is the only order;
+  clocks on different devices are never compared. An upload says which
+  revision it builds on, and the server refuses it if the save has moved. On
+  start the game plays from the local save, then checks the cloud in the
+  background:
+  - cloud unchanged since this device last synced: nothing to do;
+  - cloud moved, and this device has nothing the cloud lacks: the cloud save
+    is loaded, and Overtime Cultivation (§10) replays from the time stamped in
+    that save;
+  - cloud moved, and this device has unsynced progress, or an upload is
+    refused during play: the player chooses. A panel shows each save's realm,
+    level, floor and last-played time, and neither is replaced until the
+    player picks "Keep this device's" or "Use cloud save".
+  A reply lost after the server stored an upload is recognised by the stored
+  data matching the local save, so it is not shown as a conflict.
+- **Linking.** Joining with a code never overwrites silently: a device that
+  already has a run is asked which save to keep, and closing the page mid-choice
+  asks again next time.
+- **Reset progress** also deletes the cloud save (other linked devices lose it
+  too) and is refused, changing nothing, if the cloud can't be reached.
+  "Turn off on this device" only forgets the cloud here and leaves the server
+  save for other devices.
+- **Signed out.** If the backend stops honouring this browser's sign-in, play
+  continues, uploads stop, and the Menu offers to link again or start a new
+  cloud save. No new anonymous user is created behind the player's back.
+- **Data loss warning.** An anonymous cloud save lives only as long as at least
+  one linked device keeps its site data. Clearing site data on every linked
+  device loses it. Linking a second device keeps a copy.
+- **Privacy and safety.** The backend address and public client key come from
+  build-time environment variables (§ README), not the repository; without
+  them the build has no cloud save and its Content-Security-Policy is
+  unchanged. With them, the policy allows that one origin and nothing else.
+  Tokens and save data travel in headers and request bodies, never in URLs;
+  the game logs nothing and never puts cloud data in the page title.
+  Server text is never shown: errors map to the game's own messages.
 
 ## 12. Out of scope (v1)
 
 - Party / multiple characters.
-- Trading, real-money items, accounts, servers.
+- Trading, real-money items, and accounts with email or passwords. The only
+  server is the cloud save's storage (§11); it has no leaderboards or shared
+  state.
 
 ## 13. Build order
 
