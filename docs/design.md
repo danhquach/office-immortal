@@ -26,7 +26,7 @@ treasures, and push higher.
 ```
 fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─► next floor
      ▲                                                          │
-     └──── Early Retirement (prestige) ◄── wall: can't clear ◄──┘
+     └─────── Reincarnation (prestige) ◄── wall: can't clear ◄──┘
 ```
 
 ## 3. The cultivator
@@ -79,7 +79,7 @@ The realm name is primary; the job title is shown beside it.
   not multiplied).
 - **Losing** to a Tribulation costs nothing: the floor is played again, with
   the Tribulation at its end. Gear is what beats it; a cultivator who stays
-  stuck can start over through Early Retirement.
+  stuck can start over through Reincarnation.
 - **Tribulations:** Probation Review, Annual Appraisal, Restructuring, Hostile
   Takeover, Board Inquiry, Heavenly Audit. Each is 8× a demon's HP and 2.5×
   its damage on the floor it is fought on.
@@ -186,8 +186,8 @@ Every drop is generated from a seeded roll.
   burst (souls never crit or burst) and reduced by the enemy's defence with
   the hit. Talisman Masters, whose primary stat is Spirit, gain the most.
   A full Immortal banner adds 30% of Spirit to every attack.
-- **Souls clear** when the banner is unequipped or replaced and on Early
-  Retirement. They are kept through a lost fight, a new floor and a
+- **Souls clear** when the banner is unequipped or replaced and on
+  Reincarnation. They are kept through a lost fight, a new floor and a
   Tribulation. A banner in the bag holds no souls. Details shows the soul
   count and cap as text, e.g. "Souls: 7 / 20 (+6.7 damage per attack)".
 
@@ -316,7 +316,7 @@ Every drop is generated from a seeded roll.
 |---|---|---|
 | Spirit Stones | Kills and selling | Path change, stat reset, inventory space |
 | Spirit Essence | Salvage | Crafting (later): upgrading base stats, rerolling one affix |
-| Dao Insight | Early Retirement | Permanent passives (§9) |
+| Dao Insight | Reincarnation | Permanent passives (§9) |
 
 - **Path change** puts every stat point into the new Path's primary stat.
 - **Stat reset** takes back every point above the base to spend by hand;
@@ -324,14 +324,14 @@ Every drop is generated from a seeded roll.
 - **Inventory space** adds a row of 8 cells, each row dearer, up to 80 (on a
   second inventory page).
 
-## 9. Prestige: Early Retirement
+## 9. Prestige: Reincarnation
 
-Retire to restart at floor 1, level 1, keeping Dao Insight (earned from the
+Reincarnate to restart at floor 1, level 1, keeping Dao Insight (earned from the
 highest floor reached). Insight buys permanent passives: more XP, more
 treasure find, a higher offline cap, more starting stat points.
 
 - **Insight paid:** highest floor² / 50, rounded down; nothing below floor 10,
-  where the Retire button stays off (floor 10 pays 2, 20 pays 8, 50 pays 50).
+  where the Reincarnate button stays off (floor 10 pays 2, 20 pays 8, 50 pays 50).
 - **Kept:** Dao Insight, passives, the Path and the auto filter. **Lost:**
   level, floors, every item (bag and equipped), Spirit Stones, Spirit Essence
   and bought bag slots.
@@ -450,7 +450,7 @@ waits on the network.
 4. Save and offline catch-up.
 5. Salvage, filter, currencies.
 6. Realms and Tribulation bosses.
-7. Early Retirement (prestige).
+7. Reincarnation (prestige).
 8. Tab HUD, pop-out window, notifications.
 
 ## 14. Art direction
@@ -485,8 +485,8 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   the Previous / Next pager under the grid (hidden, space kept, while the bag
   has one page), so buying slots never grows the panel. A short last page is
   padded to full size. Arrow keys stay on the shown page; turning the page
-  clears a bag selection left on the other one. A new run (after Early
-  Retirement) opens on page 1.
+  clears a bag selection left on the other one. A new run (after
+  Reincarnation) opens on page 1.
   Selecting a cell shows a details panel: rolls, quality, and gains / losses
   against the equipped item. Equip by dragging the item onto the character
   panel (onto one of a pair to choose it; anywhere else picks its default

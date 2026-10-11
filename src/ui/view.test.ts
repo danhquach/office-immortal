@@ -277,7 +277,7 @@ describe('respecView', () => {
   });
 });
 
-describe('Early Retirement', () => {
+describe('Reincarnation', () => {
   const preview: RetirePreview = {
     insight: 8,
     insightAfter: 11,
@@ -290,8 +290,8 @@ describe('Early Retirement', () => {
   };
 
   it('labels the button with the insight, or the floor still needed', () => {
-    expect(retireLabel(preview)).toBe('Retire early…');
-    expect(retireLabel({ ...preview, insight: 0 })).toBe('Reach floor 10 to retire early');
+    expect(retireLabel(preview)).toBe('Reincarnate…');
+    expect(retireLabel({ ...preview, insight: 0 })).toBe('Reach floor 10 to reincarnate');
   });
 
   it('lists what is kept and what is lost', () => {

@@ -15,7 +15,7 @@ from `main`, redeployed to GitHub Pages on every push to `main`.
 The v1 build order in [`docs/design.md`](docs/design.md) (§13) is complete and
 playable: the simulation core ([#2]), loot ([#3]), the combat strip, character
 panel and inventory ([#4]), save and offline catch-up ([#5]), sell and salvage
-([#6]), realms and Tribulation ([#7]), Early Retirement ([#8]), the tab HUD,
+([#6]), realms and Tribulation ([#7]), Reincarnation ([#8]), the tab HUD,
 pop-out and notifications ([#9]), and the game art ([#15]).
 
 No further features are planned yet. New work is tracked in
@@ -35,7 +35,7 @@ All shipped on `main`:
   melt it into Spirit Essence, by hand or with an auto filter.
 - **Realms** ([#7]). Climb from Qi Condensation (Intern) to Immortal Ascension
   (CEO) and beyond, with a Tribulation boss at each realm.
-- **Early Retirement** ([#8]). Reset for Dao Insight and permanent bonuses.
+- **Reincarnation** ([#8]). Reset for Dao Insight and permanent bonuses.
 - **Overtime Cultivation** ([#5]). Progress continues while the tab is in the
   background or closed, up to a cap.
 - **Tab HUD** ([#9]). Status in the tab title and favicon, a pop-out mini
