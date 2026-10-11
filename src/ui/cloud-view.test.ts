@@ -4,7 +4,14 @@ import { newGame } from '../core/sim.ts';
 import { decodeSave, encodeSave } from '../storage/save.ts';
 import type { SyncStatus } from '../storage/sync.ts';
 import { setLang, DEFAULT_LANG, PACKS } from './i18n.ts';
-import { agoLabel, cloudText, cloudStatusLine, needsChoice, saveSummary } from './cloud-view.ts';
+import {
+  agoLabel,
+  cloudText,
+  cloudStatusLine,
+  frameStep,
+  needsChoice,
+  saveSummary,
+} from './cloud-view.ts';
 
 const NOW = 1_800_000_000_000;
 
@@ -95,5 +102,15 @@ describe('cloud texts in the language packs', () => {
     expect(cloudText('link_code_expired')).not.toBe(
       'That link code has expired. Get a new one on the other device.',
     );
+  });
+});
+
+describe('frameStep', () => {
+  it('adds a link code frame when its part of the Menu shows and drops it when it hides', () => {
+    expect(frameStep(false, true)).toBe('add');
+    expect(frameStep(true, true)).toBe('keep');
+    // Turned off or signed out (relink): the code frame and any code in it go.
+    expect(frameStep(true, false)).toBe('drop');
+    expect(frameStep(false, false)).toBe('keep');
   });
 });

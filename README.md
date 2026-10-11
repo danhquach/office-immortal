@@ -134,8 +134,9 @@ How the itch.io build differs from GitHub Pages:
   page (`docs/design.md` §11, "Cloud save on itch.io"). Where the browser
   can't use it (Firefox, which lacks `location.ancestorOrigins`, or blocked
   frame storage), the game runs on its own itch.io storage without the cloud
-  save. To move progress between itch.io and GitHub Pages, use a link code
-  (cloud save) or the save code.
+  save. A cloud link code is made and shown, or typed, only inside frames on
+  GitHub Pages, never on the itch.io game page. To move progress between itch.io and
+  GitHub Pages, use a link code (cloud save) or the save code.
 - **Its own local save.** Saves are kept per site, so progress on itch.io and
   on GitHub Pages are separate. Every save also goes to a fallback copy on
   itch.io's shared origin, used only when the frame doesn't answer or holds no

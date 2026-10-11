@@ -186,10 +186,18 @@ describe('cloud actions through the frame', () => {
     c.hello();
     const link = await linking;
     const deleting = link?.sync?.deleteCloud();
-    const code = link?.sync?.linkCode();
     await vi.advanceTimersByTimeAsync(SYNC_REQUEST_MS);
     expect(await deleting).toEqual({ ok: false, message: 'offline' });
-    expect(await code).toBeNull();
+  });
+
+  it('never sends or asks for a link code (code frames on our origin do, out of the game page)', async () => {
+    const c = alone();
+    const linking = c.client.connect();
+    c.hello();
+    const link = await linking;
+    expect(await link?.sync?.linkCode()).toBeNull();
+    await link?.sync?.link('ABCDEFGH12');
+    expect(c.sent.map((m) => m.op)).toEqual(['hello']);
   });
 
   it('reads replies through the allow-list', async () => {
@@ -197,11 +205,8 @@ describe('cloud actions through the frame', () => {
     const linking = c.client.connect();
     c.hello();
     const link = await linking;
-    const code = link?.sync?.linkCode();
     const gone = link?.sync?.deleteCloud();
-    c.from({ p: PROTOCOL, re: 2, value: { code: 'abc<script>', ttl: 900 } });
-    c.from({ p: PROTOCOL, re: 3, value: { ok: false, message: 'raw server text' } });
-    expect(await code).toBeNull();
+    c.from({ p: PROTOCOL, re: 2, value: { ok: false, message: 'raw server text' } });
     expect(await gone).toEqual({ ok: false, message: 'bad-response' });
   });
 });

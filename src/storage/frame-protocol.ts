@@ -4,7 +4,11 @@
 // event types, exact keys, known storage keys, text of a sane size) into a
 // fresh object, and anything off is dropped. The cloud sign-in token is never
 // part of any message: it stays in the frame's own storage (CLOUD_KEY is not a
-// mirrored key) and only the frame talks to the server.
+// mirrored key) and only the frame talks to the server. Nor is a link code,
+// either way: a code joins a cloud save as well as the token would. The code
+// is made and shown, and a code from another device typed, in visible frames
+// on our origin (ui/code-frame.ts); a typed code goes from that frame straight
+// to the storage frame beside it (LINK_PROTOCOL), never through the game.
 
 import type { CloudMessage } from './cloud.ts';
 import { ADOPT_KEY } from './cloud-meta.ts';
@@ -64,7 +68,6 @@ const BARE_OPS = [
   'sync.retry',
   'sync.syncNow',
   'sync.turnOn',
-  'sync.linkCode',
   'sync.keepLocal',
   'sync.useCloud',
   'sync.turnOff',
@@ -79,14 +82,13 @@ export type Request = { id: number } & (
   | { op: 'backup.put'; raw: string }
   | { op: 'sync.offer'; raw: string; savedAt: number }
   | { op: 'sync.flush'; reason: 'hidden' | 'pagehide' }
-  | { op: 'sync.link'; code: string }
 );
 export type Op = Request['op'];
 
 /** The request in `data`, or null when it is not exactly one the frame takes. */
 export function readRequest(data: unknown): Request | null {
   try {
-    const head = obj(data, ['p', 'id', 'op'], ['key', 'value', 'raw', 'savedAt', 'reason', 'code']);
+    const head = obj(data, ['p', 'id', 'op'], ['key', 'value', 'raw', 'savedAt', 'reason']);
     if (head.p !== PROTOCOL) fail('protocol');
     const id = int(head.id, 1, MAX_ID);
     const op = head.op;
@@ -119,11 +121,6 @@ export function readRequest(data: unknown): Request | null {
       }
       case 'sync.flush':
         return { id, op, reason: oneOf(only(['reason']).reason, ['hidden', 'pagehide'] as const) };
-      case 'sync.link': {
-        const code = only(['code']).code;
-        if (typeof code !== 'string' || code.length > MAX_CODE_CHARS) fail('code');
-        return { id, op, code };
-      }
       default:
         return fail('op');
     }
@@ -322,12 +319,29 @@ export function readBackupText(v: unknown): string | null {
   return typeof v === 'string' && v.length <= MAX_SAVE_CHARS ? v : null;
 }
 
-/** A link code reply, or null. */
-export function readLinkCode(v: unknown): { code: string; ttl: number } | null {
+// The link frame and the storage frame: siblings in the game, both on our origin.
+
+/** Tags a typed link code the link frame hands to the storage frame, and its answer. */
+export const LINK_PROTOCOL = 'oi-link-1';
+
+/** A typed link code and its attempt number, or null; odd characters are kept for the server to refuse. */
+export function readLinkMessage(data: unknown): { code: string; n: number } | null {
   try {
-    const o = obj(v, ['code', 'ttl']);
-    if (typeof o.code !== 'string' || !/^[0-9A-Z]{10}$/.test(o.code)) fail('code');
-    return { code: o.code, ttl: int(o.ttl, 1, 3600) };
+    const o = obj(data, ['p', 'code', 'n']);
+    if (o.p !== LINK_PROTOCOL) fail('protocol');
+    if (typeof o.code !== 'string' || o.code.length > MAX_CODE_CHARS) fail('code');
+    return { code: o.code, n: int(o.n, 1, MAX_ID) };
+  } catch {
+    return null;
+  }
+}
+
+/** The attempt number in the storage frame's answer that a link attempt has ended, or null. */
+export function readLinkDone(data: unknown): number | null {
+  try {
+    const o = obj(data, ['p', 'done', 'n']);
+    if (o.p !== LINK_PROTOCOL || o.done !== true) fail('done');
+    return int(o.n, 1, MAX_ID);
   } catch {
     return null;
   }

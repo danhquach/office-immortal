@@ -18,7 +18,6 @@ import {
   readDeleted,
   readFrameMessage,
   readHello,
-  readLinkCode,
   type FrameEvent,
   type MirrorKey,
   type Op,
@@ -170,8 +169,10 @@ export function createClient(deps: ClientDeps): Client {
     retry: () => void post('sync.retry'),
     syncNow: () => waitFor('sync.syncNow'),
     turnOn: () => waitFor('sync.turnOn'),
-    link: (code) => waitFor('sync.link', { code }),
-    linkCode: async () => readLinkCode(await ask('sync.linkCode', {}, SYNC_REQUEST_MS, null)),
+    // Never through the game: a code is typed into a link frame (code-frame.ts).
+    link: async () => {},
+    // Never through the game: the frame shows the code in a frame of its own (code-frame.ts).
+    linkCode: async () => null,
     keepLocal: () => waitFor('sync.keepLocal'),
     useCloud: () => void post('sync.useCloud'),
     turnOff: () => void post('sync.turnOff'),
