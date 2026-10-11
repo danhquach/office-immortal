@@ -11,6 +11,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "zip": "node tools/zip-build.mjs",
+    "marketing:saves": "node --experimental-strip-types tools/marketing/saves.ts",
+    "marketing:screenshots": "node --experimental-strip-types tools/marketing/screenshots.ts",
+    "marketing:trailer": "node --experimental-strip-types tools/marketing/trailer.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit && eslint . && prettier --check .",
     "format": "prettier --write ."
@@ -21,6 +24,7 @@
     "eslint": "^10.11.0",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.12.0",
+    "playwright": "1.64.0",
     "prettier": "^3.9.9",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.70.1",

@@ -132,6 +132,34 @@ How the itch.io build differs from GitHub Pages:
   frame, so the button is hidden. Browsers may also refuse notifications
   inside the frame.
 
+## Store page
+
+The itch.io page's text, tags, AI disclosure and settings are in
+[`docs/itch-page.md`](docs/itch-page.md); its images live in `marketing/`. The
+screenshots, video and GIF are taken from the production build with test
+saves committed in `marketing/saves/`, so retake them after any UI change
+(Playwright's Chromium and, for the video, `ffmpeg` on the PATH):
+
+```bash
+npx playwright install chromium   # once
+npm run build
+npm run marketing:screenshots     # marketing/screenshots/01-…06-*.png, same on every run
+npm run marketing:trailer         # marketing/trailer-1080p.mp4 and marketing/autobattle.gif
+npm run marketing:saves           # rewrite the test saves (after a sim or save-format change)
+```
+
+The cover is `marketing/cover-630x500.png`, built from a generated painting by
+`python3 tools/marketing/cover.py <painting>` (needs Pillow 10.1+:
+`pip install pillow`).
+
+The video is about 30 seconds at 1080p and is git-ignored (too big for the
+repo). itch.io embeds only YouTube or Vimeo, so after making it:
+
+1. Upload `marketing/trailer-1080p.mp4` to YouTube (or Vimeo) as Public or
+   Unlisted, titled "Office Immortal: gameplay".
+2. On itch.io, Edit game, paste the video's link into **Gameplay video or
+   trailer**, and save.
+
 ## License
 
 [MIT](LICENSE)

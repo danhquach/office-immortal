@@ -378,13 +378,18 @@ const NAMES: Readonly<Record<Exclude<EnemyKind, 'tribulation'>, readonly string[
 
 function readEnemies(v: unknown, floor: number, c: Cultivator, oldLadder: boolean): Enemy[] {
   // A cultivator held at a cap has the realm's Tribulation at the end of the
-  // floor, and only then.
+  // floor (or at its front, once faced), and only then.
   const ready = readyForTribulation(c);
   const order: readonly EnemyKind[] = ready ? [...FLOOR_KINDS, 'tribulation'] : FLOOR_KINDS;
   const list = arr(v, order.length);
   // A floor always has an enemy until it is cleared, and clearing starts the next one.
   if (list.length === 0) fail('no enemies');
-  const kinds = order.slice(order.length - list.length);
+  // Faced early (faceTribulation), it fights first and the floor it interrupted waits behind it.
+  const faced =
+    ready && list.length > 1 && (list[0] as { kind?: unknown } | null)?.kind === 'tribulation';
+  const kinds = faced
+    ? ['tribulation', ...FLOOR_KINDS.slice(FLOOR_KINDS.length - (list.length - 1))]
+    : order.slice(order.length - list.length);
   return list.map((e, i) => {
     const o = obj(e, ['name', 'kind', 'maxHp', 'hp', 'damage', 'defence', 'attackInterval', 'xp']);
     const kind = kinds[i] as EnemyKind;
