@@ -33,7 +33,10 @@ export const TRIBULATIONS = [
   'Annual Appraisal',
   'Restructuring',
   'Hostile Takeover',
+  'Shareholder Revolt',
   'Board Inquiry',
+  'Regulatory Probe',
+  'Market Crash',
   'Heavenly Audit',
 ] as const;
 
@@ -86,7 +89,7 @@ export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
   };
 }
 
-/** The Tribulation that closes realm `realm` (an index into REALMS below Immortal), on `floor`. */
+/** The Tribulation that closes realm `realm` (an index into REALMS below Immortal Ascension), on `floor`. */
 export function makeTribulation(floor: number, realm: number): Enemy {
   const name = TRIBULATIONS[realm];
   if (name === undefined)

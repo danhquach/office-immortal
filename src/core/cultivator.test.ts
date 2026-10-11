@@ -187,19 +187,22 @@ describe('realms', () => {
       'Foundation Establishment',
       'Golden Core',
       'Nascent Soul',
-      'Spirit Severing',
+      'Spirit Transformation',
+      'Void Refinement',
+      'Body Integration',
+      'Mahayana',
+      'Tribulation Transcendence',
       'Immortal Ascension',
-      'Immortal',
     ]);
-    expect([1, 10, 11, 20, 21, 50, 51, 60, 61, 500].map(realmOf)).toEqual([
-      0, 0, 1, 1, 2, 4, 5, 5, 6, 6,
+    expect([1, 10, 11, 20, 21, 50, 51, 60, 61, 90, 91, 500].map(realmOf)).toEqual([
+      0, 0, 1, 1, 2, 4, 5, 5, 6, 8, 9, 9,
     ]);
   });
 
-  it('caps every 10 levels up to Immortal Ascension, then never', () => {
+  it('caps every 10 levels up to Tribulation Transcendence, then never', () => {
     const caps = Array.from({ length: 200 }, (_, i) => i + 1).filter(isRealmCap);
-    expect(caps).toEqual([10, 20, 30, 40, 50, 60]);
-    expect(LAST_CAP).toBe(60);
+    expect(caps).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90]);
+    expect(LAST_CAP).toBe(90);
   });
 });
 
@@ -227,14 +230,14 @@ describe('realm caps', () => {
     expect(readyForTribulation(c)).toBe(true);
   });
 
-  it('never caps an Immortal', () => {
-    const c = atLevel('sword', 60);
-    c.xp = xpToNext(60);
+  it('never caps after Immortal Ascension', () => {
+    const c = atLevel('sword', 90);
+    c.xp = xpToNext(90);
     breakThrough(c);
-    expect(c.level).toBe(61);
-    gainXp(c, xpToNext(61) + xpToNext(62) + xpToNext(63));
-    expect(c.level).toBe(64);
-    expect(readyForTribulation({ ...c, level: 70, xp: 1e9 })).toBe(false);
+    expect(c.level).toBe(91);
+    gainXp(c, xpToNext(91) + xpToNext(92) + xpToNext(93));
+    expect(c.level).toBe(94);
+    expect(readyForTribulation({ ...c, level: 100, xp: 1e9 })).toBe(false);
   });
 });
 

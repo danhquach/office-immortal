@@ -381,6 +381,49 @@ select {
 .kpi .value {
   font-weight: 600;
 }
+/* The Realm chip's hover list: every realm, the current one highlighted. */
+.realm-list {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  color: inherit;
+  padding: 0.2rem 0;
+  list-style: none;
+  font-size: 0.85rem;
+  /* Columns line up across rows. */
+  grid-template-columns: repeat(3, max-content);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
+}
+.realm-list:popover-open {
+  display: grid;
+}
+.realm-list li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  column-gap: 1rem;
+  padding: 0.2rem 0.8rem 0.2rem calc(0.8rem - 3px);
+  border-left: 3px solid transparent;
+  white-space: nowrap;
+}
+.realm-list .title,
+.realm-list .levels {
+  color: var(--muted);
+}
+.realm-list .levels {
+  text-align: right;
+}
+.realm-list li.current {
+  background: var(--head);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+.realm-list li.current :is(.title, .levels) {
+  color: inherit;
+}
 /* Full: the strip takes the left half; the chips and Recent drops share the
    right half beside it; everything else spans both. */
 @media (min-width: 1100px) {

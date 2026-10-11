@@ -24,6 +24,7 @@ import {
   pageOf,
   passiveRow,
   realmLabel,
+  realmRows,
   retireLabel,
   SUMMARY_ICONS,
   summaryIcon,
@@ -381,13 +382,13 @@ describe('summaryIcon', () => {
     expect(summaryIcon('essence')).toBe(1);
   });
 
-  it('changes the realm icon at each breakthrough, and Immortal keeps the last', () => {
+  it('changes the realm icon at each breakthrough, and Immortal Ascension keeps the last', () => {
     expect(summaryIcon('realm', 1)).toBe(2);
     expect(summaryIcon('realm', 10)).toBe(2);
     expect(summaryIcon('realm', 11)).toBe(3);
-    expect(summaryIcon('realm', 60)).toBe(7);
-    expect(summaryIcon('realm', 61)).toBe(8);
-    expect(summaryIcon('realm', 3000)).toBe(8);
+    expect(summaryIcon('realm', 90)).toBe(10);
+    expect(summaryIcon('realm', 91)).toBe(11);
+    expect(summaryIcon('realm', 3000)).toBe(11);
     const cols = Array.from({ length: REALMS.length }, (_, r) => summaryIcon('realm', r * 10 + 1));
     expect(new Set(cols).size).toBe(REALMS.length);
     expect(cols.every((c) => c >= 0 && c < SUMMARY_ICONS.length)).toBe(true);
@@ -399,12 +400,42 @@ describe('realmLabel', () => {
     expect(realmLabel(1)).toBe('Qi Condensation · Intern');
     expect(realmLabel(10)).toBe('Qi Condensation · Intern');
     expect(realmLabel(11)).toBe('Foundation Establishment · Associate');
-    expect(realmLabel(60)).toBe('Immortal Ascension · CEO');
+    expect(realmLabel(90)).toBe('Tribulation Transcendence · Chairman');
   });
 
-  it('shows Immortal alone: it has no job title', () => {
-    expect(realmLabel(61)).toBe('Immortal');
-    expect(realmLabel(3000)).toBe('Immortal');
+  it('shows Immortal Ascension alone: it has no job title', () => {
+    expect(realmLabel(91)).toBe('Immortal Ascension');
+    expect(realmLabel(3000)).toBe('Immortal Ascension');
+  });
+});
+
+describe('realmRows', () => {
+  it('lists every realm in order with its job title and levels', () => {
+    expect(realmRows(1).map((r) => [r.name, r.title, r.levels])).toEqual([
+      ['Qi Condensation', 'Intern', 'Lv 1–10'],
+      ['Foundation Establishment', 'Associate', 'Lv 11–20'],
+      ['Golden Core', 'Team Lead', 'Lv 21–30'],
+      ['Nascent Soul', 'Manager', 'Lv 31–40'],
+      ['Spirit Transformation', 'Senior Manager', 'Lv 41–50'],
+      ['Void Refinement', 'Director', 'Lv 51–60'],
+      ['Body Integration', 'VP', 'Lv 61–70'],
+      ['Mahayana', 'CEO', 'Lv 71–80'],
+      ['Tribulation Transcendence', 'Chairman', 'Lv 81–90'],
+      ['Immortal Ascension', '', 'Lv 91+'],
+    ]);
+  });
+
+  it('marks only the realm the level is in as current, at both edges of a realm', () => {
+    const current = (level: number): number[] =>
+      realmRows(level).flatMap((r, i) => (r.current ? [i] : []));
+    expect(current(1)).toEqual([0]);
+    expect(current(10)).toEqual([0]);
+    expect(current(11)).toEqual([1]);
+    expect(current(60)).toEqual([5]);
+    expect(current(61)).toEqual([6]);
+    expect(current(90)).toEqual([8]);
+    expect(current(91)).toEqual([9]);
+    expect(current(3000)).toEqual([9]);
   });
 });
 
@@ -460,7 +491,10 @@ describe('tribulationCall', () => {
       name: 'Probation Review',
       next: 'Foundation Establishment',
     });
-    expect(tribulationCall(dueAt(60))).toEqual({ name: 'Heavenly Audit', next: 'Immortal' });
+    expect(tribulationCall(dueAt(90))).toEqual({
+      name: 'Heavenly Audit',
+      next: 'Immortal Ascension',
+    });
   });
 
   it('is null before the cap, short of the XP, and once the fight is on', () => {

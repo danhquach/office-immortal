@@ -17,7 +17,7 @@ import {
   type MessageKey,
 } from './i18n.ts';
 import { NAME_KINDS, type NameKind } from './names.ts';
-import { realmLabel, waveLabel } from './view.ts';
+import { realmLabel, realmRows, waveLabel } from './view.ts';
 
 const english = PACKS[0]!;
 const keys = (o: object) => Object.keys(o).sort();
@@ -115,10 +115,10 @@ describe('t and tn', () => {
     expect(tn('item', 'Iron Flying Sword')).toBe('Thiết Phi Kiếm');
   });
 
-  it('tells the Immortal grade from the Immortal realm', () => {
+  it('tells the Immortal grade from the Immortal Ascension realm', () => {
     setLang('vi');
     expect(tn('grade', 'Immortal')).toBe('Tiên Phẩm');
-    expect(tn('realm', 'Immortal')).toBe('Tiên Nhân');
+    expect(tn('realm', 'Immortal Ascension')).toBe('Phi Thăng');
   });
 
   it('fills each value once, as plain text: no value is read as a placeholder', () => {
@@ -143,11 +143,20 @@ describe('t and tn', () => {
     expect([1, 11, 21, 31].map(realmLabel)).toEqual([
       'Luyện Khí · Thực Tập Sinh',
       'Trúc Cơ · Nhân Viên',
-      'Kim Đan · Trưởng Phòng',
-      'Nguyên Anh · Giám Đốc',
+      'Kết Đan · Trưởng Nhóm',
+      'Nguyên Anh · Trưởng Phòng',
     ]);
-    expect(realmLabel(61)).toBe('Tiên Nhân');
-    expect(tabTitle(12, 3, true)).toBe('T12 · Đến lúc độ kiếp · 3 món đồ');
+    expect(realmLabel(81)).toBe('Độ Kiếp · Chủ Tịch');
+    expect(realmLabel(91)).toBe('Phi Thăng');
+    expect(tabTitle(12, 3, true)).toBe('T12 · Đến lúc Độ Thiên Kiếp · 3 món đồ');
+    const rows = realmRows(15);
+    expect(rows[1]).toEqual({
+      name: 'Trúc Cơ',
+      title: 'Nhân Viên',
+      levels: 'Cấp 11–20',
+      current: true,
+    });
+    expect(rows[9]?.levels).toBe('Cấp 91+');
   });
 
   it('keeps numbers in the same format in both languages', () => {

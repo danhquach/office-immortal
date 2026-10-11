@@ -109,31 +109,35 @@ export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipme
 }
 
 // Realms (docs/design.md §4): every LEVELS_PER_REALM levels is a cap that only
-// a Tribulation win breaks through. Up to Immortal Ascension; Immortal is endless.
+// a Tribulation win breaks through. Up to Tribulation Transcendence; Immortal
+// Ascension is endless.
 
 export interface Realm {
   readonly name: string;
-  /** The office cover; Immortal has none. */
+  /** The office cover; Immortal Ascension has none. */
   readonly title: string | null;
 }
 
 export const REALMS: readonly Realm[] = [
   { name: 'Qi Condensation', title: 'Intern' },
   { name: 'Foundation Establishment', title: 'Associate' },
-  { name: 'Golden Core', title: 'Manager' },
-  { name: 'Nascent Soul', title: 'Director' },
-  { name: 'Spirit Severing', title: 'VP' },
-  { name: 'Immortal Ascension', title: 'CEO' },
-  { name: 'Immortal', title: null },
+  { name: 'Golden Core', title: 'Team Lead' },
+  { name: 'Nascent Soul', title: 'Manager' },
+  { name: 'Spirit Transformation', title: 'Senior Manager' },
+  { name: 'Void Refinement', title: 'Director' },
+  { name: 'Body Integration', title: 'VP' },
+  { name: 'Mahayana', title: 'CEO' },
+  { name: 'Tribulation Transcendence', title: 'Chairman' },
+  { name: 'Immortal Ascension', title: null },
 ];
 
 export const LEVELS_PER_REALM = 10;
 /** Max HP and damage each realm reached adds, as a share. */
 export const REALM_BONUS = 0.1;
-/** The last capped level; past it, Immortal levels without end. */
+/** The last capped level; past it, Immortal Ascension levels without end. */
 export const LAST_CAP = LEVELS_PER_REALM * (REALMS.length - 1);
 
-/** Index into REALMS for a level: 1–10 is 0, 11–20 is 1, …, 61+ is Immortal. */
+/** Index into REALMS for a level: 1–10 is 0, 11–20 is 1, …, 91+ is Immortal Ascension. */
 export function realmOf(level: number): number {
   return Math.min(REALMS.length - 1, Math.floor((level - 1) / LEVELS_PER_REALM));
 }

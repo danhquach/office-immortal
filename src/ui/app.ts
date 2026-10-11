@@ -7,7 +7,7 @@
 // the player's choices (equip, sell, salvage, filter, spending) back in and
 // saves.
 
-import { derive, PATHS, type PathId, type StatId } from '../core/cultivator.ts';
+import { derive, PATHS, realmOf, type PathId, type StatId } from '../core/cultivator.ts';
 import {
   BAG_ROW,
   bagCost,
@@ -137,6 +137,7 @@ import {
   ICON_ROWS,
   iconCell,
   realmLabel,
+  realmRows,
   retireLabel,
   SUMMARY_ICONS,
   summaryIcon,
@@ -641,6 +642,95 @@ function kpi(
   return { box, icon, value };
 }
 
+/**
+ * The Realm chip's hover list: every realm, the current one highlighted. It
+ * opens on hover or keyboard focus and closes when the pointer has left and
+ * the chip has no keyboard focus (or on Escape). It reads the level from
+ * `level` when it opens; `refresh` redraws an open list after a breakthrough.
+ */
+function realmList(chip: HTMLElement, level: () => number): { refresh: () => void } {
+  const list = el('ul', 'realm-list');
+  list.id = 'realm-list';
+  list.setAttribute('role', 'tooltip');
+  // The summary band can clip what spills out, so the list opens in the top
+  // layer, placed under the chip.
+  list.popover = 'manual';
+  chip.tabIndex = 0;
+  chip.setAttribute('aria-describedby', list.id);
+  chip.after(list);
+  let shown = -1;
+  let hovered = false;
+  const isOpen = (): boolean => list.matches(':popover-open');
+  function fill(): void {
+    shown = realmOf(level());
+    list.replaceChildren(
+      ...realmRows(level()).map((row) => {
+        const li = el('li', row.current ? 'current' : '');
+        if (row.current) li.setAttribute('aria-current', 'true');
+        // The spaces keep a screen reader's words apart; the grid drops them.
+        li.append(
+          el('span', 'name', row.name),
+          ' ',
+          el('span', 'title', row.title),
+          ' ',
+          el('span', 'levels', row.levels),
+        );
+        // A tooltip's text is read flat, so say which row is current in words too.
+        if (row.current) li.append(el('span', 'sr-only', ` ${t('realm.current')}`));
+        return li;
+      }),
+    );
+  }
+  function show(): void {
+    if (isOpen()) return;
+    fill();
+    list.showPopover();
+    const r = chip.getBoundingClientRect();
+    list.style.top = `${r.bottom}px`;
+    list.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - list.offsetWidth - 4))}px`;
+    // Placed once, where it opened: a resize or scroll closes it. The scroll
+    // a focus may cause to bring the chip into view is let through first.
+    window.addEventListener('resize', hide);
+    requestAnimationFrame(() => {
+      if (isOpen()) window.addEventListener('scroll', hide, true);
+    });
+  }
+  function hide(): void {
+    window.removeEventListener('resize', hide);
+    window.removeEventListener('scroll', hide, true);
+    if (isOpen()) list.hidePopover();
+  }
+  const over = (e: PointerEvent): void => {
+    hovered = true;
+    if (e.pointerType !== 'touch') show();
+  };
+  // Moving from the chip onto the list (or back) keeps it open; so does
+  // keyboard focus, but not the focus a mouse click leaves behind.
+  const out = (e: PointerEvent): void => {
+    const to = e.relatedTarget as Node | null;
+    if (to && (chip.contains(to) || list.contains(to))) return;
+    hovered = false;
+    // A tap's finger lifts at once: the focus it left keeps the list open until blur.
+    if (e.pointerType !== 'touch' && !chip.matches(':focus-visible')) hide();
+  };
+  for (const node of [chip, list]) {
+    node.addEventListener('pointerenter', over);
+    node.addEventListener('pointerleave', out);
+  }
+  chip.addEventListener('focus', show);
+  chip.addEventListener('blur', () => {
+    if (!hovered) hide();
+  });
+  chip.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+  });
+  return {
+    refresh: () => {
+      if (isOpen() && realmOf(level()) !== shown) fill();
+    },
+  };
+}
+
 function panel(className: string, title: MessageKey): { box: HTMLElement; heading: HTMLElement } {
   const box = el('section', `panel ${className}`);
   const heading = elt('h2', '', title);
@@ -1044,6 +1134,7 @@ function play(
   const kEssence = kpi('kpi.essence', summaryIcon('essence'));
   let realmIcon = summaryIcon('realm', state.cultivator.level);
   kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box);
+  const realms = realmList(kRealm.box, () => state.cultivator.level);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
   const character = panel('character', 'character.title');
@@ -1779,6 +1870,7 @@ function play(
     const c = state.cultivator;
     kPath.value.textContent = tn('path', PATHS[c.path].name);
     kRealm.value.textContent = realmLabel(c.level);
+    realms.refresh();
     // A breakthrough swaps the realm's icon.
     const icon = summaryIcon('realm', c.level);
     if (icon !== realmIcon && kRealm.icon) {

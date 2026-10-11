@@ -33,8 +33,9 @@ All shipped on `main`:
   quality, in five grades from Mortal to Immortal.
 - **Sell and salvage** ([#6]). Sell what you don't want for Spirit Stones or
   melt it into Spirit Essence, by hand or with an auto filter.
-- **Realms** ([#7]). Climb from Qi Condensation (Intern) to Immortal Ascension
-  (CEO) and beyond, with a Tribulation boss at each realm.
+- **Realms** ([#7]). Climb ten realms from Qi Condensation (Intern) through
+  Tribulation Transcendence (Chairman) to Immortal Ascension, with a
+  Tribulation boss at each cap. Hover the Realm chip to see them all.
 - **Reincarnation** ([#8]). Reset for Dao Insight and permanent bonuses.
 - **Overtime Cultivation** ([#5]). Progress continues while the tab is in the
   background or closed, up to a cap.

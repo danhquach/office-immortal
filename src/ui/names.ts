@@ -1,6 +1,5 @@
 // The names the sim hands the UI, by kind: language packs translate each kind
-// on its own, as one English name can mean two things (the Immortal grade and
-// the Immortal realm).
+// on its own, as one English name could mean two things in different kinds.
 
 import { PATHS, REALMS } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, TRIBULATIONS } from '../core/floors.ts';
