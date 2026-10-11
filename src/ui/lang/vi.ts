@@ -252,6 +252,21 @@ const vi: Pack = {
     'menu.notify': 'Báo khi rơi đồ Tiên Phẩm và khi đến Độ Thiên Kiếp',
     'menu.blocked': 'Thông báo bị chặn',
     'menu.blockedHint': 'Hãy cho phép thông báo trong cài đặt trình duyệt.',
+    'menu.backup': 'Mã lưu',
+    'menu.backupHint':
+      'Giữ một bản dữ liệu lưu ngoài trình duyệt. Xuất sẽ sao chép nó thành một đoạn mã; dán mã vào bên dưới rồi Nhập để tải lại.',
+    'menu.export': 'Xuất mã lưu',
+    'menu.exported': 'Đã sao chép mã lưu. Hãy cất nó ở nơi an toàn.',
+    'menu.exportManual': 'Trình duyệt không cho sao chép. Hãy chọn mã ở trên và tự sao chép.',
+    'menu.exportField': 'Mã lưu của bạn',
+    'menu.importField': 'Dán mã lưu',
+    'menu.import': 'Nhập…',
+    'menu.importEmpty': 'Hãy dán mã lưu trước.',
+    'menu.importTooBig': 'Mã này quá dài, không phải mã lưu. Không có gì thay đổi.',
+    'menu.importBad': 'Đây không phải mã lưu của trò chơi này. Không có gì thay đổi.',
+    'menu.importText':
+      'Thay lượt chơi hiện tại bằng dữ liệu này ({summary})? Lượt chơi hiện tại sẽ mất nếu bạn chưa xuất mã.',
+    'menu.importYes': 'Thay lượt chơi',
     'menu.reset': 'Xóa tiến trình',
     'menu.resetHint':
       'Bắt đầu lại từ bước chọn Con Đường. Mọi lượt chơi, vật phẩm và nội tại đều mất.',

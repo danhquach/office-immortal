@@ -120,8 +120,13 @@ export function decodeSave(raw: unknown): Save | null {
 
 /** Writes the save; returns false when storage refuses (full, blocked). */
 export function writeSave(storage: SaveStorage, state: GameState, savedAt: number): boolean {
+  return writeRaw(storage, encodeSave(state, savedAt));
+}
+
+/** Writes save text from encodeSave; returns false when storage refuses (full, blocked). */
+export function writeRaw(storage: SaveStorage, raw: string): boolean {
   try {
-    storage.setItem(SAVE_KEY, encodeSave(state, savedAt));
+    storage.setItem(SAVE_KEY, raw);
     return true;
   } catch {
     return false;

@@ -125,9 +125,12 @@ How the itch.io build differs from GitHub Pages:
   so another game there could read the cloud sign-in token. The itch.io build
   leaves the cloud settings out and the menu doesn't offer it.
 - **Its own local save.** Saves are kept per site, so progress on itch.io and
-  on GitHub Pages are separate. On that shared origin another game can also
-  clear or overwrite the local save; there is no way to stop that from inside
-  the page.
+  on GitHub Pages are separate. On that shared origin another game can clear
+  or overwrite `localStorage`, so every save also goes to IndexedDB and the
+  game loads the newest valid copy (`docs/design.md` §11).
+- **Save code backup.** Menu, Settings, Save code: **Export** copies the save
+  as a text code to keep outside the browser. To restore (new browser, cleared
+  site data), paste the code into the field, press **Import** and confirm.
 - **No pop-out.** The browser refuses Document Picture-in-Picture inside a
   frame, so the button is hidden. Browsers may also refuse notifications
   inside the frame.
