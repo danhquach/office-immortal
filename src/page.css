@@ -323,6 +323,7 @@ select {
   background-repeat: no-repeat;
   background-size: 256px 256px;
   background-position: 0 0;
+  image-rendering: pixelated;
   animation: avatar-frames 0.8s steps(4) infinite;
 }
 .paths button:is(:hover, :focus-visible) .avatar {
@@ -335,8 +336,10 @@ select {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .paths .avatar {
+  .paths .avatar,
+  .paths button:is(:hover, :focus-visible) .avatar {
     animation: none;
+    background-position: 0 0;
   }
 }
 
