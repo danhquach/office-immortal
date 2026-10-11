@@ -1453,29 +1453,44 @@ button.primary {
   height: 100vh;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
-  padding: 0.3rem 0.5rem;
+  gap: 0.1rem;
+  padding: 0.2rem 0.5rem;
   font-size: 0.8rem;
+  line-height: 1.25;
+}
+/* The text lines keep their height; the 160 px is shared out by the strip. */
+.mini .file,
+.mini .status,
+.mini .toast {
+  flex-shrink: 0;
 }
 .mini .file {
   font-family: ui-monospace, monospace;
   color: var(--muted);
 }
 .mini .strip {
-  padding: 0.4rem 0.6rem;
+  padding: 0.2rem 0.6rem;
 }
-/* The status line already says the floor and the fight; HP shows as bars only. */
+/* The status line already says the floor and the fight; HP shows as bars
+   only, with no "vs" between them and no gap above them. */
 .mini .where,
+.mini .vs,
 .mini .fighter .name,
 .mini .fighter .hp {
   display: none;
+}
+.mini .fighters {
+  grid-template-columns: 1fr 1fr;
+}
+.mini .fighter {
+  gap: 0;
 }
 /* The whole stage at 3/8 (208 px tall becomes 78), sprites and background
    together, so it fits the 160 px window. The pop-out is Chromium-only, which
    has zoom. */
 .mini .stage {
   zoom: 0.375;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.15rem;
 }
 /* At 3/8 a damage number would be about 5 px: the HP bars say it instead. */
 .mini .dmg {
