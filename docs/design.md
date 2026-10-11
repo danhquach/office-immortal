@@ -379,6 +379,39 @@ Saved to browser storage, validated on load against an allow-list; a bad
 save starts a new run instead of crashing. The save is versioned JSON, written
 on every autosave, and is always the copy the game plays from.
 
+### Backup copy and save code
+
+- **IndexedDB copy.** Every save also goes to IndexedDB, and each write goes
+  ahead whether or not the other succeeds. On start the game reads both copies,
+  runs each through the same allow-list, and plays the newest one that passes
+  (the browser storage copy on a tie); a broken copy is skipped, never
+  preferred, and so is a backup stamped more than a minute in the future
+  (both copies are stamped by this browser's clock). So a `localStorage.clear()` by another page on the same origin
+  (itch.io serves every game from one), or a full browser storage, doesn't
+  lose the run: the next start loads the IndexedDB copy, and a running tab
+  that sees the clear writes its save straight back. Where IndexedDB is
+  missing, blocked or doesn't answer within 1.5 s, the game runs on browser
+  storage alone. A save taken from the cloud (below) loads from browser
+  storage whatever its stamp, since another device's clock may be behind.
+  Reset progress stops autosaving, deletes the IndexedDB copy first, then
+  browser storage, and is refused if either refuses.
+- **Save code.** Menu, Settings, Save code. **Export** copies the save to the
+  clipboard as one line of text (`OI1:` and the save JSON in base64); where
+  the browser won't copy, the code is shown to copy by hand. Keep it anywhere
+  outside the browser. To restore, paste it into the field and press
+  **Import**: the game shows the code's realm, level, floor and last-played
+  time, and replaces the current run only after the player confirms. Overtime
+  Cultivation replays from the code's own time stamp.
+- **Import is untrusted input.** At most twice the longest possible code is
+  looked at; only ASCII spaces and line breaks are ignored; the rest must be
+  the tag and plain base64 of valid UTF-8, and the save inside goes through the
+  load allow-list. Anything else (too long, wrong tag, look-alike or invisible
+  characters, a hostile save) is refused with a short message and nothing
+  changes. The pasted text is cleared from the field once read and is never
+  shown back, put in the title or logged; the field has spell check off.
+- **Clearing all site data** in the browser deletes both copies. Only an
+  exported save code (or the cloud save) survives that.
+
 ### Cloud save
 
 Optional, off until the player turns it on (Menu, Settings, Cloud save). It

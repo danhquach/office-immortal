@@ -1655,3 +1655,22 @@ button.primary {
   display: grid;
   gap: 0.35rem;
 }
+/* Save code: the export code to copy by hand, and the paste field. */
+.settings textarea.code {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.4rem;
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.3rem;
+  font: inherit;
+  font-size: 0.75rem;
+  word-break: break-all;
+  resize: vertical;
+}
+.settings textarea.code[hidden] {
+  display: none;
+}

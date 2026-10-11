@@ -64,15 +64,23 @@ import { createCloud, type CloudMessage } from '../storage/cloud.ts';
 import { readCloudConfig } from '../storage/cloud-config.ts';
 import { ADOPT_KEY } from '../storage/cloud-meta.ts';
 import {
+  browserIdb,
+  clearBoth,
+  idbBackup,
+  loadNewest,
+  writeBoth,
+  type Backup,
+} from '../storage/backup.ts';
+import {
   browserStorage,
-  clearSave,
   encodeSave,
   loadSave,
   SAVE_KEY,
-  writeSave,
+  type Save,
   type SaveStorage,
 } from '../storage/save.ts';
 import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
+import { exportCode, importCode } from '../storage/transfer.ts';
 import {
   dropToast,
   faviconHref,
@@ -316,7 +324,8 @@ function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null 
     storage,
     now: Date.now,
     visible: () => !document.hidden,
-    onAdopt: () => current && start(current.root, current.storage),
+    // The adopted save is in browser storage; its stamp may be older than the backup's.
+    onAdopt: () => current && start(current.root, current.storage, 'local'),
     onNote: (code) => {
       cloudNote = code;
       showCloudNote?.(code);
@@ -325,8 +334,23 @@ function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null 
   return sync;
 }
 
-/** Loads the saved run and replays the time away, or offers a new run when there is none. */
-export function start(root: HTMLElement, storage: SaveStorage | null = browserStorage()): void {
+/** The IndexedDB copy of the save, opened on first use. */
+let backupCopy: Backup | null = null;
+const backup = (): Backup => (backupCopy ??= idbBackup(browserIdb()));
+/** Bumped by every start, so a load that answers after a newer start is dropped. */
+let starts = 0;
+
+/**
+ * Loads the saved run and replays the time away, or offers a new run when there
+ * is none. The run loaded is the newest copy in browser storage or the backup;
+ * `from` overrides that: 'local' for a save just put in browser storage (the
+ * cloud's, whose stamp may be older than the backup's), or a save to play.
+ */
+export function start(
+  root: HTMLElement,
+  storage: SaveStorage | null = browserStorage(),
+  from?: 'local' | Save,
+): void {
   run.stop();
   // Before play() saves over the local run: the cloud check compares against it.
   cloudSync(root, storage)?.begin();
@@ -334,7 +358,16 @@ export function start(root: HTMLElement, storage: SaveStorage | null = browserSt
   showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
   setLang(pickedLang ?? readLang(storage, navigator.languages ?? []));
   document.documentElement.lang = lang().code;
-  const saved = storage && loadSave(storage);
+  const token = ++starts;
+  const begin = (saved: Save | null): void => {
+    if (token === starts) resume(root, storage, saved);
+  };
+  if (from === 'local') begin(storage && loadSave(storage));
+  else if (from) begin(from);
+  else void loadNewest(storage, backup(), Date.now()).then(begin);
+}
+
+function resume(root: HTMLElement, storage: SaveStorage | null, saved: Save | null): void {
   if (saved) {
     const { state, summary } = catchUp(saved.state, offlineSeconds(saved.savedAt, Date.now()));
     // play() stamps the save straight away, so a crash can't replay this time twice.
@@ -1623,6 +1656,8 @@ function play(
     resetYes.hidden = true;
   };
   let resetting = false;
+  /** Reset progress is deleting the save: save() writes nothing until the new run. */
+  let clearing = false;
   const resetYes = buttonT('menu.resetYes', 'primary', () => {
     if (resetting) return;
     resetting = true;
@@ -1640,7 +1675,10 @@ function play(
         return;
       }
     }
-    if (storage && !clearSave(storage)) {
+    // No autosave while the copies go, or it would write this run back.
+    clearing = true;
+    if (!(await clearBoth(storage, backup()))) {
+      clearing = false;
       refuse(() => t('menu.resetRefused'));
       return;
     }
@@ -1664,6 +1702,95 @@ function play(
     resetBox.hidden = false;
     resetYes.hidden = false;
     resetNo.focus();
+  });
+
+  // Save code: Export copies the save as text; Import takes one back, after asking.
+  /** The line under the save code tools: what the last action did; null for nothing. */
+  let codeShown: (() => string) | null = null;
+  const codeMsg = el('p', 'muted');
+  codeMsg.setAttribute('role', 'status');
+  say(() => (codeMsg.textContent = codeShown ? codeShown() : ''));
+  const showCode = (text: (() => string) | null): void => {
+    codeShown = text;
+    codeMsg.textContent = text ? text() : '';
+  };
+  // Where the browser won't copy (some frames), the code is shown to copy by hand.
+  const exportBox = el('textarea', 'code');
+  exportBox.readOnly = true;
+  exportBox.rows = 3;
+  exportBox.hidden = true;
+  attr(exportBox, 'aria-label', 'menu.exportField');
+  const exportBtn = buttonT('menu.export', '', () => {
+    save();
+    const code = exportCode(encodeSave(state, Date.now()));
+    const manual = (): void => {
+      exportBox.value = code;
+      exportBox.hidden = false;
+      exportBox.select();
+      showCode(() => t('menu.exportManual'));
+    };
+    exportBox.hidden = true;
+    exportBox.value = '';
+    if (!navigator.clipboard) return manual();
+    navigator.clipboard.writeText(code).then(() => showCode(() => t('menu.exported')), manual);
+  });
+  const importField = el('label', 'field');
+  const importCaption = document.createTextNode('');
+  say(() => (importCaption.data = t('menu.importField')));
+  // The pasted code is never echoed: not in a message, the title or a log.
+  const importBox = el('textarea', 'code');
+  importBox.rows = 3;
+  importBox.autocomplete = 'off';
+  // Off, so no spell or grammar checker sends a code anywhere.
+  for (const box of [importBox, exportBox]) {
+    box.spellcheck = false;
+    box.dataset.gramm = 'false';
+    box.dataset.enableGrammarly = 'false';
+  }
+  importField.append(importCaption, importBox);
+  /** The save a checked code holds, waiting for the player's yes. */
+  let imported: Save | null = null;
+  const importText = el('p');
+  const importYes = buttonT('menu.importYes', 'primary', () => {
+    if (!imported) return;
+    const save = imported;
+    imported = null;
+    menu.close();
+    // start() stops this run first; play() then writes the imported save to both copies.
+    start(root, storage, save);
+  });
+  const importNo = buttonT('confirm.cancel', '', () => {
+    imported = null;
+    importConfirm.hidden = true;
+    importBtn.focus();
+  });
+  const importConfirm = el('div', 'confirm');
+  importConfirm.setAttribute('role', 'alert');
+  importConfirm.append(importText, importYes, importNo);
+  importConfirm.hidden = true;
+  say(() => {
+    if (imported)
+      importText.textContent = t('menu.importText', { summary: saveSummary(imported, Date.now()) });
+  });
+  const importBtn = buttonT('menu.import', '', () => {
+    const result = importCode(importBox.value);
+    importBox.value = '';
+    imported = null;
+    importConfirm.hidden = true;
+    if (!result.ok) {
+      const key = (
+        { empty: 'menu.importEmpty', tooBig: 'menu.importTooBig', bad: 'menu.importBad' } as const
+      )[result.why];
+      showCode(() => t(key));
+      return;
+    }
+    showCode(null);
+    imported = result.save;
+    importText.textContent = t('menu.importText', {
+      summary: saveSummary(result.save, Date.now()),
+    });
+    importConfirm.hidden = false;
+    importNo.focus();
   });
 
   /** The Settings theme choice; start() already put the saved one on the page. */
@@ -1701,6 +1828,20 @@ function play(
       settings.append(elt('h3', '', 'menu.notifications'), noticeBtn);
     }
     if (cloudUi) settings.append(...cloudUi.menu);
+    const codeRow = el('div', 'cloud-row');
+    codeRow.append(exportBtn);
+    const importRow = el('div', 'cloud-row');
+    importRow.append(importBtn);
+    settings.append(
+      elt('h3', '', 'menu.backup'),
+      elt('p', 'muted hint', 'menu.backupHint'),
+      codeRow,
+      exportBox,
+      importField,
+      importRow,
+      importConfirm,
+      codeMsg,
+    );
     settings.append(
       elt('h3', '', 'menu.reset'),
       elt('p', 'muted hint', 'menu.resetHint'),
@@ -2408,10 +2549,12 @@ function play(
     'storage',
     (e) => {
       if (!storage) return;
-      if ((e.key === null || e.key === SAVE_KEY) && e.newValue === null) start(root, storage);
+      if (e.key === SAVE_KEY && e.newValue === null) start(root, storage);
       // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
       // Only an adoption writes this key, so autosaving tabs can't set each other off.
-      else if (e.key === ADOPT_KEY) start(root, storage);
+      else if (e.key === ADOPT_KEY) start(root, storage, 'local');
+      // Something else cleared browser storage: put this run's save straight back.
+      else if (e.key === null) save();
     },
     { signal },
   );
@@ -2489,10 +2632,11 @@ function play(
 
   /** Plays up to now, then saves, so the stamp and the state agree. */
   function save(): void {
-    if (!storage) return;
+    if (clearing) return;
     step();
     const savedAt = Date.now();
-    if (writeSave(storage, state, savedAt)) cloud?.offer(encodeSave(state, savedAt), savedAt);
+    const raw = encodeSave(state, savedAt);
+    if (writeBoth(storage, backup(), raw)) cloud?.offer(raw, savedAt);
   }
 
   scope.every(TICK_MS, step);
