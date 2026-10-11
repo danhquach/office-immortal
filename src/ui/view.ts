@@ -53,7 +53,7 @@ import {
 import { canEquip, canFaceTribulation, requiredRealm, type GameState } from '../core/sim.ts';
 import { t, tn, type MessageKey } from './i18n.ts';
 
-/** The Path picker's one-liner: office cover, role, primary stat (docs/design.md §3). */
+/** The Path picker's one-liner: role, primary stat (docs/design.md §3). */
 export function pathBlurb(id: PathId): string {
   return t(`pathBlurb.${id}`);
 }
