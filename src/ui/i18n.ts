@@ -109,8 +109,49 @@ export function tn(kind: NameKind, name: string): string {
   return Object.hasOwn(names, name) ? (names[name] as string) : name;
 }
 
-/** An enemy's name: elites are "Elite <demon>" in the sim. */
-export function enemyName(kind: string, name: string): string {
-  if (kind !== 'elite' || !name.startsWith('Elite ')) return tn('enemy', name);
-  return t('enemy.elite', { name: tn('enemy', name.slice('Elite '.length)) });
+/** The enemy kinds that show a tier in front of their name; demons show none. */
+export type EnemyTier = 'elite' | 'boss' | 'tribulation';
+
+const TIER_KEYS: Readonly<Record<EnemyTier, MessageKey>> = {
+  elite: 'enemy.tier.elite',
+  boss: 'enemy.tier.boss',
+  tribulation: 'enemy.tier.tribulation',
+};
+
+/** One piece of a name on the page: the tier unit (brackets included) or the name itself. */
+export interface NamePart {
+  readonly text: string;
+  /** Set on the tier unit only. */
+  readonly tier?: EnemyTier;
+}
+
+/**
+ * An enemy's name in display order: the tier unit first in every language
+ * ("(Elite)", "(Tinh Anh)"), then the translated name. Demons, and any kind
+ * not on the list, are the name alone. Elites are "Elite <demon>" in the sim.
+ */
+export function enemyNameParts(kind: string, name: string): readonly NamePart[] {
+  const tier = Object.hasOwn(TIER_KEYS, kind) ? (kind as EnemyTier) : null;
+  const bare = tier === 'elite' && name.startsWith('Elite ') ? name.slice('Elite '.length) : name;
+  const named: NamePart = { text: tn('enemy', bare) };
+  if (!tier) return [named];
+  return [{ text: t('enemy.tier.wrap', { tier: t(TIER_KEYS[tier]) }), tier }, named];
+}
+
+/**
+ * The spans a name is drawn as, in order: the tier unit's classes pick its line
+ * and colour in page.css (`.fighter .enemy-tier`), the name's span has none.
+ */
+export function nameSpans(
+  parts: readonly NamePart[],
+): readonly { readonly className: string; readonly text: string }[] {
+  return parts.map((p) => ({
+    className: p.tier ? `enemy-tier enemy-tier--${p.tier}` : '',
+    text: p.text,
+  }));
+}
+
+/** Name parts as one plain string, e.g. "(Elite) Reply-All Swarm" (the tooltip, any text-only use). */
+export function plainName(parts: readonly NamePart[]): string {
+  return parts.map((p) => p.text).join(' ');
 }

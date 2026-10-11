@@ -54,7 +54,11 @@ const messages = {
   'xp.due': 'Tribulation due',
   'xp.spokenDue': 'Level {n}, Tribulation due',
   'xp.spoken': 'Level {n}, {xp} of {next} XP to the next level',
-  'enemy.elite': 'Elite {name}',
+  // The tier in front of a ranked enemy's name; the brackets are part of it.
+  'enemy.tier.wrap': '({tier})',
+  'enemy.tier.elite': 'Elite',
+  'enemy.tier.boss': 'Boss',
+  'enemy.tier.tribulation': 'Tribulation',
 
   'trial.due': 'Tribulation due',
   'trial.call': '{name}: win it to reach {next}. Click to face it now.',

@@ -1,7 +1,9 @@
 /* Colours: every text colour here passes 4.5:1 on every surface of its theme
    (checked by src/ui/contrast.test.ts). Text vars: --ink, --muted, --up, --down, --grade-*.
-   Surfaces: --bg, --panel, --head (panel headers). --grid is the sheet's cell lines. The combat strip pairs --strip-ink and --strip-hurt with --strip-bg; its text sits on
-   --strip-bg chips over the stage art. The XP bar (one look in both themes)
+   Surfaces: --bg, --panel, --head (panel headers). --grid is the sheet's cell lines.
+   The combat strip pairs --strip-ink, --strip-hurt and the enemy tier colours
+   (--strip-elite, --strip-boss, --strip-tribulation) with --strip-bg; its text
+   sits on --strip-bg chips over the stage art. The XP bar (one look in both themes)
    pairs --xp-ink with --xp-fill and --xp-track-ink with --xp-track; fill and track differ by 3:1. */
 :root {
   color-scheme: light;
@@ -16,6 +18,9 @@
   --strip-bg: #1d2430;
   --strip-ink: #e8ecf2;
   --strip-hurt: #ff7a66;
+  --strip-elite: #f2c94c;
+  --strip-boss: #7aaeff;
+  --strip-tribulation: #c8a2ff;
   --hp-you: #3fb56b;
   --hp-foe: #e0533d;
   --xp-track: #2b2618;
@@ -44,6 +49,9 @@
   --accent: #7fb0ff;
   --strip-bg: #0e1117;
   --strip-ink: #e8ecf2;
+  --strip-elite: #f2c94c;
+  --strip-boss: #7aaeff;
+  --strip-tribulation: #c8a2ff;
   --up: #6fd38a;
   --down: #ff8a80;
   --grade-mortal: #a9aeb5;
@@ -820,20 +828,14 @@ select {
 .vs {
   align-self: center;
 }
-/* Name and HP on one line, the bar under them. */
+/* The name on its own row at every width, then the bar, then HP; the foe's
+   side is the same, mirrored. The name keeps the fighter's full column. */
 .fighter {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: 'name hp' 'bar bar';
-  gap: 0.15rem 0.5rem;
-}
-.foe {
-  grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: 'hp name' 'bar bar';
-}
-.fighter .name {
-  grid-area: name;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'name' 'bar' 'hp';
+  gap: 0.15rem;
 }
 .fighter .hp {
   grid-area: hp;
@@ -841,18 +843,36 @@ select {
 .fighter .bar {
   grid-area: bar;
 }
-/* Narrow: too tight for both on one line; name, bar, then HP. */
-@media (max-width: 767px) {
-  .fighter,
-  .foe {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'name' 'bar' 'hp';
-  }
-}
+/* 2 lines always reserved, so nothing below moves when the enemy changes: a
+   ranked enemy's tier on line 1 and its name on line 2, a demon's name on
+   line 1. Long names wrap instead of being cut to one line; the 2-line clamp
+   is only a safety net and the title attribute holds the full name. */
 .fighter .name {
+  grid-area: name;
+  line-height: 1.3;
+  min-height: 2.6em;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+}
+/* The enemy's tier, brackets included: a line of its own, bold, in its
+   colour, never split. */
+.fighter .enemy-tier {
+  display: block;
+  font-weight: 700;
   white-space: nowrap;
+}
+.fighter .enemy-tier--elite {
+  color: var(--strip-elite);
+}
+.fighter .enemy-tier--boss {
+  color: var(--strip-boss);
+}
+.fighter .enemy-tier--tribulation {
+  color: var(--strip-tribulation);
 }
 .foe {
   text-align: right;
@@ -860,6 +880,11 @@ select {
 /* Narrow: a Path (128 px) and a boss (192 px) still fit side by side at 375 px,
    the narrowest width the views support (docs/design.md §14). */
 @media (max-width: 479px) {
+  /* Both fighters' names (never the tier) a step smaller, so the longest
+     enemy name fits its line under the tier at 375 px; the sides stay alike. */
+  .fighter .name > :not(.enemy-tier) {
+    font-size: 0.8rem;
+  }
   .strip {
     padding: 0.5rem;
   }
