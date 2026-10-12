@@ -864,8 +864,7 @@ function panel(className: string, title: MessageKey): { box: HTMLElement; headin
 /**
  * A grid cell: grade initial (top-left), icon (centred) and the gear badge
  * (bottom-right: ▲ a strict upgrade, ▼ a strict downgrade, a gold dash for
- * mixed gains and losses, hidden otherwise);
- * the grade colour is its border.
+ * mixed gains and losses, hidden otherwise); the grade colour is its border.
  */
 function cell(): HTMLButtonElement {
   const b = el('button', 'cell');
