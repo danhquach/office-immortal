@@ -19,6 +19,8 @@ import {
   refineReach,
   rerollCost,
   rollPoints,
+  type BulkAction,
+  type BulkPreview,
 } from '../core/economy.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
@@ -65,7 +67,7 @@ import {
   requiredRealm,
   type GameState,
 } from '../core/sim.ts';
-import { t, tn, type MessageKey } from './i18n.ts';
+import { lang, t, tn, type MessageKey } from './i18n.ts';
 
 /** The Path picker's one-liner: role, primary stat (docs/design.md §3). */
 export function pathBlurb(id: PathId): string {
@@ -556,21 +558,97 @@ export function freshDrops(prev: GameState, next: GameState): Item[] {
 }
 
 /**
- * The bulk-sell confirmation, e.g. "Sell 12 items (best: Spirit) for 340 Spirit
- * Stones?", and a note when refined items below the grade are kept.
+ * The `data-tint` a select wears for `value` (app.ts tintChoice): the value
+ * itself when it is exactly one of `allowed`, else null (no tint). A value
+ * tampered with in devtools never becomes an attribute or a class.
  */
-export function sellBelowLabel(p: {
-  count: number;
-  highest: GradeId | null;
-  stones: number;
-  kept?: number;
-}): string {
-  const note = p.kept ? ` ${t('sell.keptRefined')}` : '';
-  if (p.count === 0 || p.highest === null) return t('sell.nothing') + note;
-  const grade = tn('grade', GRADES[p.highest].name);
-  return (
-    t(p.count === 1 ? 'sell.one' : 'sell.many', { n: p.count, grade, stones: p.stones }) + note
-  );
+export function tintOf(value: string, allowed: readonly string[]): string | null {
+  return allowed.includes(value) ? value : null;
+}
+
+/** A run of text; `grade` marks one to show in that grade's colour (its name stays as text). */
+export interface TextPart {
+  text: string;
+  grade?: GradeId;
+}
+
+/** Sentence-ending marks a lost-placeholder grade name goes in front of (gradeRuns). */
+const TRAILING_MARKS = new Set([...'?!.:;…。？！：；', ' ', '\u00a0']);
+
+/**
+ * `message` as text runs, its `{grade}` placeholder replaced by a run of
+ * `name` tagged with `grade`. A message that lost its placeholder (a pack
+ * typo; i18n.test checks for it) still names the grade, in brackets before
+ * the sentence's closing marks: "Sell 2 items (Earth)?".
+ */
+export function gradeRuns(message: string, name: string, grade: GradeId): TextPart[] {
+  const parts: TextPart[] = [];
+  message.split('{grade}').forEach((text, i) => {
+    if (i > 0) parts.push({ text: name, grade });
+    if (text) parts.push({ text });
+  });
+  if (parts.some((part) => part.grade)) return parts;
+  // Walked back by hand, not by regex, so no message can make it backtrack.
+  let end = message.length;
+  while (end > 0 && TRAILING_MARKS.has(message.charAt(end - 1))) end -= 1;
+  const head = message.slice(0, end);
+  const tail = message.slice(end);
+  return [
+    ...(head ? [{ text: `${head} (` }] : [{ text: '(' }]),
+    { text: name, grade },
+    { text: `)${tail}` },
+  ];
+}
+
+/**
+ * A bulk sell or salvage confirmation (§7), e.g. "Sell 12 items (highest grade:
+ * Spirit) for 340 Spirit Stones?", as text runs: the highest grade's name is
+ * its own run, wherever the language puts it, so it can wear its grade colour.
+ * A note follows when refined items below the grade are kept.
+ */
+export function bulkParts(
+  action: BulkAction,
+  p: { count: number; highest: GradeId | null; total: number; kept?: number },
+): TextPart[] {
+  const note: TextPart[] = p.kept ? [{ text: ` ${t('bulk.keptRefined')}` }] : [];
+  if (p.count === 0 || p.highest === null) return [{ text: t(`${action}.nothing`) }, ...note];
+  const grade = p.highest;
+  const name = tn('grade', GRADES[grade].name);
+  // Every other placeholder is filled first; {grade} is left in to split on.
+  // The language's own plural rule picks the form (Vietnamese has one).
+  const form = new Intl.PluralRules(lang().code).select(p.count) === 'one' ? 'one' : 'many';
+  const message = t(`${action}.${form}`, { n: p.count, total: p.total });
+  const parts = gradeRuns(message, name, grade);
+  return [...parts, ...note];
+}
+
+/** The bulk confirmation as one string (see bulkParts). */
+export function bulkLabel(
+  action: BulkAction,
+  p: { count: number; highest: GradeId | null; total: number; kept?: number },
+): string {
+  return bulkParts(action, p)
+    .map((part) => part.text)
+    .join('');
+}
+
+/**
+ * What the bulk confirmation shows for `action` with `preview` (§7): the
+ * message (as text runs and as one string) and its Yes and dismiss labels.
+ * Nothing to take (count 0) offers only "OK", and `yes` is null.
+ */
+export function bulkAsk(
+  action: BulkAction,
+  preview: BulkPreview,
+): { parts: TextPart[]; text: string; yes: string | null; no: string } {
+  const can = preview.count > 0;
+  const parts = bulkParts(action, preview);
+  return {
+    parts,
+    text: parts.map((part) => part.text).join(''),
+    yes: can ? t(`confirm.${action}`) : null,
+    no: t(can ? 'confirm.cancel' : 'confirm.ok'),
+  };
 }
 
 /** Item types in the icon atlas's column order (tools/art/manifest.json "icons"). */

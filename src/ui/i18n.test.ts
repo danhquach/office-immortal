@@ -80,6 +80,15 @@ describe('language packs', () => {
     });
   }
 
+  it('names the highest grade exactly once in every bulk confirmation', () => {
+    for (const pack of PACKS) {
+      for (const key of ['sell.one', 'sell.many', 'salvage.one', 'salvage.many'] as const) {
+        expect(pack.messages[key].split('{grade}'), `${pack.code} ${key}`).toHaveLength(2);
+        expect(pack.messages[key], `${pack.code} ${key}`).toMatch(/\{total\}/);
+      }
+    }
+  });
+
   it('keeps the grade initials apart in every pack', () => {
     for (const pack of PACKS) {
       const initials = Object.entries(pack.messages)

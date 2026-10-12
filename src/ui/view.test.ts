@@ -45,8 +45,12 @@ import {
   retireLines,
   respecView,
   STAT_GROUPS,
-  sellBelowLabel,
+  bulkAsk,
+  bulkLabel,
+  bulkParts,
+  gradeRuns,
   soulsLine,
+  tintOf,
   statRows,
   tribulationBanner,
   tribulationCall,
@@ -55,7 +59,7 @@ import {
   xpBar,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
-import { DEFAULT_LANG, PACKS, setLang, t } from './i18n.ts';
+import { DEFAULT_LANG, PACKS, setLang, t, tn } from './i18n.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
@@ -1155,37 +1159,249 @@ describe('overtimeLines', () => {
   });
 });
 
-describe('sellBelowLabel', () => {
+describe('bulkLabel: sell', () => {
   it('names the count, the highest grade and the price', () => {
-    expect(sellBelowLabel({ count: 12, highest: 'spirit', stones: 340 })).toBe(
+    expect(bulkLabel('sell', { count: 12, highest: 'spirit', total: 340 })).toBe(
       'Sell 12 items (highest grade: Spirit) for 340 Spirit Stones?',
     );
-    expect(sellBelowLabel({ count: 1, highest: 'mortal', stones: 2 })).toBe(
+    expect(bulkLabel('sell', { count: 1, highest: 'mortal', total: 2 })).toBe(
       'Sell 1 item (highest grade: Mortal) for 2 Spirit Stones?',
     );
   });
 
   it('says when there is nothing to sell', () => {
-    expect(sellBelowLabel({ count: 0, highest: null, stones: 0 })).toBe(
+    expect(bulkLabel('sell', { count: 0, highest: null, total: 0 })).toBe(
       'Nothing to sell below that grade.',
     );
   });
 
   it('says refined items are kept, only when some are', () => {
-    expect(sellBelowLabel({ count: 2, highest: 'spirit', stones: 30, kept: 1 })).toBe(
+    expect(bulkLabel('sell', { count: 2, highest: 'spirit', total: 30, kept: 1 })).toBe(
       'Sell 2 items (highest grade: Spirit) for 30 Spirit Stones? Refined items (+1 or higher) are kept.',
     );
-    expect(sellBelowLabel({ count: 0, highest: null, stones: 0, kept: 3 })).toBe(
+    expect(bulkLabel('sell', { count: 0, highest: null, total: 0, kept: 3 })).toBe(
       'Nothing to sell below that grade. Refined items (+1 or higher) are kept.',
     );
-    expect(sellBelowLabel({ count: 2, highest: 'spirit', stones: 30, kept: 0 })).not.toMatch(
+    expect(bulkLabel('sell', { count: 2, highest: 'spirit', total: 30, kept: 0 })).not.toMatch(
       /Refined/,
     );
     setLang('vi');
-    expect(sellBelowLabel({ count: 0, highest: null, stones: 0, kept: 1 })).toMatch(
+    expect(bulkLabel('sell', { count: 0, highest: null, total: 0, kept: 1 })).toMatch(
       / Vật phẩm đã tinh luyện \(\+1 trở lên\) được giữ lại\.$/,
     );
     setLang(DEFAULT_LANG);
+  });
+});
+
+describe('bulkLabel: salvage', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+  it('names the count, the highest grade and the Spirit Essence', () => {
+    expect(bulkLabel('salvage', { count: 12, highest: 'spirit', total: 40 })).toBe(
+      'Salvage 12 items (highest grade: Spirit) for 40 Spirit Essence?',
+    );
+    expect(bulkLabel('salvage', { count: 1, highest: 'mortal', total: 1 })).toBe(
+      'Salvage 1 item (highest grade: Mortal) for 1 Spirit Essence?',
+    );
+  });
+
+  it('says when there is nothing to salvage, and when refined items are kept', () => {
+    expect(bulkLabel('salvage', { count: 0, highest: null, total: 0 })).toBe(
+      'Nothing to salvage below that grade.',
+    );
+    expect(bulkLabel('salvage', { count: 2, highest: 'earth', total: 9, kept: 1 })).toBe(
+      'Salvage 2 items (highest grade: Earth) for 9 Spirit Essence? Refined items (+1 or higher) are kept.',
+    );
+    expect(bulkLabel('salvage', { count: 2, highest: 'earth', total: 9, kept: 0 })).not.toMatch(
+      /Refined/,
+    );
+  });
+
+  it('is translated', () => {
+    setLang('vi');
+    expect(bulkLabel('salvage', { count: 3, highest: 'spirit', total: 7 })).toBe(
+      'Phân giải 3 vật phẩm (phẩm cao nhất: ' + tn('grade', 'Spirit') + ') lấy 7 Tinh Hoa?',
+    );
+    expect(bulkLabel('salvage', { count: 0, highest: null, total: 0 })).toBe(
+      'Không có gì dưới phẩm cấp đó để phân giải.',
+    );
+  });
+});
+
+describe('bulkAsk', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+  const preview = (count: number, total = 7) => ({
+    count,
+    highest: count ? ('spirit' as const) : null,
+    total,
+    kept: 0,
+  });
+
+  it('asks to sell or salvage with its own Yes', () => {
+    expect(bulkAsk('sell', preview(2))).toMatchObject({
+      text: 'Sell 2 items (highest grade: Spirit) for 7 Spirit Stones?',
+      yes: 'Sell',
+      no: 'Cancel',
+    });
+    expect(bulkAsk('salvage', preview(2, 3))).toMatchObject({
+      text: 'Salvage 2 items (highest grade: Spirit) for 3 Spirit Essence?',
+      yes: 'Salvage',
+      no: 'Cancel',
+    });
+  });
+
+  it('offers only OK when there is nothing to take', () => {
+    for (const action of ['sell', 'salvage'] as const) {
+      const ask = bulkAsk(action, preview(0, 0));
+      expect(ask.yes).toBeNull();
+      expect(ask.no).toBe('OK');
+      expect(ask.text).toMatch(/^Nothing to (sell|salvage) below that grade\.$/);
+    }
+  });
+
+  it('is translated', () => {
+    setLang('vi');
+    expect(bulkAsk('salvage', preview(1))).toMatchObject({ yes: 'Phân giải', no: 'Hủy' });
+    expect(bulkAsk('sell', preview(0)).no).toBe('OK');
+  });
+});
+
+describe('gradeRuns', () => {
+  it('splits on the placeholder wherever it sits', () => {
+    expect(gradeRuns('{grade} first', 'Earth', 'earth')).toEqual([
+      { text: 'Earth', grade: 'earth' },
+      { text: ' first' },
+    ]);
+    expect(gradeRuns('last: {grade}', 'Earth', 'earth')).toEqual([
+      { text: 'last: ' },
+      { text: 'Earth', grade: 'earth' },
+    ]);
+  });
+
+  it('names a lost placeholder’s grade in brackets, before the closing marks', () => {
+    expect(gradeRuns('Sell 2 items?', 'Earth', 'earth')).toEqual([
+      { text: 'Sell 2 items (' },
+      { text: 'Earth', grade: 'earth' },
+      { text: ')?' },
+    ]);
+    const joined = (m: string) =>
+      gradeRuns(m, 'Earth', 'earth')
+        .map((r) => r.text)
+        .join('');
+    expect(joined('Bán 2 vật phẩm lấy 9 Linh Thạch?')).toBe(
+      'Bán 2 vật phẩm lấy 9 Linh Thạch (Earth)?',
+    );
+    expect(joined('Sell them ?! ')).toBe('Sell them (Earth) ?! ');
+    expect(joined('No marks')).toBe('No marks (Earth)');
+    expect(joined('全部出售？')).toBe('全部出售 (Earth)？');
+    expect(joined('?')).toBe('(Earth)?');
+    expect(joined('')).toBe('(Earth)');
+    // Exactly one run carries the grade.
+    expect(gradeRuns('x?', 'Earth', 'earth').filter((r) => r.grade)).toHaveLength(1);
+  });
+
+  it('handles a huge lost-placeholder message in linear time', () => {
+    // A long run of closing marks then a letter: a backtracking regex would be quadratic.
+    const message = `${'? '.repeat(100_000)}x${' ?'.repeat(100_000)}`;
+    const start = performance.now();
+    const runs = gradeRuns(message, 'Earth', 'earth');
+    expect(performance.now() - start).toBeLessThan(500);
+    expect(runs.map((r) => r.text).join('')).toBe(
+      `${'? '.repeat(100_000)}x (Earth)${' ?'.repeat(100_000)}`,
+    );
+  });
+
+  it('keeps a hostile name as plain text in one run', () => {
+    const name = '<img src=x onerror=alert(1)>\u202e{grade}';
+    const runs = gradeRuns('a {grade} b', name, 'spirit');
+    expect(runs.filter((r) => r.grade)).toEqual([{ text: name, grade: 'spirit' }]);
+  });
+});
+
+describe('tintOf', () => {
+  it('tints only an allowed value, exactly', () => {
+    expect(tintOf('sell', ['sell', 'salvage'])).toBe('sell');
+    expect(tintOf('earth', ['mortal', 'earth'])).toBe('earth');
+  });
+
+  it.each([
+    ['empty', ''],
+    ['prototype key', '__proto__'],
+    ['object key', 'constructor'],
+    ['case', 'SELL'],
+    ['attribute break', "sell'] , *[x='"],
+    ['markup', '<img src=x onerror=alert(1)>'],
+    ['zero-width', 'sell\u200b'],
+    ['bidi override', '\u202esell'],
+    ['look-alike', 'ѕell'],
+    ['padding', ' sell'],
+    ['oversized', 'sell'.repeat(100_000)],
+  ])('refuses a tampered select value (%s)', (_, value) => {
+    expect(tintOf(value, ['sell', 'salvage'])).toBeNull();
+  });
+});
+
+describe('bulkParts', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+  const p = { count: 3, highest: 'heaven' as const, total: 40, kept: 0 };
+
+  it('puts the highest grade name in its own run, tagged with its grade', () => {
+    expect(bulkParts('salvage', p)).toEqual([
+      { text: 'Salvage 3 items (highest grade: ' },
+      { text: 'Heaven', grade: 'heaven' },
+      { text: ') for 40 Spirit Essence?' },
+    ]);
+    expect(
+      bulkParts('sell', p)
+        .map((x) => x.text)
+        .join(''),
+    ).toBe(bulkLabel('sell', p));
+  });
+
+  it('follows the language, wherever it puts the grade', () => {
+    setLang('vi');
+    const parts = bulkParts('sell', { ...p, kept: 1 });
+    const graded = parts.filter((x) => x.grade);
+    expect(graded).toEqual([{ text: tn('grade', 'Heaven'), grade: 'heaven' }]);
+    expect(parts.map((x) => x.text).join('')).toBe(
+      `Bán 3 vật phẩm (phẩm cao nhất: ${tn('grade', 'Heaven')}) lấy 40 Linh Thạch? Vật phẩm đã tinh luyện (+1 trở lên) được giữ lại.`,
+    );
+  });
+
+  it('picks the plural form by the language’s rule', () => {
+    expect(bulkLabel('sell', { ...p, count: 1 })).toMatch(/^Sell 1 item \(/);
+    setLang('vi');
+    // Vietnamese has one form: the {n} message, even for one item.
+    expect(bulkLabel('sell', { ...p, count: 1 })).toMatch(/^Bán 1 vật phẩm/);
+  });
+
+  it('tags nothing when there is nothing to take', () => {
+    const parts = bulkParts('salvage', { count: 0, highest: null, total: 0, kept: 2 });
+    expect(parts.some((x) => x.grade)).toBe(false);
+    expect(parts.map((x) => x.text).join('')).toMatch(/^Nothing to salvage below that grade\. /);
+  });
+
+  it('keeps hostile pack text as plain text runs, with one graded run', () => {
+    setLang('vi');
+    const hostile = '<script>alert(1)</script>\u202e\u200b{grade}{grade}';
+    const parts = gradeRuns(hostile, '__proto__', 'heaven');
+    expect(parts.map((x) => x.text).join('')).toBe(
+      '<script>alert(1)</script>\u202e\u200b__proto____proto__',
+    );
+    expect(parts.every((x) => typeof x.text === 'string')).toBe(true);
+    expect(parts.filter((x) => x.grade).every((x) => x.grade === 'heaven')).toBe(true);
+  });
+
+  it('picks a plural form for huge and odd counts without throwing', () => {
+    for (const count of [0.5, 2 ** 53, 1e308]) {
+      expect(() => bulkLabel('sell', { ...p, count })).not.toThrow();
+    }
+  });
+
+  it('never splits on a {grade} that came from a number or a name', () => {
+    // Only the message's own placeholder is split on; other params are numbers.
+    const parts = bulkParts('sell', { ...p, total: 7 });
+    expect(parts.filter((x) => x.grade)).toHaveLength(1);
+    expect(parts.map((x) => x.text).join('')).not.toMatch(/\{grade\}/);
   });
 });
 

@@ -6,7 +6,10 @@
    sits on --strip-bg chips over the stage art. The XP bar (one look in both themes)
    pairs --xp-ink with --xp-fill and --xp-track-ink with --xp-track; fill and track differ by 3:1. The bag cell's ▲ / ▼ badge reuses --up / --down
    (the details panel's gain / loss colours) and its mixed dash is --mixed; as
-   non-text marks they need 3:1 on --bg. */
+   non-text marks they need 3:1 on --bg. --sell (cyan, the Spirit Stone icon's
+   colour) and --salvage (orange, the Spirit Essence drop's) colour the sell and
+   salvage buttons' text and borders, so they are text vars too; their hues
+   stay at least 15° from the grade, badge, accent and strip colours. */
 :root {
   color-scheme: light;
   --bg: #f3f1ec;
@@ -37,6 +40,8 @@
   --grade-earth: #22702a;
   --grade-heaven: #865c00;
   --grade-immortal: #b0122d;
+  --sell: #006b75;
+  --salvage: #a13b00;
 }
 /* Dark is the default (before any script runs, too); light shows only when
    Settings resolves to it (data-theme, set by app.ts). */
@@ -63,6 +68,8 @@
   --grade-earth: #6ccb6f;
   --grade-heaven: #e8bb2a;
   --grade-immortal: #ff7389;
+  --sell: #3fd0d6;
+  --salvage: #ff9d5c;
 }
 
 /* The page is a sheet: faint cell lines behind every panel. */
@@ -1228,6 +1235,26 @@ button.primary {
   border-color: var(--accent);
   font-weight: 600;
 }
+/* Sell controls wear the Spirit Stones colour and salvage controls the Spirit
+   Essence colour (§7); the label still names the action, so colour is not the
+   only cue. Hover thickens the border instead of turning it --accent. */
+button.sell:not([aria-disabled='true']) {
+  color: var(--sell);
+  border-color: var(--sell);
+}
+button.salvage:not([aria-disabled='true']) {
+  color: var(--salvage);
+  border-color: var(--salvage);
+}
+button:is(.sell, .salvage):not([aria-disabled='true']):hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.confirm[data-action='sell'] {
+  border-color: var(--sell);
+}
+.confirm[data-action='salvage'] {
+  border-color: var(--salvage);
+}
 .grade-mortal {
   color: var(--grade-mortal);
 }
@@ -1242,6 +1269,61 @@ button.primary {
 }
 .grade-immortal {
   color: var(--grade-immortal);
+}
+/* Pickers tint their chosen value: a grade by its grade colour, a sell or
+   salvage choice by its action colour (app.ts sets data-tint from the
+   select's own value). Options are tinted too where the browser
+   allows, and fall back to --ink (never the chosen value's colour) where it
+   does not. The select and its options sit on --bg, which these text colours
+   pass 4.5:1 on. */
+.field select[data-tint='mortal'] {
+  color: var(--grade-mortal);
+}
+.field select[data-tint='spirit'] {
+  color: var(--grade-spirit);
+}
+.field select[data-tint='earth'] {
+  color: var(--grade-earth);
+}
+.field select[data-tint='heaven'] {
+  color: var(--grade-heaven);
+}
+.field select[data-tint='immortal'] {
+  color: var(--grade-immortal);
+}
+.field select[data-tint='sell'],
+.field option.sell {
+  color: var(--sell);
+}
+.field select[data-tint='salvage'],
+.field option.salvage {
+  color: var(--salvage);
+}
+.field option {
+  color: var(--ink);
+  background: var(--bg);
+}
+.field option.grade-mortal {
+  color: var(--grade-mortal);
+}
+.field option.grade-spirit {
+  color: var(--grade-spirit);
+}
+.field option.grade-earth {
+  color: var(--grade-earth);
+}
+.field option.grade-heaven {
+  color: var(--grade-heaven);
+}
+.field option.grade-immortal {
+  color: var(--grade-immortal);
+}
+/* The row under the pointer in the open list: the system's own pair, so a
+   grade colour never sits on the system highlight. The chosen row keeps its
+   tint, as the closed select shows it. */
+.field option:hover {
+  color: HighlightText;
+  background-color: Highlight;
 }
 /* Sell, salvage, the bag tools, the auto filter and spending */
 .row {
