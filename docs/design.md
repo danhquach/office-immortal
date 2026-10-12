@@ -301,8 +301,35 @@ Every drop is generated from a seeded roll.
   Grades, affixes and item level roll the same online and offline.
 - **Affix pool:** +crit chance, +crit damage, +attack speed, lifesteal,
   +max HP, +defence, +qi regen, +spirit stone find, +treasure find.
-- **Quality %:** how close the item rolled to its maximum, shown on every item
-  (e.g. "94%"). The "one more floor" hook.
+- **Quality %:** the unweighted average of the item's base roll and its affix
+  rolls, each a whole 0–100% within its range, rounded down; the Immortal
+  unique effect is not a roll and is left out. It ignores grade, item level and
+  the number of affixes (a Mortal item with only its base roll easily reads
+  90%+), so it is not a measure of power. It is shown labeled ("Quality 94%" /
+  "Chất lượng 94%") in the details panel, with a helper line under it ("Average
+  of this item's rolls within their ranges"), in the drop toast and in the
+  cell's screen-reader label, but not on the grid cell. The bag can still be
+  sorted by it.
+- **Gear badge:** a bag cell shows a badge in its bottom-right corner, worked
+  out from the same comparison the details panel shows (stat changes that
+  round to nothing are ignored). Per position the item fits: gains and no
+  losses is an upgrade, losses and no gains a downgrade, both is mixed, and
+  no change is nothing. A Formation Disc of the same array type counts its
+  array as a gain when stronger and a loss when weaker; a different array type
+  is one gain and one loss, so mixed. Over the positions it fits (two for
+  accessories and charms), in order:
+  1. A green ▲ (the gain colour) when a position is empty or it is an upgrade
+     in at least one.
+  2. A red ▼ (the loss colour) when it is a downgrade in every position.
+  3. A gold dash when any position changes at all (mixed, or a downgrade in
+     one and no change in the other).
+  4. Otherwise nothing.
+
+  Equipped items and items the cultivator can't equip yet (below the realm
+  they require) get no badge. Soul Banner souls are not counted. The shape is
+  the cue, not the colour alone: "upgrade", "downgrade" or "mixed" ("nâng
+  cấp", "hạ cấp", "được mất") is added to the cell's accessible name when a
+  badge shows.
 
 ## 7. Sell, salvage and filter
 
@@ -618,11 +645,12 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   padded to full size. Arrow keys stay on the shown page; turning the page
   clears a bag selection left on the other one. A new run (after
   Reincarnation) opens on page 1.
-  Selecting a cell shows a details panel: rolls, quality, and gains / losses
-  against the equipped item. Equip by dragging the item onto the character
-  panel (onto one of a pair to choose it; anywhere else picks its default
-  position), by double-click, or with the panel's Equip button (touch
-  and keyboard use the button).
+  Cells show no quality %; a ▲, ▼ or gold dash marks an upgrade, downgrade or
+  mixed change (§6). Selecting a cell shows a details panel: rolls, labeled
+  quality with its helper line, and gains / losses against the equipped item.
+  Equip by dragging the item onto the character panel (onto one of a pair to
+  choose it; anywhere else picks its default position), by double-click, or
+  with the panel's Equip button (touch and keyboard use the button).
 - In the Full view the character, inventory and side panels keep fixed widths
   and one shared height whatever tab is open; a taller tab or item scrolls
   inside its panel.

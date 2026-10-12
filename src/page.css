@@ -4,7 +4,9 @@
    The combat strip pairs --strip-ink, --strip-hurt and the enemy tier colours
    (--strip-elite, --strip-boss, --strip-tribulation) with --strip-bg; its text
    sits on --strip-bg chips over the stage art. The XP bar (one look in both themes)
-   pairs --xp-ink with --xp-fill and --xp-track-ink with --xp-track; fill and track differ by 3:1. */
+   pairs --xp-ink with --xp-fill and --xp-track-ink with --xp-track; fill and track differ by 3:1. The bag cell's ▲ / ▼ badge reuses --up / --down
+   (the details panel's gain / loss colours) and its mixed dash is --mixed; as
+   non-text marks they need 3:1 on --bg. */
 :root {
   color-scheme: light;
   --bg: #f3f1ec;
@@ -29,6 +31,7 @@
   --xp-ink: #3d2e00;
   --up: #1d6b2f;
   --down: #b3261e;
+  --mixed: #865c00;
   --grade-mortal: #5f6368;
   --grade-spirit: #1a5fb4;
   --grade-earth: #22702a;
@@ -54,6 +57,7 @@
   --strip-tribulation: #c8a2ff;
   --up: #6fd38a;
   --down: #ff8a80;
+  --mixed: #f2c94c;
   --grade-mortal: #a9aeb5;
   --grade-spirit: #7aaeff;
   --grade-earth: #6ccb6f;
@@ -970,11 +974,48 @@ select {
 .item-head .icon {
   margin: 0;
 }
-.cell .q {
+/* The gear badge in the bottom-right corner, opposite the grade initial: ▲ a
+   strict upgrade and ▼ a strict downgrade (the details panel's gain / loss
+   colours), a gold dash a mix of gains and losses. In a 46 px cell it can only sit in the 5 px margin around the 32 px icon by
+   touching the icon's corner, so it gets a --bg backing that keeps it readable
+   over any icon art. The shape is the cue; the colour backs it up. */
+.cell .verdict {
   position: absolute;
-  right: 2px;
-  bottom: 2px;
-  color: var(--muted);
+  right: 1px;
+  bottom: 1px;
+  padding: 0 1px;
+  border-radius: 2px;
+  background: var(--bg);
+  font-size: 0.65rem;
+  line-height: 1;
+}
+.cell .verdict.up {
+  color: var(--up);
+}
+.cell .verdict.down {
+  color: var(--down);
+}
+/* The mixed dash: a solid 2 px bar in the same box as the triangles. */
+.cell .verdict.mixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 0.65rem;
+  height: 0.65rem;
+  color: var(--mixed);
+}
+.cell .verdict.mixed::before {
+  content: '';
+  width: 0.5rem;
+  height: 2px;
+  background: currentColor;
+}
+.cell .verdict[hidden] {
+  display: none;
+}
+/* The line under the details tag that says what quality is. */
+.item-head .hint {
+  font-size: 0.8rem;
 }
 /* Tabs inside a panel (office-software style). */
 .tabs {

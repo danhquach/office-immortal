@@ -84,7 +84,7 @@ export function miniStatus(floor: number, realm: string, unseen: number, due = f
   return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
 }
 
-/** The pop-out's latest-drop toast, e.g. `Jade Serpent Blade · Earth · 87%`. Shown on the page only, never in the title. */
+/** The pop-out's latest-drop toast, e.g. `Jade Serpent Blade · Earth · Quality 87%`. Shown on the page only, never in the title. */
 export function dropToast(item: Item): string {
   return t('hud.toast', {
     name: tn('item', item.name),

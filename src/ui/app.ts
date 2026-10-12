@@ -7,7 +7,14 @@
 // the player's choices (equip, sell, salvage, filter, spending) back in and
 // saves.
 
-import { derive, PATHS, realmOf, type PathId, type StatId } from '../core/cultivator.ts';
+import {
+  derive,
+  PATHS,
+  realmOf,
+  type Derived,
+  type PathId,
+  type StatId,
+} from '../core/cultivator.ts';
 import {
   BAG_ROW,
   bagCost,
@@ -34,7 +41,6 @@ import {
   defaultSlot,
   EQUIP_SLOTS,
   GRADES,
-  quality,
   SLOTS,
   slotsFor,
   type EquipSlotId,
@@ -145,6 +151,8 @@ import {
   gridMove,
   itemLines,
   itemTag,
+  gearVerdict,
+  type GearVerdict,
   overtimeLines,
   pageOf,
   passiveRow,
@@ -853,24 +861,43 @@ function panel(className: string, title: MessageKey): { box: HTMLElement; headin
   return { box, heading };
 }
 
-/** A grid cell: grade initial, slot code and quality; the grade colour is its border. */
+/**
+ * A grid cell: grade initial (top-left), icon (centred) and the gear badge
+ * (bottom-right: ▲ a strict upgrade, ▼ a strict downgrade, a gold dash for
+ * mixed gains and losses, hidden otherwise); the grade colour is its border.
+ */
 function cell(): HTMLButtonElement {
   const b = el('button', 'cell');
   b.type = 'button';
   const icon = el('span', 'icon');
   icon.setAttribute('aria-hidden', 'true');
-  b.append(el('span', 'grade'), icon, el('span', 'q'));
+  const badge = el('span', 'verdict');
+  badge.setAttribute('aria-hidden', 'true');
+  badge.hidden = true;
+  b.append(el('span', 'grade'), icon, badge);
   return b;
 }
 
-/** Shows `item` in a cell, or an empty cell with `emptyText` as its name. */
-function fillCell(b: HTMLButtonElement, item: Item | undefined, emptyText: string): void {
-  const [grade, icon, q] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
+/**
+ * Shows `item` in a cell, or an empty cell with `emptyText` as its name. `verdict`
+ * shows the ▲ / ▼ / dash badge and adds it to the cell's name (bag cells only).
+ */
+function fillCell(
+  b: HTMLButtonElement,
+  item: Item | undefined,
+  emptyText: string,
+  verdict: GearVerdict = null,
+): void {
+  const [grade, icon, badge] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
+  const v = item ? verdict : null;
   b.className = item ? `cell grade-${item.grade}` : 'cell empty';
   grade.textContent = item ? t(`grade.initial.${item.grade}`) : '';
   setIcon(icon, item);
-  q.textContent = item ? `${quality(item)}%` : '';
-  b.setAttribute('aria-label', item ? cellLabel(item) : emptyText);
+  badge.hidden = v === null;
+  badge.className = v ? `verdict ${v}` : 'verdict';
+  // The mixed dash is drawn by CSS (a solid bar reads better than a thin glyph).
+  badge.textContent = v === 'up' ? '▲' : v === 'down' ? '▼' : '';
+  b.setAttribute('aria-label', item ? cellLabel(item, v) : emptyText);
 }
 
 /**
@@ -1210,6 +1237,8 @@ function play(
   let gearVersion = 0;
   let drawnGear = '';
   let drawnDetails = '';
+  /** The gear badge cache (see verdicts()): its key, the current derive() and results per item. */
+  let badges: { key: string; now: Derived; cache: WeakMap<Item, GearVerdict> } | null = null;
   /** The selected Soul Banner's souls line; refilled every draw, as kills add souls. */
   let soulsText: HTMLElement | null = null;
   /** A press on a bag item; it becomes a drag (with a ghost) once the mouse moves. */
@@ -2214,6 +2243,24 @@ function play(
       : state.cultivator.equipment[selected.slot];
   }
 
+  /**
+   * A bag item's badge (▲ / ▼ / dash / none). Results are kept per item until the
+   * equipped gear or the level changes (gearVersion + level: everything derive()
+   * reads), so a drop, selection, page turn or sort reuses them; the cultivator's
+   * current derive() is worked out once per gear change.
+   */
+  function verdicts(): (item: Item) => GearVerdict {
+    const c = state.cultivator;
+    const key = `${gearVersion}|${c.level}`;
+    if (badges?.key !== key) badges = { key, now: derive(c), cache: new WeakMap() };
+    const { now, cache } = badges;
+    return (item) => {
+      let v = cache.get(item);
+      if (v === undefined) cache.set(item, (v = gearVerdict(c, item, now)));
+      return v;
+    };
+  }
+
   /** Cells and details are built once and refilled in place, so focus never drops. */
   function drawGear(): void {
     const c = state.cultivator;
@@ -2239,13 +2286,11 @@ function play(
       n: state.inventory.length,
       size: state.bagSize,
     });
+    const verdict = verdicts();
     bagCells.forEach((b, i) => {
       const index = order[i];
-      fillCell(
-        b,
-        index === undefined ? undefined : state.inventory[index],
-        t('inventory.emptyCell', { n: i + 1 }),
-      );
+      const item = index === undefined ? undefined : state.inventory[index];
+      fillCell(b, item, t('inventory.emptyCell', { n: i + 1 }), item ? verdict(item) : null);
       b.setAttribute(
         'aria-pressed',
         String(index !== undefined && !!selected && 'bag' in selected && selected.bag === index),
@@ -2281,6 +2326,7 @@ function play(
     name.append(
       el('div', `title grade-${item.grade}`, tn('item', item.name)),
       el('div', `tag grade-${item.grade}`, itemTag(item)),
+      el('div', 'muted hint', t('item.qualityHint')),
     );
     const tier = treasureTier(item);
     if (tier) name.append(el('div', 'muted', tier));
