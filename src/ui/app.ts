@@ -23,6 +23,9 @@ import {
   changePath,
   essenceValue,
   GRADE_IDS,
+  refine,
+  refineReach,
+  rerollAffix,
   pathChangeCost,
   resetStats,
   salvage,
@@ -36,6 +39,7 @@ import {
   spendPoints,
   statResetCost,
   type FilterAction,
+  type ItemAt,
 } from '../core/economy.ts';
 import {
   defaultSlot,
@@ -150,7 +154,19 @@ import {
   freshDrops,
   gridMove,
   itemLines,
+  itemName,
   itemTag,
+  qualityLine,
+  refineMark,
+  refineAction,
+  refinePreview,
+  refineResult,
+  rerollAction,
+  rerollConfirm,
+  rerollResult,
+  affixText,
+  CRAFT_MODES,
+  type CraftMode,
   gearVerdict,
   type GearVerdict,
   overtimeLines,
@@ -862,9 +878,10 @@ function panel(className: string, title: MessageKey): { box: HTMLElement; headin
 }
 
 /**
- * A grid cell: grade initial (top-left), icon (centred) and the gear badge
- * (bottom-right: ▲ a strict upgrade, ▼ a strict downgrade, a gold dash for
- * mixed gains and losses, hidden otherwise); the grade colour is its border.
+ * A grid cell: grade initial (top-left), refine level (top-right, "+7", hidden
+ * at +0), icon (centred) and the gear badge (bottom-right: ▲ a strict upgrade,
+ * ▼ a strict downgrade, a gold dash for mixed gains and losses, hidden
+ * otherwise); the grade colour is its border.
  */
 function cell(): HTMLButtonElement {
   const b = el('button', 'cell');
@@ -874,7 +891,11 @@ function cell(): HTMLButtonElement {
   const badge = el('span', 'verdict');
   badge.setAttribute('aria-hidden', 'true');
   badge.hidden = true;
-  b.append(el('span', 'grade'), icon, badge);
+  // The cell's name says the refine level in words (cellLabel).
+  const refined = el('span', 'refine');
+  refined.setAttribute('aria-hidden', 'true');
+  refined.hidden = true;
+  b.append(el('span', 'grade'), icon, badge, refined);
   return b;
 }
 
@@ -888,8 +909,16 @@ function fillCell(
   emptyText: string,
   verdict: GearVerdict = null,
 ): void {
-  const [grade, icon, badge] = b.children as unknown as [HTMLElement, HTMLElement, HTMLElement];
+  const [grade, icon, badge, refined] = b.children as unknown as [
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+    HTMLElement,
+  ];
   const v = item ? verdict : null;
+  const mark = item ? refineMark(item) : '';
+  refined.hidden = mark === '';
+  refined.textContent = mark;
   b.className = item ? `cell grade-${item.grade}` : 'cell empty';
   grade.textContent = item ? t(`grade.initial.${item.grade}`) : '';
   setIcon(icon, item);
@@ -902,9 +931,12 @@ function fillCell(
 
 /**
  * Tabs inside a panel: one tab stop, arrow keys (and Home / End) switch, only the chosen body
- * shows. The first tab starts selected.
+ * shows. The first tab starts selected; `onShow` hears every switch the player makes.
  */
-function tabs(list: { id: string; label: MessageKey; body: HTMLElement }[]): {
+function tabs(
+  list: { id: string; label: MessageKey; body: HTMLElement }[],
+  onShow?: (id: string) => void,
+): {
   bar: HTMLElement;
   panels: HTMLElement[];
   show: (id: string) => void;
@@ -927,7 +959,10 @@ function tabs(list: { id: string; label: MessageKey; body: HTMLElement }[]): {
     b.id = `tab-${tab.id}`;
     b.setAttribute('role', 'tab');
     b.setAttribute('aria-controls', `tabpanel-${tab.id}`);
-    b.addEventListener('click', () => show(tab.id));
+    b.addEventListener('click', () => {
+      show(tab.id);
+      onShow?.(tab.id);
+    });
     b.addEventListener('keydown', (e) => {
       const to: Record<string, number> = {
         ArrowRight: (i + 1) % list.length,
@@ -940,6 +975,7 @@ function tabs(list: { id: string; label: MessageKey; body: HTMLElement }[]): {
       e.preventDefault();
       const next = list[j] as (typeof list)[number];
       show(next.id);
+      onShow?.(next.id);
       buttons[list.indexOf(next)]?.focus();
     });
     const panel = el('div', 'tabpanel');
@@ -974,6 +1010,8 @@ let pickedSort: BagSort | null = null;
 let pickedReverse: boolean | null = null;
 /** The language picked this visit: kept across runs even where storage is blocked. */
 let pickedLang: string | null = null;
+/** The Crafting panel's last mode, kept for the visit. */
+let pickedCraftMode: CraftMode = 'refine';
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
@@ -1747,6 +1785,127 @@ function play(
   const detailBody = el('div');
   details.box.append(detailBody);
 
+  // Crafting: a modal over the office shell for the selected item (bag or worn),
+  // one tab per mode. It stays open between crafts, so a craft can be repeated.
+  /** Where the item being crafted is, and that item as last drawn; null while closed. */
+  let crafting: { at: ItemAt; item: string } | null = null;
+  /** The affix picked for a reroll, by index. */
+  let craftPick = 0;
+  /** The last craft's result line, so a language switch can write it again. */
+  let craftSaid: (() => string) | null = null;
+  const craft = el('dialog', 'menu craft');
+  craft.setAttribute('aria-labelledby', 'craft-title');
+  // The dialog has no padding of its own, so a click on it is a click on the backdrop.
+  const craftBody = el('div', 'craft-body');
+  const craftHead = el('div', 'menu-head');
+  const craftTitle = elt('h2', '', 'craft.title');
+  craftTitle.id = 'craft-title';
+  craftHead.append(
+    craftTitle,
+    buttonT('craft.close', '', () => closeCraft()),
+  );
+  const craftItem = el('div', 'item-head');
+  const craftEssence = el('p', 'essence');
+  /** An action line: the button, then its cost and why it is off; the button is described by both. */
+  function craftLine(key: string, btn: HTMLButtonElement) {
+    const line = el('div', 'line');
+    const cost = el('span', 'cost');
+    cost.id = `${key}-cost`;
+    const why = el('span', 'why');
+    why.id = `${key}-why`;
+    const meta = el('small', 'meta');
+    meta.append(cost, why);
+    btn.setAttribute('aria-describedby', `${cost.id} ${why.id}`);
+    line.append(btn, meta);
+    return { line, cost, why };
+  }
+  // Refine: what it can do, then the button.
+  const refineLines = el('ul', 'lines');
+  const refineBtn = button('', 'primary', () => doRefine());
+  const refineLine = craftLine('craft-refine', refineBtn);
+  const refineBody = el('div', 'craft-mode');
+  refineBody.append(elt('p', 'muted hint', 'craft.refineNote'), refineLines, refineLine.line);
+  // Reroll: pick an affix, then the button and its inline confirmation.
+  const affixPick = el('fieldset', 'affix-pick');
+  const affixList = el('div', 'affixes');
+  affixPick.append(elt('legend', '', 'craft.pickAffix'), affixList);
+  const rerollBtn = buttonT('craft.reroll', 'primary', () => askReroll());
+  const rerollLine = craftLine('craft-reroll', rerollBtn);
+  const rerollAsk = el('div', 'confirm');
+  rerollAsk.setAttribute('role', 'alert');
+  const rerollAskText = el('p');
+  const rerollYes = buttonT('craft.reroll', 'primary', () => doReroll());
+  const rerollNo = buttonT('confirm.cancel', '', () => {
+    rerollAsk.hidden = true;
+    rerollBtn.focus();
+  });
+  rerollAsk.append(rerollAskText, rerollYes, rerollNo);
+  rerollAsk.hidden = true;
+  const noAffixes = elt('p', 'muted', 'craft.noAffixes');
+  const rerollBody = el('div', 'craft-mode');
+  rerollBody.append(
+    elt('p', 'muted hint', 'craft.rerollNote'),
+    affixPick,
+    rerollLine.line,
+    rerollAsk,
+    noAffixes,
+  );
+  const modeBodies: Record<CraftMode, HTMLElement> = { refine: refineBody, reroll: rerollBody };
+  const craftTabs = tabs(
+    CRAFT_MODES.map((m) => ({ id: `craft-${m}`, label: `craft.mode.${m}`, body: modeBodies[m] })),
+    (id) => {
+      pickedCraftMode = CRAFT_MODES.find((m) => `craft-${m}` === id) ?? 'refine';
+      rerollAsk.hidden = true;
+    },
+  );
+  attr(craftTabs.bar, 'aria-label', 'craft.modes');
+  const craftResult = el('p', 'craft-result');
+  craftResult.setAttribute('aria-live', 'polite');
+  craftBody.append(
+    craftHead,
+    craftItem,
+    craftEssence,
+    craftTabs.bar,
+    ...craftTabs.panels,
+    craftResult,
+  );
+  craft.append(craftBody);
+  // Esc, and a click on the backdrop, close it the same way as Close.
+  craft.addEventListener('cancel', (e) => {
+    e.preventDefault();
+    closeCraft();
+  });
+  // Only a press that starts and ends on the backdrop: outside the panel's box
+  // (its border is the dialog too), and not a text selection dragged out of it.
+  const onBackdrop = (e: MouseEvent): boolean => {
+    if (e.target !== craft) return false;
+    const r = craft.getBoundingClientRect();
+    return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+  };
+  let pressedBackdrop = false;
+  craft.addEventListener('pointerdown', (e) => (pressedBackdrop = onBackdrop(e)));
+  craft.addEventListener('click', (e) => {
+    if (pressedBackdrop && onBackdrop(e)) closeCraft();
+    pressedBackdrop = false;
+  });
+  // Tab and Shift+Tab wrap inside the panel.
+  craft.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const stops = [...craft.querySelectorAll<HTMLElement>('button, input')].filter(
+      (n) => n.tabIndex >= 0 && n.getClientRects().length > 0,
+    );
+    const first = stops[0];
+    const last = stops.at(-1);
+    if (!first || !last) return;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
+
   // Recent drops
   const log = panel('log', 'drops.title');
   const drops = el('ul', 'drops');
@@ -2025,7 +2184,7 @@ function play(
   let blinkOn = true;
   let blinkAt = 0;
 
-  root.replaceChildren(bar, formulaBar(), game, statusBar(), menu);
+  root.replaceChildren(bar, formulaBar(), game, statusBar(), menu, craft);
   away?.querySelector('button')?.focus();
 
   /**
@@ -2324,8 +2483,9 @@ function play(
     setIcon(icon, item);
     const name = el('div');
     name.append(
-      el('div', `title grade-${item.grade}`, tn('item', item.name)),
+      el('div', `title grade-${item.grade}`, itemName(item)),
       el('div', `tag grade-${item.grade}`, itemTag(item)),
+      el('div', 'quality', qualityLine(item)),
       el('div', 'muted hint', t('item.qualityHint')),
     );
     const tier = treasureTier(item);
@@ -2338,8 +2498,14 @@ function play(
     if (souls !== null) name.append((soulsText = el('div', 'muted', souls)));
     head.append(icon, name);
     const parts: HTMLElement[] = [head, lines];
+    // Crafting works on bag and worn items alike.
+    const craftBtn = button(t('details.craft'), '', () => openCraft());
+    craftBtn.dataset.action = 'craft';
+    craftBtn.setAttribute('aria-haspopup', 'dialog');
     if ('slot' in selected) {
-      parts.push(el('p', 'muted', t('details.equipped')));
+      const row = el('div', 'row');
+      row.append(craftBtn);
+      parts.push(el('p', 'muted', t('details.equipped')), row);
     } else {
       const index = selected.bag;
       const blocked = equipBlock(state.cultivator, item);
@@ -2377,7 +2543,7 @@ function play(
             'h3',
             '',
             current
-              ? t('details.vs', { slot: name, item: tn('item', current.name) })
+              ? t('details.vs', { slot: name, item: itemName(current) })
               : t('details.empty', { slot: name }),
           ),
           equipBtn,
@@ -2393,7 +2559,7 @@ function play(
         dispose(index, 'salvage'),
       );
       salvageBtn.dataset.action = 'salvage';
-      row.append(sellBtn, salvageBtn);
+      row.append(sellBtn, salvageBtn, craftBtn);
       parts.push(row);
     }
     // A level-up redraws the comparison; a focused Equip button keeps focus.
@@ -2470,6 +2636,147 @@ function play(
       setCursor(at);
       bagCells[at]?.focus();
     }
+  }
+
+  /** The item at `at` in `s`, if any. */
+  function itemIn(s: GameState, at: ItemAt): Item | undefined {
+    return 'bag' in at ? s.inventory[at.bag] : s.cultivator.equipment[at.slot];
+  }
+
+  /** Opens the Crafting panel on the selected item, in the last mode used. */
+  function openCraft(): void {
+    const item = selectedItem();
+    if (!selected || !item) return;
+    crafting = { at: selected, item: JSON.stringify(item) };
+    craftPick = 0;
+    craftSaid = null;
+    craftResult.textContent = '';
+    rerollAsk.hidden = true;
+    craftTabs.show(`craft-${pickedCraftMode}`);
+    fillCraft(item);
+    drawCraft();
+    craft.showModal();
+    craft.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus();
+  }
+
+  /** Closes the panel; focus goes back to the Craft button (or the details, if it has gone). */
+  function closeCraft(): void {
+    if (!crafting) return;
+    crafting = null;
+    rerollAsk.hidden = true;
+    if (craft.open) craft.close();
+    const back = detailBody.querySelector<HTMLButtonElement>('[data-action="craft"]');
+    if (back) back.focus();
+    else details.heading.focus();
+  }
+
+  /** Rebuilds the panel's parts that show the item: its head, the refine range and the affixes. */
+  function fillCraft(item: Item): void {
+    const icon = el('span', 'icon');
+    icon.setAttribute('aria-hidden', 'true');
+    setIcon(icon, item);
+    const name = el('div');
+    name.append(
+      el('div', `title grade-${item.grade}`, itemName(item)),
+      el('div', `tag grade-${item.grade}`, itemTag(item)),
+      el('div', 'quality', qualityLine(item)),
+      el('div', 'muted hint', t('item.qualityHint')),
+    );
+    craftItem.replaceChildren(icon, name);
+    refineLines.replaceChildren(...refinePreview(item).map((line) => el('li', '', line)));
+    // An item with no affixes (Mortal) has nothing to pick and no action.
+    const has = item.affixes.length > 0;
+    affixPick.hidden = !has;
+    rerollLine.line.hidden = !has;
+    noAffixes.hidden = has;
+    if (!has) rerollAsk.hidden = true;
+    craftPick = Math.max(0, Math.min(craftPick, item.affixes.length - 1));
+    const refocus = affixList.contains(document.activeElement);
+    const inputs = item.affixes.map((_, i) => {
+      const input = el('input');
+      input.type = 'radio';
+      input.name = 'craft-affix';
+      input.checked = i === craftPick;
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        craftPick = i;
+        rerollAsk.hidden = true;
+      });
+      return input;
+    });
+    affixList.replaceChildren(
+      ...inputs.map((input, i) => {
+        const label = el('label', 'affix');
+        label.append(input, document.createTextNode(affixText(item, i)));
+        return label;
+      }),
+    );
+    if (refocus) inputs[craftPick]?.focus();
+  }
+
+  /**
+   * Every tick while open: the Essence balance and what each action costs, so
+   * an Essence change alone turns a button on. Closes if the item left (benchItem).
+   */
+  function drawCraft(): void {
+    const item = benchItem();
+    if (!item) return;
+    setText(craftEssence, t('craft.essence', { n: state.essence }));
+    const r = refineAction(item, state.essence);
+    setButton(refineBtn, t(refineReach(item) ? 'craft.refine' : 'craft.refineMax'), r.off);
+    setText(refineLine.cost, r.cost);
+    setText(refineLine.why, r.why);
+    const x = rerollAction(item, state.essence);
+    setButton(rerollBtn, t('craft.reroll'), x.off);
+    setText(rerollLine.cost, x.cost);
+    setText(rerollLine.why, x.why);
+  }
+
+  /** Applies a craft: the new state, the panel's item and its result line. */
+  function crafted(next: GameState, said: (after: Item) => () => string): void {
+    if (!crafting) return;
+    const after = itemIn(next, crafting.at) as Item;
+    crafting.item = JSON.stringify(after);
+    act(next);
+    fillCraft(after);
+    craftSaid = said(after);
+    craftResult.textContent = craftSaid();
+  }
+
+  /**
+   * The item being crafted, checked against the one the panel shows. The sim
+   * never changes an item, so a different one at the crafted place means it
+   * left: the panel closes (undefined) rather than craft the wrong item.
+   */
+  function benchItem(): Item | undefined {
+    if (!crafting) return undefined;
+    const item = itemIn(state, crafting.at);
+    if (item && JSON.stringify(item) === crafting.item) return item;
+    closeCraft();
+    return undefined;
+  }
+
+  function doRefine(): void {
+    const item = benchItem();
+    if (!crafting || !item || refineAction(item, state.essence).off) return;
+    crafted(refine(state, crafting.at), (after) => () => refineResult(item, after));
+  }
+
+  function askReroll(): void {
+    const item = benchItem();
+    if (!item || rerollAction(item, state.essence).off) return;
+    rerollAskText.textContent = rerollConfirm(item, craftPick);
+    rerollAsk.hidden = false;
+    rerollYes.focus();
+  }
+
+  function doReroll(): void {
+    const item = benchItem();
+    rerollAsk.hidden = true;
+    if (!crafting || !item || rerollAction(item, state.essence).off) return;
+    const i = craftPick;
+    crafted(rerollAffix(state, crafting.at, i), (after) => () => rerollResult(item, after, i));
+    rerollBtn.focus();
   }
 
   function spend(stat: StatId, n: number): void {
@@ -2775,6 +3082,7 @@ function play(
     drawSummary();
     drawGear();
     drawShop();
+    drawCraft();
     const handled = [];
     if (state.dropsSold > 0) handled.push(t('drops.soldOnPickup', { n: state.dropsSold }));
     if (state.dropsSalvaged > 0) {
@@ -2791,7 +3099,7 @@ function play(
   let liveTimer = 0;
   function relabel(): void {
     // Rewritten, not new: the live regions stay quiet while their text changes.
-    const live = [drops, pageText, miniToast];
+    const live = [drops, pageText, miniToast, craftResult];
     for (const node of live) node.setAttribute('aria-live', 'off');
     // A second switch inside the window restarts it.
     clearTimeout(liveTimer);
@@ -2807,6 +3115,12 @@ function play(
     if (!confirmBox.hidden) askSellBelow(pending?.grade ?? (below.select.value as GradeId), false);
     drawRetire();
     drawTools();
+    const onBench = crafting && itemIn(state, crafting.at);
+    if (onBench) {
+      fillCraft(onBench);
+      if (craftSaid) craftResult.textContent = craftSaid();
+      if (!rerollAsk.hidden) rerollAskText.textContent = rerollConfirm(onBench, craftPick);
+    }
     draw(null);
   }
 

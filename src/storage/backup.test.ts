@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { newGame } from '../core/sim.ts';
+import { newGame, type GameState } from '../core/sim.ts';
 import {
   clearBoth,
   FUTURE_SLACK_MS,
@@ -13,6 +13,23 @@ import { memory } from './cloud-fakes.ts';
 import { decodeSave, encodeSave, MAX_SAVE_CHARS, REJECTED_KEY, SAVE_KEY } from './save.ts';
 
 const raw = (savedAt: number, seed = 1): string => encodeSave(newGame(seed, 'sword'), savedAt);
+/** A new run holding one Mortal cap refined 7 times, on a base roll of 50%. */
+function refinedRun(): GameState {
+  const s = newGame(1, 'sword');
+  s.inventory.push({
+    slot: 'head',
+    name: 'Hempen Scholar Cap',
+    level: 1,
+    grade: 'mortal',
+    baseRoll: 0.5,
+    affixes: [],
+    refines: 7,
+  });
+  return s;
+}
+/** The refined run saved at `savedAt`, its refine level written as `refines` (raw JSON). */
+const refinedRaw = (savedAt: number, refines = '7'): string =>
+  encodeSave(refinedRun(), savedAt).replace('"refines":7', `"refines":${refines}`);
 /** The clock at load: after every stamp below. */
 const NOW = 10_000;
 
@@ -266,6 +283,23 @@ describe('loadNewest', () => {
       const { save, storage } = await load(good, bad);
       expect(save?.savedAt).toBe(100);
       // The good local save is still there; a bad backup isn't copied over it.
+      expect(storage.getItem(SAVE_KEY)).toBe(good);
+    }
+  });
+
+  it('round-trips a crafted item through the backup', async () => {
+    const { save } = await load(null, refinedRaw(200));
+    expect(save?.state).toEqual(refinedRun());
+    expect(save?.state.inventory[0]?.refines).toBe(7);
+  });
+
+  it('never lets a backup with a bad refine level replace a good save', async () => {
+    const good = raw(100);
+    for (const bad of ['-1', '101', '2.5', '"5"', '1e999', '51', 'null', '7,"__proto__":{"x":1}']) {
+      const text = refinedRaw(9_999, bad);
+      expect(text, bad).toContain(`"refines":${bad}`);
+      const { save, storage } = await load(good, text);
+      expect(save?.savedAt, bad).toBe(100);
       expect(storage.getItem(SAVE_KEY)).toBe(good);
     }
   });

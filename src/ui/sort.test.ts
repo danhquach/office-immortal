@@ -53,6 +53,23 @@ describe('bagOrder', () => {
     expect(bagOrder(bag, 'quality')).toEqual([0, 4, 5, 2, 1, 3]);
   });
 
+  it('sorts by refine level, highest first, then quality', () => {
+    const refined = bag.map((i, n) =>
+      n === 2
+        ? { ...i, refines: 3 }
+        : n === 5
+          ? { ...i, refines: 3 }
+          : n === 1
+            ? { ...i, refines: 1 }
+            : i,
+    );
+    // 5 and 2 tie at +3: 5 has the higher quality. Then +1 (1), then the rest by quality.
+    expect(bagOrder(refined, 'refine')).toEqual([5, 2, 1, 0, 4, 3]);
+    expect(bagOrder(refined, 'refine', true)).toEqual([3, 4, 0, 1, 2, 5]);
+    // With nothing refined it is the quality order.
+    expect(bagOrder(bag, 'refine')).toEqual(bagOrder(bag, 'quality'));
+  });
+
   it('keeps drop order for Drop order', () => {
     expect(bagOrder(bag, 'newest')).toEqual([0, 1, 2, 3, 4, 5]);
   });
@@ -111,6 +128,7 @@ describe('bagOrder', () => {
       'Item type',
       'Item level',
       'Quality %',
+      'Refine level',
       'Drop order',
     ]);
   });

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { derive, newCultivator, REALMS, type Cultivator } from '../core/cultivator.ts';
-import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE } from '../core/economy.ts';
+import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE, refineCost, rerollCost } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
 import {
@@ -17,6 +17,17 @@ import {
   gridMove,
   itemLines,
   itemTag,
+  itemName,
+  qualityLine,
+  refineMark,
+  refineAction,
+  rerollAction,
+  refinePreview,
+  refineResult,
+  rerollResult,
+  rerollConfirm,
+  affixText,
+  CRAFT_MODES,
   gearVerdict,
   verdictOf,
   treasureTier,
@@ -83,8 +94,9 @@ describe('items', () => {
     expect(lines.at(-1)).toBe('Synergy of the Dao: +25% Damage');
   });
 
-  it('tags grade, slot, level and quality in text', () => {
-    expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10 · Quality 66%');
+  it('tags grade, slot and level in text, and quality on its own labeled line', () => {
+    expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10');
+    expect(qualityLine(stapler)).toBe('Quality 66%');
   });
 
   it.each([
@@ -688,14 +700,22 @@ describe('freshDrops', () => {
 describe('cellLabel', () => {
   afterEach(() => setLang(DEFAULT_LANG));
 
-  it('names the item with its grade, slot, level and labeled quality in words', () => {
-    expect(cellLabel(stapler)).toBe(
-      'Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · Quality 66%',
+  it('names the item with its grade, slot and level in words', () => {
+    expect(cellLabel(stapler)).toBe('Golden Crow Flying Sword, Heaven · Weapon · Lv 10');
+  });
+
+  it('adds the refine level to the name, and nothing at +0', () => {
+    expect(cellLabel({ ...stapler, refines: 7 })).toBe(
+      'Golden Crow Flying Sword +7, Heaven · Weapon · Lv 10',
     );
+    expect(cellLabel({ ...stapler, refines: 7 }, 'up')).toBe(
+      'Golden Crow Flying Sword +7, Heaven · Weapon · Lv 10, upgrade',
+    );
+    expect(cellLabel({ ...stapler, refines: 0 })).toBe(cellLabel(stapler));
   });
 
   it('adds "upgrade" or "downgrade" only when that badge shows', () => {
-    const tag = 'Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · Quality 66%';
+    const tag = 'Golden Crow Flying Sword, Heaven · Weapon · Lv 10';
     expect(cellLabel(stapler, 'up')).toBe(`${tag}, upgrade`);
     expect(cellLabel(stapler, 'down')).toBe(`${tag}, downgrade`);
     expect(cellLabel(stapler, 'mixed')).toBe(`${tag}, mixed`);
@@ -703,14 +723,16 @@ describe('cellLabel', () => {
     expect(cellLabel(stapler)).toBe(tag);
   });
 
-  it('labels quality and the upgrade in Vietnamese', () => {
+  it('labels quality, the refine level and the upgrade in Vietnamese', () => {
     setLang('vi');
-    expect(itemTag(stapler)).toMatch(/ · Cấp 10 · Chất lượng 66%$/);
-    expect(cellLabel(stapler)).toMatch(/, .* · Chất lượng 66%$/);
-    expect(cellLabel(stapler, 'up')).toMatch(/ · Chất lượng 66%, nâng cấp$/);
-    expect(cellLabel(stapler, 'down')).toMatch(/ · Chất lượng 66%, hạ cấp$/);
-    expect(cellLabel(stapler, 'mixed')).toMatch(/ · Chất lượng 66%, được mất$/);
-    expect(cellLabel(stapler, null)).toMatch(/ · Chất lượng 66%$/);
+    expect(itemTag(stapler)).toMatch(/ · Cấp 10$/);
+    expect(qualityLine(stapler)).toBe('Chất lượng 66%');
+    expect(cellLabel(stapler)).toMatch(/, .* · Cấp 10$/);
+    expect(cellLabel({ ...stapler, refines: 3 })).toMatch(/^\S.* \+3, /);
+    expect(cellLabel(stapler, 'up')).toMatch(/ · Cấp 10, nâng cấp$/);
+    expect(cellLabel(stapler, 'down')).toMatch(/ · Cấp 10, hạ cấp$/);
+    expect(cellLabel(stapler, 'mixed')).toMatch(/ · Cấp 10, được mất$/);
+    expect(cellLabel(stapler, null)).toMatch(/ · Cấp 10$/);
   });
 
   it('has a quality helper line in both languages', () => {
@@ -1114,6 +1136,23 @@ describe('sellBelowLabel', () => {
       'Nothing to sell below that grade.',
     );
   });
+
+  it('says refined items are kept, only when some are', () => {
+    expect(sellBelowLabel({ count: 2, highest: 'spirit', stones: 30, kept: 1 })).toBe(
+      'Sell 2 items (highest grade: Spirit) for 30 Spirit Stones? Refined items (+1 or higher) are kept.',
+    );
+    expect(sellBelowLabel({ count: 0, highest: null, stones: 0, kept: 3 })).toBe(
+      'Nothing to sell below that grade. Refined items (+1 or higher) are kept.',
+    );
+    expect(sellBelowLabel({ count: 2, highest: 'spirit', stones: 30, kept: 0 })).not.toMatch(
+      /Refined/,
+    );
+    setLang('vi');
+    expect(sellBelowLabel({ count: 0, highest: null, stones: 0, kept: 1 })).toMatch(
+      / Vật phẩm đã tinh luyện \(\+1 trở lên\) được giữ lại\.$/,
+    );
+    setLang(DEFAULT_LANG);
+  });
 });
 
 describe('soulsLine', () => {
@@ -1193,5 +1232,114 @@ describe('favouredBy', () => {
     expect(favouredBy(item('charm', 'Jade Vajra Talisman'), 'body')).toBeNull();
     expect(favouredBy(item('weapon', 'Iron Flying Sword', 'earth'), 'sword')).toBeNull();
     expect(favouredBy(item('weapon', '__proto__'), 'sword')).toBeNull();
+  });
+});
+
+describe('crafting', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+  const sword: Item = { ...stapler, baseRoll: 0.62 };
+
+  it('has Refine and Reroll modes, in that order', () => {
+    expect(CRAFT_MODES).toEqual(['refine', 'reroll']);
+  });
+
+  it('shows the refine level after the name and on the cell, nothing at +0', () => {
+    expect(itemName(sword)).toBe('Golden Crow Flying Sword');
+    expect(refineMark(sword)).toBe('');
+    expect(itemName({ ...sword, refines: 0 })).toBe('Golden Crow Flying Sword');
+    expect(itemName({ ...sword, refines: 7 })).toBe('Golden Crow Flying Sword +7');
+    expect(refineMark({ ...sword, refines: 7 })).toBe('+7');
+    setLang('vi');
+    expect(itemName({ ...sword, refines: 12 })).toMatch(/ \+12$/);
+  });
+
+  it('previews a refine as the base roll and its stat, before paying', () => {
+    // 8–14 damage at level 10: 62% is 11.7; 63% to 72% is 11.8 to 12.3.
+    expect(refinePreview(sword)).toEqual(['Base roll 62% → 63–72%', 'Damage: 11.7 → 11.8–12.3']);
+    expect(refinePreview({ ...sword, baseRoll: 0.97 })[0]).toBe('Base roll 97% → 98–100%');
+    // One decimal kept, so the range lines up: 13.8 → 13.9–14.0.
+    expect(refinePreview({ ...sword, baseRoll: 0.97 })[1]).toBe('Damage: 13.8 → 13.9–14.0');
+    expect(refinePreview(stapler)).toEqual([]);
+  });
+
+  it('shows one value, not "a–a", when only one is reachable', () => {
+    // 99% can only become 100%: 8–14 damage at level 10 tops out at 14.0.
+    expect(refinePreview({ ...sword, baseRoll: 0.99 })).toEqual([
+      'Base roll 99% → 100%',
+      'Damage: 13.9 → 14.0',
+    ]);
+    // A range whose ends round to one amount is shown once too.
+    // A level 1 head's defence: 51% to 60% all round to 0.3.
+    const tiny: Item = {
+      ...sword,
+      slot: 'head',
+      level: 1,
+      grade: 'mortal',
+      affixes: [],
+      baseRoll: 0.5,
+    };
+    expect(refinePreview(tiny)).toEqual(['Base roll 50% → 51–60%', 'Defence: 0.3 → 0.3']);
+  });
+
+  it('previews a disc refine as its array strength', () => {
+    const disc: Item = {
+      slot: 'attachment',
+      name: 'Bronze Formation Disc',
+      level: 1,
+      grade: 'mortal',
+      baseRoll: 0,
+      affixes: [],
+      array: 'illusion',
+    };
+    const [roll, stat] = refinePreview(disc);
+    expect(roll).toBe('Base roll 0% → 1–10%');
+    expect(stat).toMatch(/^Illusion Array: [\d.]+% → [\d.]+%–[\d.]+%$/);
+  });
+
+  it('prices the actions in Spirit Essence and says what is missing', () => {
+    const cost = refineCost(sword);
+    expect(refineAction(sword, cost)).toEqual({
+      cost: `${cost} Spirit Essence`,
+      off: false,
+      why: '',
+    });
+    expect(refineAction(sword, cost - 5)).toEqual({
+      cost: `${cost} Spirit Essence`,
+      off: true,
+      why: 'Need 5 more',
+    });
+    // The button reads "Fully refined"; `why` stays empty so it is not said twice.
+    expect(refineAction(stapler, 1e9)).toEqual({ cost: '', off: true, why: '' });
+    const r = rerollCost(sword);
+    expect(rerollAction(sword, r - 1)).toMatchObject({ off: true, why: 'Need 1 more' });
+    expect(rerollAction(sword, r)).toMatchObject({ off: false, cost: `${r} Spirit Essence` });
+    expect(rerollAction({ ...sword, affixes: [] }, 1e9)).toEqual({
+      cost: '',
+      off: true,
+      why: 'No affixes to reroll',
+    });
+  });
+
+  it('says it in Vietnamese', () => {
+    setLang('vi');
+    expect(refineAction(stapler, 0)).toEqual({ cost: '', off: true, why: '' });
+    expect(t('craft.refineMax')).toBe('Đã tinh luyện tối đa');
+    expect(refinePreview({ ...sword, baseRoll: 0.99 })[0]).toBe('Độ tung gốc 99% → 100%');
+    expect(refineAction(sword, 0)).toMatchObject({ cost: `${refineCost(sword)} Tinh Hoa` });
+    expect(rerollAction({ ...sword, affixes: [] }, 0).why).toBe(
+      'Không có thuộc tính phụ để tẩy luyện',
+    );
+    expect(refinePreview(sword)[0]).toBe('Độ tung gốc 62% → 63–72%');
+  });
+
+  it('writes the result lines and the reroll confirmation', () => {
+    expect(refineResult(sword, { ...sword, baseRoll: 0.69 })).toBe('Base roll 62% → 69%');
+    const after: Item = { ...sword, affixes: [sword.affixes[0]!, { id: 'stoneFind', roll: 1 }] };
+    expect(affixText(sword, 1)).toBe('+50 Max HP');
+    expect(rerollResult(sword, after, 1)).toMatch(/^\+50 Max HP → \+[\d.]+% Spirit stone find$/);
+    expect(rerollConfirm(sword, 0)).toBe(
+      'Reroll +0.7% Crit chance? It is replaced for good by a random affix and roll.',
+    );
+    expect(affixText(sword, 9)).toBe('');
   });
 });

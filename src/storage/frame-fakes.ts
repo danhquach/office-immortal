@@ -31,8 +31,37 @@ export function memoryBackup(): Backup & { text: string | null } {
   return b;
 }
 
-/** Lets queued messages and promise chains run. */
-export const settle = (): Promise<void> => new Promise((r) => setTimeout(r, 5));
+/** The most timer rounds settle() waits for the messages to stop. */
+const SETTLE_ROUNDS = 1000;
+/** Messages posted between a game and its frame and not delivered yet, over every pair. */
+let inFlight = 0;
+
+/** Delivers a posted message on a later task, as postMessage does, counting it until then. */
+function deliver(fn: () => void): void {
+  inFlight += 1;
+  setTimeout(() => {
+    inFlight -= 1;
+    fn();
+  });
+}
+
+/**
+ * Lets queued messages and promise chains run until nothing is left to deliver.
+ * Everything else the fakes do (server, storage, locks, response bodies) settles
+ * in microtasks, which drain before each timer callback; so once a timer finds
+ * no message in flight, the pages are idle. A fixed wait raced a chain of
+ * messages under load (each hop is a timer, so a busy event loop pushed the
+ * last ones past it).
+ */
+export async function settle(): Promise<void> {
+  // Far more rounds than any test's exchange takes; a page pair that never
+  // goes quiet (two sides answering each other forever) fails loudly instead.
+  for (let round = 0; round < SETTLE_ROUNDS; round++) {
+    await new Promise((r) => setTimeout(r, 0));
+    if (inFlight === 0) return;
+  }
+  throw new Error(`settle: messages still in flight after ${SETTLE_ROUNDS} rounds`);
+}
 
 export interface Posted {
   message: unknown;
@@ -74,7 +103,7 @@ export function framePair(
     post: (message, origin) => {
       posted.push({ message, origin });
       const data = structuredClone(message);
-      setTimeout(() => client?.receive({ data, origin: FRAME, source: frameWindow }));
+      deliver(() => client?.receive({ data, origin: FRAME, source: frameWindow }));
     },
     self: FRAME,
     isSibling: (source) => source === linkWindow,
@@ -102,7 +131,7 @@ export function framePair(
   client = createClient({
     post: (message) => {
       const data = structuredClone(message);
-      setTimeout(() => host?.receive({ data, origin: GAME, source: parentWindow }));
+      deliver(() => host?.receive({ data, origin: GAME, source: parentWindow }));
     },
     origin: FRAME,
     source: () => frameWindow,
