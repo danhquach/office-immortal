@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GradeId, Item } from '../core/loot.ts';
+import { DEFAULT_LANG, setLang } from './i18n.ts';
 import {
   bestGrade,
   dropToast,
@@ -167,7 +168,16 @@ describe('tribulationNotice', () => {
 
 describe('dropToast', () => {
   it('shows name, grade and quality', () => {
-    expect(dropToast(item('earth'))).toMatch(/^Jade Serpent Blade · Earth · \d+%$/);
+    expect(dropToast(item('earth'))).toMatch(/^Jade Serpent Blade · Earth · Quality \d+%$/);
+  });
+
+  it('labels quality in Vietnamese', () => {
+    setLang('vi');
+    try {
+      expect(dropToast(item('earth'))).toMatch(/ · Chất lượng \d+%$/);
+    } finally {
+      setLang(DEFAULT_LANG);
+    }
   });
 });
 

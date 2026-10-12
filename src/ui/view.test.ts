@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { newCultivator, REALMS, type Cultivator } from '../core/cultivator.ts';
+import { afterEach, describe, expect, it } from 'vitest';
+import { derive, newCultivator, REALMS, type Cultivator } from '../core/cultivator.ts';
 import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
@@ -17,6 +17,8 @@ import {
   gridMove,
   itemLines,
   itemTag,
+  gearVerdict,
+  verdictOf,
   treasureTier,
   charmLineName,
   favouredBy,
@@ -41,6 +43,7 @@ import {
   xpBar,
 } from './view.ts';
 import { makeTribulation } from '../core/floors.ts';
+import { DEFAULT_LANG, setLang, t } from './i18n.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
@@ -81,7 +84,7 @@ describe('items', () => {
   });
 
   it('tags grade, slot, level and quality in text', () => {
-    expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10 · 66%');
+    expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10 · Quality 66%');
   });
 
   it.each([
@@ -683,8 +686,267 @@ describe('freshDrops', () => {
 });
 
 describe('cellLabel', () => {
-  it('names the item with its grade, slot, level and quality in words', () => {
-    expect(cellLabel(stapler)).toBe('Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · 66%');
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  it('names the item with its grade, slot, level and labeled quality in words', () => {
+    expect(cellLabel(stapler)).toBe(
+      'Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · Quality 66%',
+    );
+  });
+
+  it('adds "upgrade" or "downgrade" only when that badge shows', () => {
+    const tag = 'Golden Crow Flying Sword, Heaven · Weapon · Lv 10 · Quality 66%';
+    expect(cellLabel(stapler, 'up')).toBe(`${tag}, upgrade`);
+    expect(cellLabel(stapler, 'down')).toBe(`${tag}, downgrade`);
+    expect(cellLabel(stapler, 'mixed')).toBe(`${tag}, mixed`);
+    expect(cellLabel(stapler, null)).toBe(tag);
+    expect(cellLabel(stapler)).toBe(tag);
+  });
+
+  it('labels quality and the upgrade in Vietnamese', () => {
+    setLang('vi');
+    expect(itemTag(stapler)).toMatch(/ · Cấp 10 · Chất lượng 66%$/);
+    expect(cellLabel(stapler)).toMatch(/, .* · Chất lượng 66%$/);
+    expect(cellLabel(stapler, 'up')).toMatch(/ · Chất lượng 66%, nâng cấp$/);
+    expect(cellLabel(stapler, 'down')).toMatch(/ · Chất lượng 66%, hạ cấp$/);
+    expect(cellLabel(stapler, 'mixed')).toMatch(/ · Chất lượng 66%, được mất$/);
+    expect(cellLabel(stapler, null)).toMatch(/ · Chất lượng 66%$/);
+  });
+
+  it('has a quality helper line in both languages', () => {
+    expect(t('item.qualityHint')).toBe("Average of this item's rolls within their ranges");
+    setLang('vi');
+    expect(t('item.qualityHint')).toBe('Trung bình các lần tung của món đồ trong khoảng của chúng');
+  });
+
+  it('keeps the sort option as "Quality %" / "Chất lượng %"', () => {
+    expect(t('sort.quality')).toBe('Quality %');
+    setLang('vi');
+    expect(t('sort.quality')).toBe('Chất lượng %');
+  });
+
+  it.each(['<img src=x onerror=alert(1)>\u202e\u200b', '__proto__', 'constructor', '{tag}{name}'])(
+    'passes a hostile item name through as plain text, never expanded: %s',
+    (name) => {
+      for (const lang of ['en', 'vi']) {
+        setLang(lang);
+        for (const v of ['up', 'down', 'mixed'] as const) {
+          const label = cellLabel({ ...stapler, name }, v);
+          expect(label.startsWith(`${name}, `)).toBe(true);
+          expect(label).toMatch(/, (upgrade|nâng cấp|downgrade|hạ cấp|mixed|được mất)$/);
+          // A name never fills a placeholder: the tag appears exactly once.
+          expect(label.split(itemTag(stapler))).toHaveLength(2);
+        }
+      }
+    },
+  );
+});
+
+describe('gear badge', () => {
+  const c0 = (): Cultivator => newCultivator('sword');
+  const sword = (baseRoll: number, affixes: Item['affixes'] = []): Item => ({
+    slot: 'weapon',
+    name: 'Iron Flying Sword',
+    level: 5,
+    grade: 'mortal',
+    baseRoll,
+    affixes,
+  });
+  const charm = (baseRoll: number): Item => ({
+    slot: 'charm',
+    name: 'Laminated Seal',
+    level: 1,
+    grade: 'mortal',
+    baseRoll,
+    affixes: [],
+  });
+  const acc = (baseRoll: number): Item => ({
+    slot: 'accessory',
+    name: 'Lanyard Pendant',
+    level: 1,
+    grade: 'mortal',
+    baseRoll,
+    affixes: [],
+  });
+  const disc = (array: Item['array'], baseRoll: number): Item => ({
+    slot: 'attachment',
+    name: 'Bronze Formation Disc',
+    level: 1,
+    grade: 'mortal',
+    baseRoll,
+    affixes: [],
+    array,
+  });
+
+  it('reads a comparison: all gains up, all losses down, both mixed, empty none', () => {
+    expect(verdictOf([])).toBeNull();
+    expect(verdictOf([{ better: true }, { better: true }])).toBe('up');
+    expect(verdictOf([{ better: false }, { better: false }])).toBe('down');
+    expect(verdictOf([{ better: true }, { better: false }])).toBe('mixed');
+  });
+
+  it('all gains: ▲', () => {
+    const c = c0();
+    c.equipment.weapon = sword(0);
+    expect(gearVerdict(c, sword(1))).toBe('up');
+  });
+
+  it('strict downgrade (all losses): ▼', () => {
+    const c = c0();
+    c.equipment.weapon = sword(1);
+    expect(compareToEquipped(c, sword(0), 'weapon').every((l) => !l.better)).toBe(true);
+    expect(gearVerdict(c, sword(0))).toBe('down');
+  });
+
+  it('mixed gains and losses in one position: the dash', () => {
+    const c = c0();
+    c.equipment.weapon = sword(0, [{ id: 'maxHp', roll: 1 }]);
+    const item = sword(1, [{ id: 'critChance', roll: 1 }]);
+    const lines = compareToEquipped(c, item, 'weapon');
+    expect(lines.some((l) => l.better) && lines.some((l) => !l.better)).toBe(true);
+    expect(gearVerdict(c, item)).toBe('mixed');
+  });
+
+  it('no change: none', () => {
+    const c = c0();
+    c.equipment.weapon = sword(1);
+    expect(compareToEquipped(c, sword(1), 'weapon')).toEqual([]);
+    expect(gearVerdict(c, sword(1))).toBeNull();
+  });
+
+  it('empty position: ▲ for any item, never ▼', () => {
+    expect(gearVerdict(c0(), sword(0))).toBe('up');
+  });
+
+  it('a Formation Disc of the same array: stronger ▲, weaker ▼', () => {
+    const c = c0();
+    c.equipment.attachment = disc('killing', 0);
+    expect(gearVerdict(c, disc('killing', 1))).toBe('up');
+    c.equipment.attachment = disc('killing', 1);
+    expect(gearVerdict(c, disc('killing', 0))).toBe('down');
+  });
+
+  it('a Formation Disc of a different array type (one gain, one loss): the dash', () => {
+    const c = c0();
+    c.equipment.attachment = disc('killing', 1);
+    expect(gearVerdict(c, disc('binding', 0))).toBe('mixed');
+    expect(gearVerdict(c, disc('binding', 1))).toBe('mixed');
+  });
+
+  it('two positions: a downgrade in one and the other empty: ▲', () => {
+    const c = c0();
+    c.equipment.charm1 = charm(1);
+    expect(verdictOf(compareToEquipped(c, charm(0), 'charm1'))).toBe('down');
+    expect(gearVerdict(c, charm(0))).toBe('up');
+  });
+
+  it('two positions: a downgrade in both: ▼', () => {
+    const c = c0();
+    c.equipment.charm1 = charm(1);
+    c.equipment.charm2 = charm(0.8);
+    expect(gearVerdict(c, charm(0))).toBe('down');
+    c.equipment.accessory1 = acc(1);
+    c.equipment.accessory2 = acc(0.8);
+    expect(gearVerdict(c, acc(0))).toBe('down');
+  });
+
+  it('two positions: an upgrade in one and a downgrade in the other: ▲', () => {
+    const c = c0();
+    c.equipment.charm1 = charm(0);
+    c.equipment.charm2 = charm(1);
+    const mid = charm(0.5);
+    expect(verdictOf(compareToEquipped(c, mid, 'charm1'))).toBe('up');
+    expect(verdictOf(compareToEquipped(c, mid, 'charm2'))).toBe('down');
+    expect(gearVerdict(c, mid)).toBe('up');
+    c.equipment.accessory1 = acc(0);
+    c.equipment.accessory2 = acc(1);
+    expect(gearVerdict(c, acc(0.5))).toBe('up');
+  });
+
+  it('two positions: a downgrade in one and no change in the other: the dash', () => {
+    const c = c0();
+    c.equipment.charm1 = charm(1);
+    c.equipment.charm2 = charm(0);
+    expect(gearVerdict(c, charm(0))).toBe('mixed');
+  });
+
+  it('two positions: no change in either: none', () => {
+    const c = c0();
+    c.equipment.charm1 = charm(0.5);
+    c.equipment.charm2 = charm(0.5);
+    expect(gearVerdict(c, charm(0.5))).toBeNull();
+  });
+
+  const mixedAcc = (crit: number, hp: number): Item => ({
+    ...acc(0),
+    grade: 'spirit',
+    name: 'Azure Soul-Scattering Bell',
+    affixes: [
+      { id: 'critChance', roll: crit },
+      { id: 'maxHp', roll: hp },
+    ],
+  });
+
+  it('two positions: mixed in one and a downgrade in the other: the dash', () => {
+    const c = c0();
+    c.equipment.accessory1 = mixedAcc(0, 1);
+    c.equipment.accessory2 = mixedAcc(1, 1);
+    const item = mixedAcc(1, 0);
+    expect(verdictOf(compareToEquipped(c, item, 'accessory1'))).toBe('mixed');
+    expect(verdictOf(compareToEquipped(c, item, 'accessory2'))).toBe('down');
+    expect(gearVerdict(c, item)).toBe('mixed');
+  });
+
+  it('two positions: an upgrade in one and mixed in the other: ▲', () => {
+    const c = c0();
+    c.equipment.accessory1 = mixedAcc(0, 0);
+    c.equipment.accessory2 = mixedAcc(0, 1);
+    const item = mixedAcc(1, 0);
+    expect(verdictOf(compareToEquipped(c, item, 'accessory1'))).toBe('up');
+    expect(verdictOf(compareToEquipped(c, item, 'accessory2'))).toBe('mixed');
+    expect(gearVerdict(c, item)).toBe('up');
+  });
+
+  it('an item below its realm requirement: none, even over an empty or better position', () => {
+    const c = c0();
+    const relic: Item = { ...stapler, level: 1 };
+    expect(equipBlock(c, relic)).not.toBeNull();
+    expect(gearVerdict(c, relic)).toBeNull();
+    c.equipment.weapon = { ...stapler, level: 1, baseRoll: 0 };
+    expect(gearVerdict(c, relic)).toBeNull();
+    expect(gearVerdict(c, { ...relic, baseRoll: 0, affixes: [] })).toBeNull();
+    expect(gearVerdict({ ...c, level: 11 }, relic)).toBe('up');
+  });
+
+  it('an equipped item compared with itself: none', () => {
+    const c = c0();
+    c.equipment.weapon = stapler;
+    c.level = 11;
+    expect(gearVerdict(c, stapler)).toBeNull();
+  });
+
+  it('agrees with the details comparison, given a precomputed derive()', () => {
+    const c = c0();
+    c.equipment.weapon = sword(0.5);
+    const now = derive(c);
+    for (const roll of [0, 0.25, 0.5, 0.75, 1]) {
+      const item = sword(roll);
+      expect(gearVerdict(c, item, now)).toBe(verdictOf(compareToEquipped(c, item, 'weapon')));
+      expect(compareToEquipped(c, item, 'weapon', now)).toEqual(
+        compareToEquipped(c, item, 'weapon'),
+      );
+    }
+  });
+
+  it('never badges an item whose rolls are not numbers (a save that slipped a check)', () => {
+    const c = c0();
+    c.equipment.weapon = stapler;
+    c.level = 11;
+    const broken = { ...stapler, baseRoll: Number.NaN };
+    expect(gearVerdict(c, broken)).toBeNull();
+    expect(compareToEquipped(c, broken, 'weapon').map((l) => l.text)).not.toContain(
+      expect.stringMatching(/NaN/),
+    );
   });
 });
 

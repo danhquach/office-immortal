@@ -37,6 +37,13 @@ describe('contrast', () => {
 describe('page.css colours', () => {
   const t = themes();
 
+  it('sets the mixed dash colour in both theme blocks', () => {
+    const dark = /:root:not\(\[data-theme='light'\]\)\s*{([^}]*)}/.exec(css)?.[1] ?? '';
+    const light = /^:root\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
+    expect(light).toMatch(/--mixed:\s*#[0-9a-f]{6}\s*;/i);
+    expect(dark).toMatch(/--mixed:\s*#[0-9a-f]{6}\s*;/i);
+  });
+
   it('defines every grade colour in both themes', () => {
     for (const g of GRADES) {
       expect(t.light.has(`--grade-${g}`)).toBe(true);
@@ -69,6 +76,16 @@ describe('page.css colours', () => {
         contrast(vars.get('--xp-fill') as string, vars.get('--xp-track') as string),
       ).toBeGreaterThanOrEqual(3);
     });
+
+    // The bag cell's ▲ / ▼ / dash badge is a non-text mark (WCAG 1.4.11) on the cell's --bg.
+    it.each(['--up', '--down', '--mixed'])(
+      `${name}: the %s gear badge is at least 3:1 on the cell background`,
+      (mark) => {
+        expect(
+          contrast(vars.get(mark) as string, vars.get('--bg') as string),
+        ).toBeGreaterThanOrEqual(3);
+      },
+    );
 
     it.each([
       '--strip-ink',

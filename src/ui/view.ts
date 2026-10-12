@@ -30,6 +30,7 @@ import {
   OFFLINE_DROP_MULTIPLIER,
   quality,
   SLOTS,
+  slotsFor,
   SOUL_CAPS,
   soulDamage,
   UNIQUES,
@@ -114,7 +115,7 @@ export function itemLines(item: Item): string[] {
   return lines;
 }
 
-/** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12 · 94%". */
+/** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12 · Quality 94%". */
 export function itemTag(item: Item): string {
   return t('item.tag', {
     grade: tn('grade', GRADES[item.grade].name),
@@ -280,24 +281,83 @@ export function respecView(
 /**
  * What equipping `item` into position `to` would change, as signed lines such
  * as "+3.2 Damage"; `better` is true for a gain. Rows whose change rounds to
- * nothing are left out.
+ * nothing are left out. `now` is the cultivator's current `derive()`, when the
+ * caller already has it.
  */
 export function compareToEquipped(
   c: Cultivator,
   item: Item,
   to: EquipSlotId,
+  now: Derived = derive(c),
 ): { text: string; better: boolean }[] {
-  const now = derive(c);
-  const next = derive({ ...c, equipment: { ...c.equipment, [to]: item } });
-  const lines: { text: string; better: boolean }[] = [];
-  for (const r of STAT_ROWS) {
-    const fmt = r.delta ?? r.format;
-    const change = r.value(next) - r.value(now);
-    const text = fmt(Math.abs(change));
-    if (text === fmt(0)) continue;
-    lines.push({ text: `${signed(change, text)} ${t(r.label)}`, better: change > 0 });
-  }
+  const lines = statChanges(c, item, to, now).map(({ row, change, text }) => ({
+    text: `${signed(change, text)} ${t(row.label)}`,
+    better: change > 0,
+  }));
   return [...lines, ...compareArrays(c.equipment[to], item)];
+}
+
+/**
+ * The stat rows that equipping `item` into `to` changes, with the change and
+ * its shown size (no label). Shared by the comparison and the upgrade badge,
+ * so both drop the same rounds-to-nothing rows.
+ */
+function statChanges(
+  c: Cultivator,
+  item: Item,
+  to: EquipSlotId,
+  now: Derived,
+): { row: StatRow; change: number; text: string }[] {
+  const next = derive({ ...c, equipment: { ...c.equipment, [to]: item } });
+  const out: { row: StatRow; change: number; text: string }[] = [];
+  for (const row of STAT_ROWS) {
+    const fmt = row.delta ?? row.format;
+    const change = row.value(next) - row.value(now);
+    // A non-number (only from a roll a save check missed) is no gain and no loss.
+    if (!Number.isFinite(change)) continue;
+    const text = fmt(Math.abs(change));
+    if (text !== fmt(0)) out.push({ row, change, text });
+  }
+  return out;
+}
+
+/**
+ * What a bag cell's badge says: a strict upgrade (▲), a strict downgrade (▼),
+ * a mix of gains and losses (a gold dash), or nothing.
+ */
+export type GearVerdict = 'up' | 'down' | 'mixed' | null;
+
+/**
+ * A comparison's verdict: 'up' when every line is a gain, 'down' when every
+ * line is a loss, 'mixed' when it has both, null when it is empty (no change).
+ */
+export function verdictOf(lines: readonly { better: boolean }[]): GearVerdict {
+  if (!lines.length) return null;
+  if (lines.every((l) => l.better)) return 'up';
+  return lines.every((l) => !l.better) ? 'down' : 'mixed';
+}
+
+/**
+ * The badge on bag item `item` (docs/design.md §6), from the same lines the
+ * details panel shows; none when the cultivator can't equip it yet. Over the
+ * positions it fits, in order: 'up' when one is empty or it is an upgrade in
+ * one; 'down' when it is a downgrade in every one; 'mixed' when any position
+ * changes at all; else null. `now` is the cultivator's current `derive()`,
+ * worked out once per pass by the caller.
+ */
+export function gearVerdict(c: Cultivator, item: Item, now: Derived = derive(c)): GearVerdict {
+  if (!canEquip(c, item)) return null;
+  const fits = slotsFor(item.slot);
+  if (fits.some((to) => !c.equipment[to])) return 'up';
+  const verdicts = fits.map((to) =>
+    verdictOf([
+      ...statChanges(c, item, to, now).map((s) => ({ better: s.change > 0 })),
+      ...compareArrays(c.equipment[to], item),
+    ]),
+  );
+  if (verdicts.includes('up')) return 'up';
+  if (verdicts.every((v) => v === 'down')) return 'down';
+  return verdicts.some((v) => v !== null) ? 'mixed' : null;
 }
 
 /** An array's strength in short, e.g. "1.75 s" or "9.5%". */
@@ -558,9 +618,22 @@ export function arraySetUp(prev: GameState, next: GameState): string | null {
   return array ? t('array.setUp', { name: tn('array', ARRAYS[array.id].name) }) : null;
 }
 
-/** A grid cell's accessible name: everything its colour, initial and icon show, in words. */
-export function cellLabel(item: Item): string {
-  return t('item.cell', { name: tn('item', item.name), tag: itemTag(item) });
+/** The words a gear badge adds to a cell's accessible name. */
+const CELL_LABELS: Readonly<Record<NonNullable<GearVerdict>, MessageKey>> = {
+  up: 'item.cellUpgrade',
+  down: 'item.cellDowngrade',
+  mixed: 'item.cellMixed',
+};
+
+/**
+ * A grid cell's accessible name: everything its colour, initial, icon and
+ * gear badge show, in words.
+ */
+export function cellLabel(item: Item, verdict: GearVerdict = null): string {
+  return t(verdict ? CELL_LABELS[verdict] : 'item.cell', {
+    name: tn('item', item.name),
+    tag: itemTag(item),
+  });
 }
 
 /**
