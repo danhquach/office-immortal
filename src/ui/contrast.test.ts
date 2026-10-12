@@ -18,8 +18,36 @@ function themes(): { light: Map<string, string>; dark: Map<string, string> } {
   return { light: l, dark: new Map([...l, ...vars(dark[1])]) };
 }
 
+/** The hue of `#rrggbb`, 0–360°. */
+function hue(hex: string): number {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255) as [
+    number,
+    number,
+    number,
+  ];
+  const max = Math.max(r, g, b);
+  const d = max - Math.min(r, g, b);
+  if (d === 0) return 0;
+  const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+}
+
+/** The gap between two hues round the colour wheel, 0–180°. */
+function hueGap(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+}
+
 const GRADES = ['mortal', 'spirit', 'earth', 'heaven', 'immortal'];
-const TEXT = ['--ink', '--muted', '--up', '--down', ...GRADES.map((g) => `--grade-${g}`)];
+const TEXT = [
+  '--ink',
+  '--muted',
+  '--up',
+  '--down',
+  '--sell',
+  '--salvage',
+  ...GRADES.map((g) => `--grade-${g}`),
+];
 const SURFACES = ['--bg', '--panel', '--head'];
 
 describe('contrast', () => {
@@ -42,6 +70,83 @@ describe('page.css colours', () => {
     const light = /^:root\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
     expect(light).toMatch(/--mixed:\s*#[0-9a-f]{6}\s*;/i);
     expect(dark).toMatch(/--mixed:\s*#[0-9a-f]{6}\s*;/i);
+  });
+
+  it('sets the sell and salvage colours in both theme blocks, distinct from each other', () => {
+    const dark = /:root:not\(\[data-theme='light'\]\)\s*{([^}]*)}/.exec(css)?.[1] ?? '';
+    const light = /^:root\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
+    for (const block of [light, dark]) {
+      expect(block).toMatch(/--sell:\s*#[0-9a-f]{6}\s*;/i);
+      expect(block).toMatch(/--salvage:\s*#[0-9a-f]{6}\s*;/i);
+    }
+    // Each sits apart in hue from the other and from the colours that mean
+    // something else nearby (grades, badges, accent, strip tiers).
+    const others = [
+      '--up',
+      '--down',
+      '--mixed',
+      '--accent',
+      '--strip-elite',
+      '--strip-boss',
+      '--strip-tribulation',
+      ...GRADES.filter((g) => g !== 'mortal').map((g) => `--grade-${g}`),
+    ];
+    for (const vars of [t.light, t.dark]) {
+      const hueOf = (v: string) => hue(vars.get(v) as string);
+      expect(hueGap(hueOf('--sell'), hueOf('--salvage'))).toBeGreaterThan(90);
+      for (const action of ['--sell', '--salvage']) {
+        for (const other of others) {
+          expect(hueGap(hueOf(action), hueOf(other)), `${action} vs ${other}`).toBeGreaterThan(15);
+        }
+      }
+    }
+  });
+
+  it('colours every sell control with --sell and every salvage control with --salvage', () => {
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const action of ['sell', 'salvage']) {
+      const button = new RegExp(
+        `button\\.${action}:not\\(\\[aria-disabled='true'\\]\\)\\s*{([^}]*)}`,
+      ).exec(code)?.[1];
+      expect(button).toMatch(new RegExp(`(?:^|[^-])color:\\s*var\\(--${action}\\)`));
+      expect(button).toMatch(new RegExp(`border-color:\\s*var\\(--${action}\\)`));
+      const box = new RegExp(`\\.confirm\\[data-action='${action}'\\]\\s*{([^}]*)}`).exec(
+        code,
+      )?.[1];
+      expect(box).toMatch(new RegExp(`border-color:\\s*var\\(--${action}\\)`));
+    }
+  });
+
+  it('tints the bulk grade picker and the confirmation grade name with the grade tokens', () => {
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    const rule = (selector: string) =>
+      new RegExp(`(?:^|[},])\\s*${selector}\\s*(?:,[^{]*)?{([^}]*)}`, 'm').exec(code)?.[1] ?? '';
+    for (const g of GRADES) {
+      // The picker's chosen value, and the bag cells' / confirmation span's class.
+      expect(rule(`\\.field select\\[data-tint='${g}'\\]`)).toMatch(
+        new RegExp(`(?:^|[^-])color:\\s*var\\(--grade-${g}\\)`),
+      );
+      expect(rule(`\\.grade-${g}`)).toMatch(
+        new RegExp(`(?:^|[^-])color:\\s*var\\(--grade-${g}\\)`),
+      );
+    }
+    for (const a of ['sell', 'salvage']) {
+      expect(rule(`\\.field select\\[data-tint='${a}'\\]`)).toMatch(
+        new RegExp(`(?:^|[^-])color:\\s*var\\(--${a}\\)`),
+      );
+    }
+    // Picker and options sit on --bg, a surface every text colour is checked on.
+    expect(rule('select')).toMatch(/background:\s*var\(--bg\)/);
+    expect(rule('\\.field option')).toMatch(/background:\s*var\(--bg\)/);
+    // Unstyled options fall back to --ink, never the chosen value's colour, and
+    // a highlighted row uses the system's own pair.
+    expect(rule('\\.field option')).toMatch(/(?:^|[^-])color:\s*var\(--ink\)/);
+    for (const g of GRADES) {
+      expect(rule(`\\.field option\\.grade-${g}`)).toMatch(
+        new RegExp(`(?:^|[^-])color:\\s*var\\(--grade-${g}\\)`),
+      );
+    }
+    expect(rule('\\.field option:hover')).toMatch(/color:\s*HighlightText/);
   });
 
   it('defines every grade colour in both themes', () => {

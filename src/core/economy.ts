@@ -149,64 +149,150 @@ export function pickUp(s: GameState, item: Item): void {
   }
 }
 
+/** The bag tools' bulk actions (§7): selling for Spirit Stones or salvaging into Spirit Essence. */
+export type BulkAction = 'sell' | 'salvage';
+
+/** What each bulk action pays in, and how much per item. */
+const BULK: Readonly<Record<BulkAction, { currency: Currency; value: (item: Item) => number }>> = {
+  sell: { currency: 'stones', value: sellPrice },
+  salvage: { currency: 'essence', value: essenceValue },
+};
+
 function bagItem(state: GameState, index: number, what: string): Item {
   const item = Number.isInteger(index) ? state.inventory[index] : undefined;
   if (!item) throw new RangeError(`${what}: no item at ${index}`);
   return item;
 }
 
-/** Sells the bag item at `index` for Spirit Stones; `state` is left untouched. */
-export function sell(state: GameState, index: number): GameState {
-  const item = bagItem(state, index, 'sell');
+/** Sells or salvages the bag item at `index` for what `action` pays; `state` is left untouched. */
+export function disposeItem(state: GameState, index: number, action: BulkAction): GameState {
+  if (!Object.hasOwn(BULK, action)) throw new RangeError('dispose: unknown action');
+  const item = bagItem(state, index, action);
+  const { currency, value } = BULK[action];
   const s = structuredClone(state);
   s.inventory.splice(index, 1);
-  earn(s, 'stones', sellPrice(item));
+  earn(s, currency, value(item));
   return s;
 }
 
-/** Salvages the bag item at `index` into Spirit Essence; `state` is left untouched. */
-export function salvage(state: GameState, index: number): GameState {
-  const item = bagItem(state, index, 'salvage');
-  const s = structuredClone(state);
-  s.inventory.splice(index, 1);
-  earn(s, 'essence', essenceValue(item));
-  return s;
+/** What a bulk action would do, for its confirmation. */
+export interface BulkPreview {
+  /** Items it takes. */
+  count: number;
+  /** The highest grade among them; null when it takes nothing. */
+  highest: GradeId | null;
+  /** What it pays, capped like every earning at what the currency can still hold. */
+  total: number;
+  /** Refined items (+1 or higher) below the grade, which it keeps. */
+  kept: number;
 }
 
-/** True when bulk selling below `grade` takes `item`: below it, and never refined (§7). */
-function soldBelow(item: Item, grade: GradeId): boolean {
+/** True when a bulk action below `grade` takes `item`: below it, and never refined (§7). */
+function takenBelow(item: Item, grade: GradeId): boolean {
   return gradeRank(item.grade) < gradeRank(grade) && !item.refines;
 }
 
-/**
- * What selling every bag item below `grade` would do, for the confirmation.
- * Refined items (+1 or higher) are kept; `kept` counts those below `grade`.
- */
-export function sellBelowPreview(
-  state: GameState,
-  grade: GradeId,
-): { count: number; highest: GradeId | null; stones: number; kept: number } {
-  const items = state.inventory.filter((i) => soldBelow(i, grade));
-  const highest = items.reduce<GradeId | null>(
-    (best, i) => (best === null || gradeRank(i.grade) > gradeRank(best) ? i.grade : best),
-    null,
-  );
-  const below = state.inventory.filter((i) => gradeRank(i.grade) < gradeRank(grade)).length;
-  return {
-    count: items.length,
-    highest,
-    stones: items.reduce((n, i) => n + sellPrice(i), 0),
-    kept: below - items.length,
-  };
+/** Refuses what the bag tools could never send; the bad value is not echoed (any string, any length). */
+function checkBulk(state: GameState, action: BulkAction, grade: GradeId, within: number): void {
+  if (!Object.hasOwn(BULK, action)) throw new RangeError('bulk: unknown action');
+  if (!GRADE_IDS.includes(grade)) throw new RangeError(`bulk ${action}: unknown grade`);
+  if (!Number.isInteger(within) || within < 0 || within > state.inventory.length)
+    throw new RangeError(`bulk ${action}: bad bag range`);
 }
 
-/** Sells every bag item below `grade` but the refined ones; `state` is left untouched. */
-export function sellBelow(state: GameState, grade: GradeId): GameState {
-  if (!GRADE_IDS.includes(grade)) throw new RangeError(`sellBelow: no grade ${grade}`);
+/**
+ * What bulk `action` below `grade` would do, looking only at the first
+ * `within` bag items (all by default). A confirmation carries it out with
+ * bulkConfirm, which checks that part of the bag is still the one shown.
+ */
+export function bulkPreview(
+  state: GameState,
+  action: BulkAction,
+  grade: GradeId,
+  within = state.inventory.length,
+): BulkPreview {
+  checkBulk(state, action, grade, within);
+  const { currency, value } = BULK[action];
+  let count = 0;
+  let below = 0;
+  let total = 0;
+  let highest: GradeId | null = null;
+  for (const i of state.inventory.slice(0, within)) {
+    if (gradeRank(i.grade) < gradeRank(grade)) below += 1;
+    if (!takenBelow(i, grade)) continue;
+    count += 1;
+    total += value(i);
+    if (highest === null || gradeRank(i.grade) > gradeRank(highest)) highest = i.grade;
+  }
+  total = Math.min(total, Number.MAX_SAFE_INTEGER - state[currency]);
+  return { count, highest, total, kept: below - count };
+}
+
+/**
+ * Takes every bag item below `grade` but the refined ones, among the first
+ * `within` (all by default), for what bulk `action` pays; `state` is left untouched.
+ */
+export function bulkTake(
+  state: GameState,
+  action: BulkAction,
+  grade: GradeId,
+  within = state.inventory.length,
+): GameState {
+  checkBulk(state, action, grade, within);
+  const { currency, value } = BULK[action];
   const s = structuredClone(state);
-  earn(s, 'stones', sellBelowPreview(state, grade).stones);
-  s.inventory = s.inventory.filter((i) => !soldBelow(i, grade));
+  let total = 0;
+  s.inventory = s.inventory.filter((i, at) => {
+    if (at >= within || !takenBelow(i, grade)) return true;
+    total += value(i);
+    return false;
+  });
+  earn(s, currency, total);
   return s;
+}
+
+/** True when two plain-data values (items as the sim and the save build them) are equal, key order aside. */
+function sameData(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+  return (
+    ka.length === kb.length &&
+    ka.every(
+      (k) =>
+        Object.hasOwn(b, k) &&
+        sameData((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]),
+    )
+  );
+}
+
+/** True when the bag still starts with exactly `seen`, the bag a confirmation showed. */
+export function bagStillShows(state: GameState, seen: readonly Item[]): boolean {
+  return (
+    seen.length <= state.inventory.length &&
+    seen.every((item, i) => sameData(item, state.inventory[i]))
+  );
+}
+
+/**
+ * Carries out a bulk confirmation the player was shown: `seen` is the bag it
+ * looked at. Drops that landed after `seen` are left alone. Returns null,
+ * taking nothing, when that part of the bag changed (equipping, selling or
+ * salvaging one item) or there is nothing to take: the caller asks again. The
+ * same items pay the same; only a currency's cap, which clamps every earning,
+ * can credit less than the confirmation named.
+ */
+export function bulkConfirm(
+  state: GameState,
+  action: BulkAction,
+  grade: GradeId,
+  seen: readonly Item[],
+): GameState | null {
+  if (!bagStillShows(state, seen)) return null;
+  const next = bulkTake(state, action, grade, seen.length);
+  return next.inventory.length === state.inventory.length ? null : next;
 }
 
 const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];

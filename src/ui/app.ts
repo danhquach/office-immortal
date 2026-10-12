@@ -21,6 +21,7 @@ import {
   buyBagSpace,
   canResetStats,
   changePath,
+  disposeItem,
   essenceValue,
   GRADE_IDS,
   refine,
@@ -28,16 +29,17 @@ import {
   rerollAffix,
   pathChangeCost,
   resetStats,
-  salvage,
-  sell,
-  sellBelow,
-  sellBelowPreview,
+  bulkPreview,
+  bagStillShows,
+  bulkConfirm,
+  type BulkPreview,
   sellPrice,
   setFilter,
   // Item types, not the equipment positions this file calls SLOT_IDS.
   SLOT_IDS as ITEM_TYPES,
   spendPoints,
   statResetCost,
+  type BulkAction,
   type FilterAction,
   type ItemAt,
 } from '../core/economy.ts';
@@ -185,7 +187,8 @@ import {
   SUMMARY_ICONS,
   summaryIcon,
   retireLines,
-  sellBelowLabel,
+  bulkAsk,
+  tintOf,
   SPRITE_SIZE,
   respecView,
   STAT_GROUPS,
@@ -306,6 +309,30 @@ function choice(
   }
   box.append(caption, select);
   return { box, select };
+}
+
+/**
+ * Tints `select` by its chosen value (page.css): `data-tint` mirrors the
+ * value when it is one of `allowed`, and is removed otherwise. Each option
+ * gets its own value's class, for browsers that colour options.
+ */
+function tintChoice(
+  select: HTMLSelectElement,
+  classOf: (value: string) => string,
+  allowed: readonly string[],
+): () => void {
+  for (const o of select.options) {
+    const value = tintOf(o.value, allowed);
+    if (value !== null) o.className = classOf(value);
+  }
+  const tint = (): void => {
+    const value = tintOf(select.value, allowed);
+    if (value !== null) select.dataset.tint = value;
+    else delete select.dataset.tint;
+  };
+  select.addEventListener('change', tint);
+  tint();
+  return tint;
 }
 
 /** Sets text and on/off only when they change, so a redraw every tick never flickers. */
@@ -1654,57 +1681,108 @@ function play(
     bagCells[to]?.focus();
   });
 
-  // Bulk sell: pick a grade, then confirm a message naming the count and the
-  // highest grade sold.
+  // Bulk sell or salvage: pick a grade, then confirm a message naming the
+  // count, the highest grade taken and what it pays (§7).
   const gradeName = (g: GradeId): string => tn('grade', GRADES[g].name);
   const below = choice(
-    'inventory.sellBelow',
+    'inventory.bulkBelow',
     GRADE_IDS.slice(1).map((g) => [g, () => gradeName(g)] as const),
   );
-  /** The grade and preview the player is confirming; null when no confirmation is open. */
-  let pending: { grade: GradeId; text: string } | null = null;
+  /**
+   * The confirmation open now: its action and grade, the bag the player saw
+   * and what it named; null when closed.
+   */
+  let pending: {
+    action: BulkAction;
+    grade: GradeId;
+    /** The bag it looked at; drops landing later are not taken. */
+    seen: readonly Item[];
+    preview: BulkPreview;
+  } | null = null;
   const confirmBox = el('div', 'confirm');
   confirmBox.setAttribute('role', 'alert');
   const confirmText = el('p');
-  const confirmYes = buttonT('confirm.sell', 'primary', () => {
+  const confirmYes = button('', 'primary', () => {
     if (!pending) return;
-    const text = sellBelowLabel(sellBelowPreview(state, pending.grade));
-    // A drop since the preview changed what would go: show the new numbers first.
-    if (text !== pending.text) return askSellBelow(pending.grade);
-    const grade = pending.grade;
+    const { action, grade, seen } = pending;
+    // Null when the bag the player saw changed: show the new numbers first.
+    const next = bulkConfirm(state, action, grade, seen);
+    if (!next) return askBelow(action, grade);
     closeConfirm();
     // Bag positions shift; an equipped selection stays.
     if (selected && 'bag' in selected) selected = null;
-    act(sellBelow(state, grade));
-    sellBelowBtn.focus();
+    act(next);
+    bulkBtn[action].focus();
   });
   const confirmNo = button('', '', () => {
+    if (!pending) return;
+    const { action } = pending;
     closeConfirm();
-    sellBelowBtn.focus();
+    bulkBtn[action].focus();
   });
   confirmBox.append(confirmText, confirmYes, confirmNo);
   confirmBox.hidden = true;
-  const sellBelowBtn = buttonT('inventory.sell', '', () =>
-    askSellBelow(below.select.value as GradeId),
-  );
+  // Sell controls wear the Spirit Stones colour, salvage ones the Spirit Essence
+  // colour: the class names the action (page.css).
+  const bulkBtn: Record<BulkAction, HTMLButtonElement> = {
+    sell: buttonT('inventory.sell', 'sell', () => askBelow('sell', below.select.value as GradeId)),
+    salvage: buttonT('inventory.salvage', 'salvage', () =>
+      askBelow('salvage', below.select.value as GradeId),
+    ),
+  };
   below.select.addEventListener('change', closeConfirm);
-  /** Opens (or, on a language switch, refills) the confirmation for selling below `grade`. */
-  function askSellBelow(grade: GradeId, focus = true): void {
-    const preview = sellBelowPreview(state, grade);
-    const text = sellBelowLabel(preview);
-    pending = preview.count > 0 ? { grade, text } : null;
-    confirmText.textContent = text;
-    confirmYes.hidden = !pending;
-    confirmNo.textContent = t(pending ? 'confirm.cancel' : 'confirm.ok');
+  // The picker wears its grade's colour, as bag cells do.
+  tintChoice(below.select, (g) => `grade-${g}`, GRADE_IDS);
+  /** Opens the confirmation for `action` below `grade`, naming what it would take now. */
+  function askBelow(action: BulkAction, grade: GradeId, focus = true): void {
+    // A refill (focus false) keeps focus where it is, unless it is on the Yes
+    // button that is about to hide: then it moves to OK, not to the page.
+    const onYes = document.activeElement === confirmYes;
+    pending = {
+      action,
+      grade,
+      seen: state.inventory,
+      preview: bulkPreview(state, action, grade),
+    };
+    fillConfirm();
+    if (focus || (onYes && confirmYes.hidden)) (confirmYes.hidden ? confirmNo : confirmYes).focus();
+  }
+  /**
+   * Writes the open confirmation in the current language. Text that did not
+   * change is left alone, so the alert is not read out again for nothing.
+   */
+  function fillConfirm(): void {
+    if (!pending) return;
+    const { action, preview } = pending;
+    const ask = bulkAsk(action, preview);
+    // Rebuilt only when the words change; the highest grade's name is its own
+    // span, so it wears its grade colour (text only, never markup).
+    if (confirmText.textContent !== ask.text) {
+      confirmText.replaceChildren(
+        ...ask.parts.map((part) =>
+          part.grade
+            ? el('span', `grade-${part.grade}`, part.text)
+            : document.createTextNode(part.text),
+        ),
+      );
+    }
+    setText(confirmYes, ask.yes ?? '');
+    confirmYes.className = `primary ${action}`;
+    confirmYes.hidden = ask.yes === null;
+    confirmBox.dataset.action = action;
+    setText(confirmNo, ask.no);
     confirmBox.hidden = false;
-    if (focus) (pending ? confirmYes : confirmNo).focus();
   }
   function closeConfirm(): void {
     pending = null;
     confirmBox.hidden = true;
+    // Emptied, so the next one is written (and announced) afresh.
+    confirmText.replaceChildren();
+    delete confirmBox.dataset.action;
+    confirmYes.className = 'primary';
   }
   const bulkRow = el('div', 'row');
-  bulkRow.append(below.box, sellBelowBtn);
+  bulkRow.append(below.box, bulkBtn.sell, bulkBtn.salvage);
   const bagBtn = button('', '', () => act(buyBagSpace(state)));
   const bagTools = el('div', 'tools');
   bagTools.append(bulkRow, confirmBox, bagBtn);
@@ -1751,6 +1829,10 @@ function play(
     ['sell', () => t('filter.sell')],
     ['salvage', () => t('filter.salvage')],
   ]);
+  // The minimum grade wears its grade's colour, as the bulk picker does.
+  const tintMinGrade = tintChoice(minGrade.select, (g) => `grade-${g}`, GRADE_IDS);
+  // Sold or salvaged: the choice wears its action's colour, as the buttons do.
+  const tintAction = tintChoice(actionPick.select, (a) => a, ['sell', 'salvage']);
   const types = el('fieldset', 'types');
   types.append(elt('legend', '', 'filter.types'));
   const typeBoxes = {} as Record<SlotId, HTMLInputElement>;
@@ -2552,11 +2634,11 @@ function play(
         parts.push(cmp, compare);
       }
       const row = el('div', 'row');
-      const sellBtn = button(t('details.sell', { n: sellPrice(item) }), '', () =>
+      const sellBtn = button(t('details.sell', { n: sellPrice(item) }), 'sell', () =>
         dispose(index, 'sell'),
       );
       sellBtn.dataset.action = 'sell';
-      const salvageBtn = button(t('details.salvage', { n: essenceValue(item) }), '', () =>
+      const salvageBtn = button(t('details.salvage', { n: essenceValue(item) }), 'salvage', () =>
         dispose(index, 'salvage'),
       );
       salvageBtn.dataset.action = 'salvage';
@@ -2603,10 +2685,8 @@ function play(
     // The Equip button is about to be replaced; keep keyboard focus nearby.
     const fromDetails = details.box.contains(document.activeElement);
     const at = to ?? defaultSlot(state.cultivator.equipment, item);
-    state = equip(state, index, at);
-    gearVersion += 1;
     selected = { slot: at };
-    draw(null);
+    act(equip(state, index, at));
     if (fromDetails) {
       charTabs.show('gear');
       slotCells[at].focus();
@@ -2617,6 +2697,10 @@ function play(
   function act(next: GameState): void {
     state = next;
     gearVersion += 1;
+    // The player changed the bag an open bulk confirmation shows (sold or
+    // equipped from it): show its new numbers rather than stale ones.
+    if (pending && !bagStillShows(state, pending.seen))
+      askBelow(pending.action, pending.grade, false);
     draw(null);
   }
 
@@ -2625,9 +2709,9 @@ function play(
    * cell, so the next item can be handled straight away; focus stays on the
    * same button, or goes to the cell when the bag has nothing left there.
    */
-  function dispose(index: number, action: 'sell' | 'salvage'): void {
+  function dispose(index: number, action: BulkAction): void {
     const at = order.indexOf(index);
-    const next = (action === 'sell' ? sell : salvage)(state, index);
+    const next = disposeItem(state, index, action);
     const now = bagOrder(next.inventory, sort, reverse)[at];
     selected = now === undefined ? null : { bag: now };
     act(next);
@@ -2959,8 +3043,14 @@ function play(
 
     // The form shows the saved filter; the player's own change already matches it.
     const f = state.filter;
-    if (minGrade.select.value !== f.minGrade) minGrade.select.value = f.minGrade;
-    if (actionPick.select.value !== f.action) actionPick.select.value = f.action;
+    if (minGrade.select.value !== f.minGrade) {
+      minGrade.select.value = f.minGrade;
+      tintMinGrade();
+    }
+    if (actionPick.select.value !== f.action) {
+      actionPick.select.value = f.action;
+      tintAction();
+    }
     for (const id of ITEM_TYPES) typeBoxes[id].checked = f.slots.includes(id);
   }
 
@@ -3113,7 +3203,11 @@ function play(
     delete pathPick.dataset.paths;
     delete reward.dataset.insight;
     drops.replaceChildren(...recent.map(dropLine));
-    if (!confirmBox.hidden) askSellBelow(pending?.grade ?? (below.select.value as GradeId), false);
+    // A language switch rewords the open confirmation. One that offered only OK,
+    // or whose bag changed, is asked again with the new numbers (focus stays).
+    if (pending && (pending.preview.count === 0 || !bagStillShows(state, pending.seen)))
+      askBelow(pending.action, pending.grade, false);
+    else fillConfirm();
     drawRetire();
     drawTools();
     const onBench = crafting && itemIn(state, crafting.at);

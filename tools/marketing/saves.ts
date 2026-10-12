@@ -10,7 +10,7 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { derive, readyForTribulation, type Cultivator } from '../../src/core/cultivator.ts';
-import { sellBelow } from '../../src/core/economy.ts';
+import { bulkTake } from '../../src/core/economy.ts';
 import { slotsFor, type EquipSlotId } from '../../src/core/loot.ts';
 import { buyPassive, passiveCost, type PassiveId } from '../../src/core/prestige.ts';
 import {
@@ -59,7 +59,8 @@ function playUntil(state: GameState, done: (s: GameState) => boolean, limit: num
   while (!done(state)) {
     if (state.time >= end) throw new Error(`not reached within ${limit} s`);
     state = gearUp(tick(state, 60));
-    if (state.inventory.length >= state.bagSize && !done(state)) state = sellBelow(state, 'earth');
+    if (state.inventory.length >= state.bagSize && !done(state))
+      state = bulkTake(state, 'sell', 'earth');
   }
   return state;
 }
@@ -103,7 +104,7 @@ const saves: Record<string, GameState> = {
   // A new run on its first floors.
   'early-floor': playUntil(newGame(7, 'sword'), (s) => s.floor >= 3, DAY),
   // The late run with room in the bag; an Immortal item drops within the minute.
-  'immortal-drop': immortalSoon(sellBelow(late, 'heaven'), 60),
+  'immortal-drop': immortalSoon(bulkTake(late, 'sell', 'heaven'), 60),
   // A Body Refiner held at the Foundation Establishment cap, the Tribulation started.
   tribulation: faceTribulation(
     playUntil(

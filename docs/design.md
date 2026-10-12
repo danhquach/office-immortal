@@ -348,6 +348,31 @@ Every drop is generated from a seeded roll.
   and price leave them out, and the confirmation says they are kept. They can
   still be sold or salvaged one at a time. (The auto filter is unaffected:
   every drop is +0.)
+- **Bulk salvage:** "salvage everything below grade X", the same way: the bag
+  tools share one grade picker between **Sell…** and **Salvage…**, and the
+  confirmation names how many items go, the highest grade among them and the
+  Spirit Essence gained. It takes exactly the items bulk sell would (never
+  refined or equipped ones). With nothing below the grade the confirmation
+  says so and offers only OK; cancelling, or nothing to take, changes nothing.
+  Both bulk actions take only the bag the confirmation showed: drops that land
+  while it is open are left alone, and if the shown part changes (an item sold
+  or equipped from it) the open confirmation updates to the new numbers before
+  anything is taken. Near a currency's cap the payout is clamped like every
+  earning.
+- **Colours:** every sell control (the details panel's Sell, bulk Sell… and
+  its confirm) wears the Spirit Stones colour (`--sell`, cyan like the stone
+  icon); every salvage control (Salvage, bulk Salvage… and its confirm) wears
+  the Spirit Essence colour (`--salvage`, orange like the essence drop). Both
+  are theme tokens with light and dark values that pass 4.5:1 on every
+  surface, and the labels still name the action, so colour is never the only
+  cue.
+- **Grade colours:** the bulk grade picker wears the chosen grade's colour
+  (the same `--grade-*` tokens as bag cells; each option too where the
+  browser allows), and the confirmation's highest grade name wears its own.
+  The auto filter's minimum grade wears its grade colour too, and its sell /
+  salvage choice wears `--sell` / `--salvage`. Every
+  one passes 4.5:1 on the picker's and the confirmation's background in both
+  themes, and the name or label is still there as text.
 - **Auto filter:** a minimum grade ("keep Earth and above") plus the item types
   to keep. Drops that fail are sold or salvaged on pickup, as the player
   chooses. The filter starts off: everything is kept.

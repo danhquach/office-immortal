@@ -19,9 +19,15 @@ import {
   BAG_ROW,
   bagCost,
   buyBagSpace,
+  bagStillShows,
+  bulkConfirm,
+  bulkPreview,
+  bulkTake,
+  type BulkAction,
   canResetStats,
   changePath,
   defaultFilter,
+  disposeItem,
   essenceValue,
   INVENTORY_SIZE,
   keeps,
@@ -30,10 +36,6 @@ import {
   pathChangeCost,
   pickUp,
   resetStats,
-  salvage,
-  sell,
-  sellBelow,
-  sellBelowPreview,
   sellPrice,
   setFilter,
   SLOT_IDS,
@@ -99,14 +101,14 @@ describe('prices', () => {
 
 describe('sell and salvage', () => {
   it('sells a bag item for Spirit Stones', () => {
-    const s = sell(game([item('mortal'), item('earth', 4)], 7), 1);
+    const s = disposeItem(game([item('mortal'), item('earth', 4)], 7), 1, 'sell');
     expect(s.inventory).toEqual([item('mortal')]);
     expect(s.stones).toBe(7 + 60);
     expect(s.essence).toBe(0);
   });
 
   it('salvages a bag item into Spirit Essence', () => {
-    const s = salvage(game([item('heaven', 2), item('mortal')]), 0);
+    const s = disposeItem(game([item('heaven', 2), item('mortal')]), 0, 'salvage');
     expect(s.inventory).toEqual([item('mortal')]);
     expect(s.essence).toBe(24);
     expect(s.stones).toBe(0);
@@ -115,17 +117,18 @@ describe('sell and salvage', () => {
   it('leaves the input state untouched', () => {
     const start = game([item('spirit')]);
     const copy = structuredClone(start);
-    sell(start, 0);
-    salvage(start, 0);
-    sellBelow(start, 'earth');
+    disposeItem(start, 0, 'sell');
+    disposeItem(start, 0, 'salvage');
+    bulkTake(start, 'sell', 'earth');
+    bulkTake(start, 'salvage', 'earth');
     expect(start).toEqual(copy);
   });
 
   it('rejects an index with no item', () => {
     const start = game([item('spirit')]);
     for (const i of [-1, 1, 0.5, Number.NaN]) {
-      expect(() => sell(start, i)).toThrow(RangeError);
-      expect(() => salvage(start, i)).toThrow(RangeError);
+      expect(() => disposeItem(start, i, 'sell')).toThrow(RangeError);
+      expect(() => disposeItem(start, i, 'salvage')).toThrow(RangeError);
     }
   });
 });
@@ -141,15 +144,24 @@ describe('equipped items', () => {
     const start = worn();
     const gear = structuredClone(start.cultivator.equipment);
     expect(gear.weapon).toEqual(item('immortal', 1));
-    let s = sell(start, 0);
-    s = salvage(s, 0);
+    let s = disposeItem(start, 0, 'sell');
+    s = disposeItem(s, 0, 'salvage');
     expect(s.cultivator.equipment).toEqual(gear);
     expect(s.inventory).toEqual([]);
     // Bulk selling below the top grade leaves the worn Immortal on.
-    s = sellBelow(worn(), 'immortal');
+    s = bulkTake(worn(), 'sell', 'immortal');
     expect(s.cultivator.equipment).toEqual(gear);
+    // Bulk salvage leaves it on too, and never counts or pays for it.
+    expect(bulkPreview(worn(), 'salvage', 'immortal')).toMatchObject({
+      count: 2,
+      highest: 'spirit',
+    });
+    s = bulkTake(worn(), 'salvage', 'immortal');
+    expect(s.cultivator.equipment).toEqual(gear);
+    expect(s.inventory).toEqual([]);
+    expect(s.essence).toBe(essenceValue(item('mortal')) + essenceValue(item('spirit')));
     // An index past the bag is not a way to reach the equipment.
-    expect(() => sell(start, 2)).toThrow(RangeError);
+    expect(() => disposeItem(start, 2, 'sell')).toThrow(RangeError);
   });
 });
 
@@ -163,23 +175,26 @@ describe('bulk sell', () => {
   ];
 
   it('previews the count, the highest grade sold and the price', () => {
-    expect(sellBelowPreview(game(bag), 'earth')).toEqual({
+    expect(bulkPreview(game(bag), 'sell', 'earth')).toEqual({
       count: 3,
       highest: 'spirit',
-      stones: 4 + 15 + 2,
+      total: 4 + 15 + 2,
       kept: 0,
     });
-    expect(sellBelowPreview(game(bag), 'immortal')).toMatchObject({ count: 5, highest: 'heaven' });
-    expect(sellBelowPreview(game(bag), 'mortal')).toEqual({
+    expect(bulkPreview(game(bag), 'sell', 'immortal')).toMatchObject({
+      count: 5,
+      highest: 'heaven',
+    });
+    expect(bulkPreview(game(bag), 'sell', 'mortal')).toEqual({
       count: 0,
       highest: null,
-      stones: 0,
+      total: 0,
       kept: 0,
     });
   });
 
   it('sells exactly what the preview named, keeping the rest in order', () => {
-    const s = sellBelow(game(bag, 10), 'earth');
+    const s = bulkTake(game(bag, 10), 'sell', 'earth');
     expect(s.inventory).toEqual([item('earth', 1), item('heaven')]);
     expect(s.stones).toBe(10 + 21);
   });
@@ -194,30 +209,272 @@ describe('bulk sell', () => {
       item('mortal'),
     ];
     // Only the two plain Mortals go: the refined Spirit is not the highest sold.
-    expect(sellBelowPreview(game(mixed), 'earth')).toEqual({
+    expect(bulkPreview(game(mixed), 'sell', 'earth')).toEqual({
       count: 2,
       highest: 'mortal',
-      stones: 4 + 2,
+      total: 4 + 2,
       kept: 2,
     });
-    const s = sellBelow(game(mixed, 10), 'earth');
+    const s = bulkTake(game(mixed, 10), 'sell', 'earth');
     expect(s.inventory).toEqual([mixed[1], mixed[2], mixed[3]]);
     expect(s.stones).toBe(10 + 6);
     // Nothing but refined items below: nothing sold, both kept.
     const onlyRefined = [refined(item('mortal'), 1), item('heaven')];
-    expect(sellBelowPreview(game(onlyRefined), 'spirit')).toEqual({
+    expect(bulkPreview(game(onlyRefined), 'sell', 'spirit')).toEqual({
       count: 0,
       highest: null,
-      stones: 0,
+      total: 0,
       kept: 1,
     });
-    expect(sellBelow(game(onlyRefined), 'spirit').inventory).toEqual(onlyRefined);
+    expect(bulkTake(game(onlyRefined), 'sell', 'spirit').inventory).toEqual(onlyRefined);
+  });
+
+  it('names the action when there is no item to dispose of', () => {
+    expect(() => disposeItem(game([item('earth')]), 1, 'salvage')).toThrow(
+      /^salvage: no item at 1$/,
+    );
   });
 
   it('still sells or salvages a refined item one at a time', () => {
     const one = [{ ...item('earth', 4), refines: 3 }];
-    expect(sell(game(one), 0).stones).toBe(60);
-    expect(salvage(game(one), 0).essence).toBe(20);
+    expect(disposeItem(game(one), 0, 'sell').stones).toBe(60);
+    expect(disposeItem(game(one), 0, 'salvage').essence).toBe(20);
+  });
+});
+
+describe('bulk salvage', () => {
+  const bag = [
+    item('mortal', 2),
+    item('earth', 1),
+    item('spirit', 3),
+    item('heaven'),
+    item('mortal'),
+  ];
+  const refined = (i: Item, n: number): Item => ({ ...i, refines: n });
+
+  it('previews the count, the highest grade salvaged and the Spirit Essence', () => {
+    expect(bulkPreview(game(bag), 'salvage', 'earth')).toEqual({
+      count: 3,
+      highest: 'spirit',
+      total: essenceValue(bag[0] as Item) + essenceValue(bag[2] as Item) + 1,
+      kept: 0,
+    });
+    expect(bulkPreview(game(bag), 'salvage', 'immortal')).toMatchObject({
+      count: 5,
+      highest: 'heaven',
+      total: bag.reduce((n, i) => n + essenceValue(i), 0),
+    });
+  });
+
+  it('salvages exactly what the preview named into essence, keeping the rest in order', () => {
+    const start = { ...game(bag, 10), essence: 5 };
+    const preview = bulkPreview(start, 'salvage', 'earth');
+    const s = bulkTake(start, 'salvage', 'earth');
+    expect(s.inventory).toEqual([item('earth', 1), item('heaven')]);
+    expect(s.essence).toBe(5 + preview.total);
+    // Salvage pays essence, never stones.
+    expect(s.stones).toBe(10);
+  });
+
+  it('takes the same items bulk sell would', () => {
+    const mixed = [item('mortal', 2), refined(item('spirit', 3), 1), item('earth'), item('mortal')];
+    for (const g of GRADE_IDS) {
+      expect(bulkTake(game(mixed), 'salvage', g).inventory).toEqual(
+        bulkTake(game(mixed), 'sell', g).inventory,
+      );
+    }
+  });
+
+  it('keeps refined items below the grade, counting and paying only what it salvages', () => {
+    const mixed = [
+      item('mortal', 2),
+      refined(item('spirit', 3), 1),
+      item('earth', 1),
+      refined(item('mortal', 5), 12),
+      item('mortal'),
+    ];
+    expect(bulkPreview(game(mixed), 'salvage', 'earth')).toEqual({
+      count: 2,
+      highest: 'mortal',
+      total: essenceValue(item('mortal', 2)) + essenceValue(item('mortal')),
+      kept: 2,
+    });
+    const s = bulkTake(game(mixed), 'salvage', 'earth');
+    expect(s.inventory).toEqual([mixed[1], mixed[2], mixed[3]]);
+  });
+
+  it('changes nothing when nothing is below the grade', () => {
+    for (const bagged of [bag, [refined(item('mortal'), 1), item('heaven')], []]) {
+      const start = { ...game(bagged, 3), essence: 4 };
+      const grade = bagged === bag ? 'mortal' : 'spirit';
+      expect(bulkPreview(start, 'salvage', grade)).toMatchObject({
+        count: 0,
+        highest: null,
+        total: 0,
+      });
+      expect(bulkTake(start, 'salvage', grade)).toEqual(start);
+    }
+  });
+
+  it('leaves the auto filter alone', () => {
+    const start = setFilter(game(bag), filter({ minGrade: 'heaven', action: 'salvage' }));
+    expect(bulkTake(start, 'salvage', 'immortal').filter).toEqual(start.filter);
+  });
+
+  it('caps essence at the largest whole number a save holds', () => {
+    const rich = { ...game([item('heaven', 50)]), essence: Number.MAX_SAFE_INTEGER - 1 };
+    expect(bulkTake(rich, 'salvage', 'immortal').essence).toBe(Number.MAX_SAFE_INTEGER);
+  });
+
+  it('refuses a grade the save would reject', () => {
+    const s = game([item('mortal')]);
+    for (const g of [
+      'x',
+      'h\u0435aven',
+      'toString',
+      '__proto__',
+      'earth\u200b',
+      '\u202eearth',
+      'x'.repeat(1e5),
+    ]) {
+      expect(() => bulkTake(s, 'salvage', g as GradeId)).toThrow(RangeError);
+      // The bad grade never reaches the error message (or any log line it lands in).
+      expect(() => bulkTake(s, 'salvage', g as GradeId)).toThrow(/^bulk salvage: unknown grade$/);
+      expect(() => bulkTake(s, 'sell', g as GradeId)).toThrow(/^bulk sell: unknown grade$/);
+      // The preview refuses it the same way, so the two never disagree.
+      expect(() => bulkPreview(s, 'salvage', g as GradeId)).toThrow(
+        /^bulk salvage: unknown grade$/,
+      );
+    }
+  });
+});
+
+describe('bulk actions', () => {
+  const bag = [item('mortal', 2), item('spirit'), item('heaven')];
+
+  it('sell pays Spirit Stones and salvage pays Spirit Essence, for the same items', () => {
+    const start = { ...game(bag, 1), essence: 2 };
+    const sold = bulkTake(start, 'sell', 'earth');
+    const salvaged = bulkTake(start, 'salvage', 'earth');
+    expect(sold.inventory).toEqual([item('heaven')]);
+    expect(salvaged.inventory).toEqual([item('heaven')]);
+    expect([sold.stones, sold.essence]).toEqual([
+      1 + sellPrice(bag[0] as Item) + sellPrice(item('spirit')),
+      2,
+    ]);
+    expect([salvaged.stones, salvaged.essence]).toEqual([
+      1,
+      2 + essenceValue(bag[0] as Item) + essenceValue(item('spirit')),
+    ]);
+    expect(bulkPreview(start, 'sell', 'earth').total).toBe(sold.stones - 1);
+    expect(bulkPreview(start, 'salvage', 'earth').total).toBe(salvaged.essence - 2);
+  });
+
+  it('looks only at the first `within` bag items, so a later drop is never taken', () => {
+    // The player saw two items; a third, also below the grade, landed after.
+    const s = game([item('mortal'), item('heaven'), item('spirit')]);
+    expect(bulkPreview(s, 'salvage', 'earth', 2)).toEqual({
+      count: 1,
+      highest: 'mortal',
+      total: 1,
+      kept: 0,
+    });
+    expect(bulkTake(s, 'salvage', 'earth', 2).inventory).toEqual([item('heaven'), item('spirit')]);
+    expect(bulkTake(s, 'salvage', 'earth', 0)).toEqual(s);
+  });
+
+  it('previews only what is credited once a currency is near its cap', () => {
+    const rich = { ...game([item('heaven', 50)]), essence: Number.MAX_SAFE_INTEGER - 1 };
+    const preview = bulkPreview(rich, 'salvage', 'immortal');
+    expect(preview.total).toBe(1);
+    expect(bulkTake(rich, 'salvage', 'immortal').essence).toBe(rich.essence + preview.total);
+  });
+
+  it('refuses an unknown action or a bag range it could not have seen, without echoing it', () => {
+    const s = game([item('mortal')]);
+    for (const a of ['burn', '__proto__', 'constructor', 'sell\u200b']) {
+      expect(() => bulkPreview(s, a as BulkAction, 'earth')).toThrow(/^bulk: unknown action$/);
+      expect(() => bulkTake(s, a as BulkAction, 'earth')).toThrow(/^bulk: unknown action$/);
+    }
+    for (const w of [-1, 2, 0.5, Number.NaN, Infinity]) {
+      expect(() => bulkPreview(s, 'sell', 'earth', w)).toThrow(/^bulk sell: bad bag range$/);
+      expect(() => bulkTake(s, 'salvage', 'earth', w)).toThrow(/^bulk salvage: bad bag range$/);
+    }
+  });
+});
+
+describe('bulk confirmation', () => {
+  it('takes what it showed and leaves drops that landed since', () => {
+    const start = game([item('mortal'), item('heaven')]);
+    const seen = start.inventory;
+    const preview = bulkPreview(start, 'salvage', 'earth');
+    const later = { ...start, inventory: [...start.inventory, item('spirit')] };
+    const s = bulkConfirm(structuredClone(later), 'salvage', 'earth', seen);
+    expect(s?.inventory).toEqual([item('heaven'), item('spirit')]);
+    expect(s?.essence).toBe(preview.total);
+  });
+
+  it('takes nothing when the part it showed changed, even if the numbers match', () => {
+    const seen = [item('mortal'), item('heaven')];
+    // The Mortal was sold on its own and a look-alike landed at the end.
+    const swapped = game([item('heaven'), item('mortal')]);
+    expect(bulkConfirm(swapped, 'salvage', 'earth', seen)).toBeNull();
+    expect(bulkConfirm(game([item('mortal')]), 'salvage', 'earth', seen)).toBeNull();
+    const refined = game([{ ...item('mortal'), refines: 1 }, item('heaven')]);
+    expect(bulkConfirm(refined, 'salvage', 'earth', seen)).toBeNull();
+  });
+
+  it('takes nothing when there is nothing to take', () => {
+    const none = game([item('heaven')]);
+    expect(bulkConfirm(none, 'sell', 'earth', none.inventory)).toBeNull();
+  });
+
+  it('goes through near a currency cap, crediting only what fits, so it never keeps asking', () => {
+    const near = { ...game([item('heaven', 50)]), essence: Number.MAX_SAFE_INTEGER - 5 };
+    const seen = near.inventory;
+    expect(bulkPreview(near, 'salvage', 'immortal').total).toBe(5);
+    // Kills and drops kept paying while the box was open.
+    const richer = { ...near, essence: near.essence + 2 };
+    expect(bulkConfirm(richer, 'salvage', 'immortal', seen)).toMatchObject({
+      inventory: [],
+      essence: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it('compares items by value, NaN included, so a bad field never makes it ask forever', () => {
+    const odd = [{ ...item('mortal'), baseRoll: Number.NaN }];
+    expect(bagStillShows(game(structuredClone(odd)), odd)).toBe(true);
+    expect(bagStillShows(game([]), odd)).toBe(false);
+  });
+
+  it('compares a save-parsed item with an own __proto__ key without polluting or matching', () => {
+    const hostile = JSON.parse(
+      JSON.stringify(item('mortal')).replace(/^\{/, '{"__proto__":{"polluted":true},'),
+    ) as Item;
+    expect(bagStillShows(game([hostile]), [item('mortal')])).toBe(false);
+    expect(bagStillShows(game([item('mortal')]), [hostile])).toBe(false);
+    expect(bagStillShows(game([hostile]), [structuredClone(hostile)])).toBe(true);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('refuses hostile actions and grades like the other bulk paths', () => {
+    const s = game([item('mortal')]);
+    for (const a of ['__proto__', 'constructor', 'toString', 'burn']) {
+      expect(() => bulkConfirm(s, a as BulkAction, 'earth', s.inventory)).toThrow(RangeError);
+      expect(() => disposeItem(s, 0, a as BulkAction)).toThrow(/^dispose: unknown action$/);
+    }
+    for (const g of ['x', '__proto__', 'h\u0435aven', 'x'.repeat(1e5)]) {
+      expect(() => bulkConfirm(s, 'salvage', g as GradeId, s.inventory)).toThrow(
+        /^bulk salvage: unknown grade$/,
+      );
+    }
+  });
+
+  it('matches items whatever their key order, as a save load may rebuild them', () => {
+    const seen = [item('mortal')];
+    const { slot, ...rest } = item('mortal');
+    const reordered = game([{ ...rest, slot } as Item]);
+    expect(bulkConfirm(reordered, 'salvage', 'earth', seen)?.inventory).toEqual([]);
   });
 });
 
@@ -386,15 +643,15 @@ describe('spending Spirit Stones', () => {
     ];
     for (const f of bad) expect(() => setFilter(s, f)).toThrow(RangeError);
     for (const g of ['x', 'h\u0435aven', 'toString']) {
-      expect(() => sellBelow(s, g as GradeId)).toThrow(RangeError);
+      expect(() => bulkTake(s, 'sell', g as GradeId)).toThrow(RangeError);
     }
   });
 
   it('caps currencies at the largest whole number a save holds', () => {
     const rich = game([item('immortal', 50)], Number.MAX_SAFE_INTEGER - 1);
-    expect(sell(rich, 0).stones).toBe(Number.MAX_SAFE_INTEGER);
+    expect(disposeItem(rich, 0, 'sell').stones).toBe(Number.MAX_SAFE_INTEGER);
     const s = { ...rich, essence: Number.MAX_SAFE_INTEGER };
-    expect(salvage(s, 0).essence).toBe(Number.MAX_SAFE_INTEGER);
+    expect(disposeItem(s, 0, 'salvage').essence).toBe(Number.MAX_SAFE_INTEGER);
     expect(tick(rich, 60).stones).toBe(Number.MAX_SAFE_INTEGER);
   });
 
