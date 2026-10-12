@@ -14,7 +14,11 @@ const vi: Pack = {
     'game.formula': '=TAM_AN() + CAY_CUOC() + VAN_MAY()',
     'status.ready': 'Sẵn sàng',
     'status.sheet': 'Bảng điều khiển',
-    'status.autosave': 'Tự động lưu: bật',
+    'status.char.tribulation': 'Đang độ kiếp',
+    'status.char.tribulationDue': 'Sắp độ kiếp',
+    'status.char.boss': 'Đang đánh trùm tầng {n}',
+    'status.char.elite': 'Đang đánh tinh anh · tầng {n}',
+    'status.char.cultivating': 'Đang tu luyện · tầng {n}',
 
     'lang.button': 'Ngôn ngữ',
 
@@ -227,7 +231,6 @@ const vi: Pack = {
     'item.cellUpgrade': '{name}, {tag}, nâng cấp',
     'item.cellDowngrade': '{name}, {tag}, hạ cấp',
     'item.cellMixed': '{name}, {tag}, được mất',
-    'item.qualityHint': 'Trung bình các lần tung của món đồ trong khoảng của chúng',
     'item.favouredBy': 'Hợp với: {path}',
     'item.souls': 'Hồn: {souls} / {cap} (+{damage} sát thương mỗi đòn)',
     'item.requires': 'Cần {realm}',
@@ -297,7 +300,8 @@ const vi: Pack = {
     'cloud.linkField': 'Mã liên kết từ thiết bị kia',
     'cloud.link': 'Liên kết thiết bị này',
     'cloud.linking': 'Đang liên kết…',
-    'cloud.linkHint': 'Khi liên kết, bạn sẽ được hỏi giữ bản lưu nào.',
+    'cloud.linkHint':
+      'Nếu cả hai bản lưu đều có tiến trình, bạn chọn giữ một bản. Bản còn lại sẽ bị thay thế.',
     'cloud.pathLink': 'Có mã liên kết? Nhập để tải bản lưu trên đám mây',
     'cloud.status.off': 'Đang tắt. Trình duyệt này chỉ giữ bản lưu của bạn tại đây.',
     'cloud.status.checking': 'Đang kiểm tra đám mây…',

@@ -52,7 +52,13 @@ import {
   type Passives,
   type RetirePreview,
 } from '../core/prestige.ts';
-import { canEquip, canFaceTribulation, requiredRealm, type GameState } from '../core/sim.ts';
+import {
+  canEquip,
+  canFaceTribulation,
+  characterStatus,
+  requiredRealm,
+  type GameState,
+} from '../core/sim.ts';
 import { t, tn, type MessageKey } from './i18n.ts';
 
 /** The Path picker's one-liner: role, primary stat (docs/design.md §3). */
@@ -440,6 +446,12 @@ export function tribulationCall(state: GameState): { name: string; next: string 
   const next = REALMS[realmOf(state.cultivator.level + 1)];
   if (name === undefined || next === undefined) return null;
   return { name: tn('enemy', name), next: tn('realm', next.name) };
+}
+
+/** The status bar's live line: what the cultivator is doing now, e.g. "Cultivating · floor 12". */
+export function characterStatusLabel(state: GameState): string {
+  const { kind, floor } = characterStatus(state);
+  return t(`status.char.${kind}`, { n: floor });
 }
 
 /**

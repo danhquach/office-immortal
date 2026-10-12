@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cultivator.ts';
-import { TRIBULATIONS } from './floors.ts';
+import { makeEnemy, makeTribulation, TRIBULATIONS, type EnemyKind } from './floors.ts';
 import {
   arrayValue,
   equippedArray,
@@ -18,6 +18,7 @@ import {
   ARRAY_TICK,
   canEquip,
   canFaceTribulation,
+  characterStatus,
   ENEMY_ARRIVAL,
   equip,
   faceTribulation,
@@ -593,6 +594,54 @@ describe('faceTribulation', () => {
     expect(s.floor).toBe(floor);
     expect(s.cultivator.level).toBe(10);
     expect(canFaceTribulation(s)).toBe(true);
+  });
+});
+
+describe('characterStatus', () => {
+  /** A floor-12 run facing a `front` enemy, a Tribulation due or not. */
+  function facing(front: EnemyKind, due: boolean): GameState {
+    const s = newGame(7, 'sword');
+    s.floor = 12;
+    s.cultivator.level = 10;
+    s.cultivator.xp = due ? xpToNext(10) : 0;
+    const enemy = front === 'tribulation' ? makeTribulation(12, 0) : makeEnemy(12, front, 'Foe');
+    s.enemies = [enemy, makeEnemy(12, 'demon', 'Next')];
+    return s;
+  }
+
+  it.each([
+    ['demon', 'cultivating'],
+    ['elite', 'elite'],
+    ['boss', 'boss'],
+    ['tribulation', 'tribulation'],
+  ] as const)('names a %s at the front as %s', (front, kind) => {
+    expect(characterStatus(facing(front, false))).toEqual({ kind, floor: 12 });
+  });
+
+  it('is cultivating with no enemy at all', () => {
+    const s = facing('demon', false);
+    s.enemies = [];
+    expect(characterStatus(s)).toEqual({ kind: 'cultivating', floor: 12 });
+  });
+
+  it('puts a due Tribulation ahead of a boss, an elite or a demon', () => {
+    for (const front of ['demon', 'elite', 'boss'] as const) {
+      expect(characterStatus(facing(front, true)).kind).toBe('tribulationDue');
+    }
+  });
+
+  it('puts the Tribulation being fought ahead of it being due', () => {
+    const s = facing('tribulation', true);
+    expect(readyForTribulation(s.cultivator)).toBe(true);
+    expect(characterStatus(s).kind).toBe('tribulation');
+  });
+
+  it('follows a real run, and leaves the state untouched', () => {
+    const due = until(newGame(7, 'sword'), (x) => canFaceTribulation(x));
+    const before = structuredClone(due);
+    expect(characterStatus(due)).toEqual({ kind: 'tribulationDue', floor: due.floor });
+    expect(due).toEqual(before);
+    expect(characterStatus(faceTribulation(due)).kind).toBe('tribulation');
   });
 });
 

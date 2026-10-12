@@ -98,6 +98,20 @@ describe('t and tn', () => {
     expect(lang().code).toBe('vi');
   });
 
+  it('says what linking does when both saves have progress', () => {
+    expect(t('cloud.linkHint')).toBe(
+      'If both saves have progress, you pick one to keep. The other is replaced.',
+    );
+    setLang('vi');
+    expect(t('cloud.linkHint')).toBe(
+      'Nếu cả hai bản lưu đều có tiến trình, bạn chọn giữ một bản. Bản còn lại sẽ bị thay thế.',
+    );
+  });
+
+  it('has no autosave label in any language', () => {
+    for (const pack of PACKS) expect(Object.hasOwn(pack.messages, 'status.autosave')).toBe(false);
+  });
+
   it('falls back to English for a message a pack lacks, never a blank or the key', () => {
     setLang('vi');
     const messages = lang().messages as Record<string, string>;

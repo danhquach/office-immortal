@@ -230,6 +230,28 @@ export function canFaceTribulation(state: GameState): boolean {
   return readyForTribulation(state.cultivator) && state.enemies[0]?.kind !== 'tribulation';
 }
 
+/** What the cultivator is doing now, as the status bar names it (docs/design.md §14). */
+export type CharacterStatusKind =
+  'tribulation' | 'tribulationDue' | 'boss' | 'elite' | 'cultivating';
+
+export interface CharacterStatus {
+  kind: CharacterStatusKind;
+  floor: number;
+}
+
+/**
+ * The cultivator's status, the first that applies: fighting a Tribulation, one
+ * due, fighting the floor's boss, an elite, else cultivating.
+ */
+export function characterStatus(state: GameState): CharacterStatus {
+  const { floor } = state;
+  const foe = state.enemies[0]?.kind;
+  if (foe === 'tribulation') return { kind: 'tribulation', floor };
+  if (canFaceTribulation(state)) return { kind: 'tribulationDue', floor };
+  if (foe === 'boss' || foe === 'elite') return { kind: foe, floor };
+  return { kind: 'cultivating', floor };
+}
+
 /**
  * Starts the due Tribulation now instead of at the end of the floor (docs/design.md
  * §4): it steps to the front, the enemy it interrupts waits behind it, and the

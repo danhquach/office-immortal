@@ -306,9 +306,8 @@ Every drop is generated from a seeded roll.
   unique effect is not a roll and is left out. It ignores grade, item level and
   the number of affixes (a Mortal item with only its base roll easily reads
   90%+), so it is not a measure of power. It is shown labeled ("Quality 94%" /
-  "Chất lượng 94%") in the details panel, with a helper line under it ("Average
-  of this item's rolls within their ranges"), in the drop toast and in the
-  cell's screen-reader label, but not on the grid cell. The bag can still be
+  "Chất lượng 94%") in the details panel, in the drop toast and in the cell's
+  screen-reader label, but not on the grid cell. The bag can still be
   sorted by it.
 - **Gear badge:** a bag cell shows a badge in its bottom-right corner, worked
   out from the same comparison the details panel shows (stat changes that
@@ -484,7 +483,8 @@ waits on the network.
   data matching the local save, so it is not shown as a conflict.
 - **Linking.** Joining with a code never overwrites silently: a device that
   already has a run is asked which save to keep, and closing the page mid-choice
-  asks again next time.
+  asks again next time. The hint under the link field says so: "If both saves
+  have progress, you pick one to keep. The other is replaced."
 - **Reset progress** also deletes the cloud save (other linked devices lose it
   too) and is refused, changing nothing, if the cloud can't be reached.
   "Turn off on this device" only forgets the cloud here and leaves the server
@@ -619,6 +619,12 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   (`Q3_Cultivation_Report`), a formula bar, faint cell lines behind the
   panels, summary chips, panels with header bars, tabs and a status bar. The
   combat strip sits in it like an embedded chart, with its own header bar.
+- **Status bar:** "Ready", the one sheet tab, and a live line saying what the
+  cultivator is doing, the first that applies: fighting a Tribulation ("Facing
+  Tribulation"), one due ("Tribulation due"), the floor's boss ("Fighting floor
+  12 boss"), an elite ("Fighting an elite · floor 12"), else "Cultivating ·
+  floor 12". It follows the game every frame and the language on a switch, and
+  is not a live region, so screen readers do not announce each change.
 - **Title stamp:** the game's name sits in the title bar as a red rubber
   stamp (like "CONFIDENTIAL"): capitals, double border, tilted, in the
   Immortal grade colour. It is the one loud mark on the dull shell.
@@ -647,7 +653,7 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   Reincarnation) opens on page 1.
   Cells show no quality %; a ▲, ▼ or gold dash marks an upgrade, downgrade or
   mixed change (§6). Selecting a cell shows a details panel: rolls, labeled
-  quality with its helper line, and gains / losses against the equipped item.
+  quality, and gains / losses against the equipped item.
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or
   with the panel's Equip button (touch and keyboard use the button).

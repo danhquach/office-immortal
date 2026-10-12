@@ -143,6 +143,7 @@ import {
   BAG_PAGE,
   bagPage,
   cellLabel,
+  characterStatusLabel,
   charmLineName,
   favouredBy,
   compareToEquipped,
@@ -635,15 +636,15 @@ function formulaBar(): HTMLElement {
   return bar;
 }
 
-/** The status bar under the sheet: ready state, the one sheet tab, autosave. */
-function statusBar(): HTMLElement {
+/**
+ * The status bar under the sheet: ready state, the one sheet tab, and what the
+ * cultivator is doing now (`character`, drawn every frame by the game page).
+ */
+function statusBar(): { bar: HTMLElement; character: HTMLElement } {
   const bar = el('footer', 'statusbar');
-  bar.append(
-    elt('span', '', 'status.ready'),
-    elt('span', 'sheet-tab', 'status.sheet'),
-    elt('span', 'muted', 'status.autosave'),
-  );
-  return bar;
+  const character = el('span', 'muted');
+  bar.append(elt('span', '', 'status.ready'), elt('span', 'sheet-tab', 'status.sheet'), character);
+  return { bar, character };
 }
 
 function pathChoice(onPick: (path: PathId) => void): HTMLElement {
@@ -2025,7 +2026,8 @@ function play(
   let blinkOn = true;
   let blinkAt = 0;
 
-  root.replaceChildren(bar, formulaBar(), game, statusBar(), menu);
+  const footer = statusBar();
+  root.replaceChildren(bar, formulaBar(), game, footer.bar, menu);
   away?.querySelector('button')?.focus();
 
   /**
@@ -2326,7 +2328,6 @@ function play(
     name.append(
       el('div', `title grade-${item.grade}`, tn('item', item.name)),
       el('div', `tag grade-${item.grade}`, itemTag(item)),
-      el('div', 'muted hint', t('item.qualityHint')),
     );
     const tier = treasureTier(item);
     if (tier) name.append(el('div', 'muted', tier));
@@ -2781,6 +2782,7 @@ function play(
       handled.push(t('drops.salvagedOnPickup', { n: state.dropsSalvaged }));
     }
     handledText.textContent = handled.join(' · ');
+    setText(footer.character, characterStatusLabel(state));
     drawHud();
   }
 
