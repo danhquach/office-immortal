@@ -61,9 +61,20 @@ export interface Item {
   unique?: UniqueId;
   /** Formation Discs only; its strength is the base roll. */
   array?: ArrayId;
+  /**
+   * Refine level: how many times it has been refined (docs/design.md §7), 1 to
+   * MAX_REFINES. Left out, like `unique` and `array`, on an item never refined.
+   */
+  refines?: number;
 }
 
 export type Equipment = Partial<Record<EquipSlotId, Item>>;
+
+/**
+ * The highest refine level. Every refine adds at least 1 point to a base roll
+ * of 0 to 100 points, so no item gets past it.
+ */
+export const MAX_REFINES = 100;
 
 /**
  * How a range grows with item level. Flat stats grow in step with the level;
@@ -668,11 +679,17 @@ export function rollGrade(rng: Rng): GradeId {
 /**
  * Draws `count` affixes without replacement, so an item never has the same
  * affix twice, each with its roll. `favours` weigh FAVOURED_WEIGHT, every other
- * affix 1; with none every affix is as likely, as it always was.
+ * affix 1; with none every affix is as likely, as it always was. Affixes in
+ * `exclude` are never drawn (a reroll keeps the item's other affixes apart).
  */
-export function drawAffixes(rng: Rng, count: number, favours: readonly AffixId[]): Affix[] {
+export function drawAffixes(
+  rng: Rng,
+  count: number,
+  favours: readonly AffixId[],
+  exclude: readonly AffixId[] = [],
+): Affix[] {
   const weight = (id: AffixId) => (favours.includes(id) ? FAVOURED_WEIGHT : 1);
-  const pool = [...AFFIX_IDS];
+  const pool = AFFIX_IDS.filter((id) => !exclude.includes(id));
   const affixes: Affix[] = [];
   for (let n = count; n > 0; n--) {
     let at = 0;

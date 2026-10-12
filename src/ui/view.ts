@@ -13,7 +13,13 @@ import {
   PATHS,
   type PathId,
 } from '../core/cultivator.ts';
-import { INVENTORY_SIZE } from '../core/economy.ts';
+import {
+  INVENTORY_SIZE,
+  refineCost,
+  refineReach,
+  rerollCost,
+  rollPoints,
+} from '../core/economy.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import {
   AFFIXES,
@@ -121,14 +127,29 @@ export function itemLines(item: Item): string[] {
   return lines;
 }
 
-/** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12 · Quality 94%". */
+/** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12". */
 export function itemTag(item: Item): string {
   return t('item.tag', {
     grade: tn('grade', GRADES[item.grade].name),
     slot: tn('slot', SLOTS[item.slot].name),
     level: item.level,
-    quality: quality(item),
   });
+}
+
+/** An item's refine level as its cell shows it, e.g. "+7"; empty at +0. */
+export function refineMark(item: Item): string {
+  return item.refines ? `+${item.refines}` : '';
+}
+
+/** An item's name with its refine level, e.g. "Iron Flying Sword +7"; nothing added at +0. */
+export function itemName(item: Item): string {
+  const name = tn('item', item.name);
+  return item.refines ? `${name} ${refineMark(item)}` : name;
+}
+
+/** The labeled quality line under the tag, e.g. "Quality 94%". */
+export function qualityLine(item: Item): string {
+  return t('item.quality', { quality: quality(item) });
 }
 
 /** A weapon's treasure tier by grade (docs/design.md §6): what kind of magic tool it is. */
@@ -534,15 +555,22 @@ export function freshDrops(prev: GameState, next: GameState): Item[] {
   return next.inventory.slice(prev.inventory.length).reverse();
 }
 
-/** The bulk-sell confirmation, e.g. "Sell 12 items (best: Spirit) for 340 Spirit Stones?". */
+/**
+ * The bulk-sell confirmation, e.g. "Sell 12 items (best: Spirit) for 340 Spirit
+ * Stones?", and a note when refined items below the grade are kept.
+ */
 export function sellBelowLabel(p: {
   count: number;
   highest: GradeId | null;
   stones: number;
+  kept?: number;
 }): string {
-  if (p.count === 0 || p.highest === null) return t('sell.nothing');
+  const note = p.kept ? ` ${t('sell.keptRefined')}` : '';
+  if (p.count === 0 || p.highest === null) return t('sell.nothing') + note;
   const grade = tn('grade', GRADES[p.highest].name);
-  return t(p.count === 1 ? 'sell.one' : 'sell.many', { n: p.count, grade, stones: p.stones });
+  return (
+    t(p.count === 1 ? 'sell.one' : 'sell.many', { n: p.count, grade, stones: p.stones }) + note
+  );
 }
 
 /** Item types in the icon atlas's column order (tools/art/manifest.json "icons"). */
@@ -643,7 +671,7 @@ const CELL_LABELS: Readonly<Record<NonNullable<GearVerdict>, MessageKey>> = {
  */
 export function cellLabel(item: Item, verdict: GearVerdict = null): string {
   return t(verdict ? CELL_LABELS[verdict] : 'item.cell', {
-    name: tn('item', item.name),
+    name: itemName(item),
     tag: itemTag(item),
   });
 }
@@ -784,4 +812,93 @@ export function retireLines(p: RetirePreview): { kept: string[]; lost: string[] 
     ],
     lost,
   };
+}
+
+/** The Crafting panel's modes, in tab order; a new mode is one more entry. */
+export const CRAFT_MODES = ['refine', 'reroll'] as const;
+export type CraftMode = (typeof CRAFT_MODES)[number];
+
+/** A crafting action: its cost, whether it is off, and why (like respecView). */
+export interface CraftAction {
+  cost: string;
+  off: boolean;
+  why: string;
+}
+
+function craftAction(cost: number, essence: number): CraftAction {
+  const why = essence < cost ? t('respec.need', { n: cost - essence }) : '';
+  return { cost: t('craft.cost', { n: cost }), off: why !== '', why };
+}
+
+/** Refine: its cost, or off once the base roll is 100% (fully refined). */
+export function refineAction(item: Item, essence: number): CraftAction {
+  // The button itself reads "Fully refined" (app.ts), so `why` stays empty
+  // rather than say it twice to a screen reader.
+  if (!refineReach(item)) return { cost: '', off: true, why: '' };
+  return craftAction(refineCost(item), essence);
+}
+
+/** Reroll: its cost, or "No affixes to reroll" for an item without any. */
+export function rerollAction(item: Item, essence: number): CraftAction {
+  if (item.affixes.length === 0) return { cost: '', off: true, why: t('craft.noAffixes') };
+  return craftAction(rerollCost(item), essence);
+}
+
+/**
+ * A base stat's or array's amount at base roll `roll` (points), without its
+ * name, e.g. "8.0" or "4.5%": one decimal kept, so a range lines up.
+ */
+function baseAmount(item: Item, roll: number): string {
+  const at = { ...item, baseRoll: roll / 100 };
+  if (item.array) return arrayAmount(item.array, arrayValue(at));
+  const stat = SLOTS[item.slot].base.stat;
+  const v = baseValue(at);
+  return FLAT.has(stat) ? v.toFixed(1) : `${(v * 100).toFixed(1)}%`;
+}
+
+/**
+ * What a refine can do, before paying: the base roll now and the rolls it can
+ * land on, then the same as the stat, e.g. "Base roll 62% → 63–72%" and
+ * "Damage: 8.2 → 8.3–9.0". Empty once fully refined.
+ */
+export function refinePreview(item: Item): string[] {
+  const reach = refineReach(item);
+  if (!reach) return [];
+  const [lo, hi] = reach;
+  const now = rollPoints(item.baseRoll);
+  const stat = item.array
+    ? tn('array', ARRAYS[item.array].name)
+    : t(BONUS_LABELS[SLOTS[item.slot].base.stat]);
+  const [from, to] = [baseAmount(item, lo), baseAmount(item, hi)];
+  // One reachable value (99%, or a range that rounds to one amount) is shown once.
+  return [
+    lo === hi ? t('craft.refineRollOne', { now, to: hi }) : t('craft.refineRoll', { now, lo, hi }),
+    from === to
+      ? t('craft.refineRangeOne', { stat, now: baseAmount(item, now), to })
+      : t('craft.refineRange', { stat, now: baseAmount(item, now), lo: from, hi: to }),
+  ];
+}
+
+/** Affix `i` of `item` as its details show it, e.g. "+3% Crit chance". */
+export function affixText(item: Item, i: number): string {
+  const a = item.affixes[i];
+  return a ? formatBonus(AFFIXES[a.id].stat, itemAffixValue(item, a)) : '';
+}
+
+/** The result line after a refine, e.g. "Base roll 62% → 69%". */
+export function refineResult(before: Item, after: Item): string {
+  return t('craft.result.refine', {
+    from: rollPoints(before.baseRoll),
+    to: rollPoints(after.baseRoll),
+  });
+}
+
+/** The result line after rerolling affix `i`, e.g. "+3% Crit chance → +11% Stone find". */
+export function rerollResult(before: Item, after: Item, i: number): string {
+  return t('craft.result.reroll', { from: affixText(before, i), to: affixText(after, i) });
+}
+
+/** The reroll confirmation, naming affix `i` and its current value. */
+export function rerollConfirm(item: Item, i: number): string {
+  return t('confirm.reroll', { affix: affixText(item, i) });
 }

@@ -33,6 +33,8 @@ All shipped on `main`:
   quality, in five grades from Mortal to Immortal.
 - **Sell and salvage** ([#6]). Sell what you don't want for Spirit Stones or
   melt it into Spirit Essence, by hand or with an auto filter.
+- **Crafting** ([#95]). Spend Spirit Essence to refine an item's base roll
+  (its refine level shows as "+N") or reroll one of its affixes.
 - **Realms** ([#7]). Climb ten realms from Qi Condensation (Intern) through
   Tribulation Transcendence (Chairman) to Immortal Ascension, with a
   Tribulation boss at each cap. Hover the Realm chip to see them all.
@@ -190,3 +192,4 @@ repo). itch.io embeds only YouTube or Vimeo, so after making it:
 [#8]: https://github.com/danhquach/office-immortal/issues/8
 [#9]: https://github.com/danhquach/office-immortal/issues/9
 [#15]: https://github.com/danhquach/office-immortal/issues/15
+[#95]: https://github.com/danhquach/office-immortal/issues/95

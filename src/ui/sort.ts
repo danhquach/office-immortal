@@ -8,7 +8,7 @@ import type { MessageKey } from './i18n.ts';
 
 export const BAG_SORT_KEY = 'office-immortal.bagSort';
 export const BAG_REVERSE_KEY = 'office-immortal.bagSortReverse';
-export const BAG_SORTS = ['grade', 'type', 'level', 'quality', 'newest'] as const;
+export const BAG_SORTS = ['grade', 'type', 'level', 'quality', 'refine', 'newest'] as const;
 export type BagSort = (typeof BAG_SORTS)[number];
 
 /** The sort control's options (message keys), in menu order. */
@@ -17,6 +17,7 @@ export const BAG_SORT_NAMES: Readonly<Record<BagSort, MessageKey>> = {
   type: 'sort.type',
   level: 'sort.level',
   quality: 'sort.quality',
+  refine: 'sort.refine',
   newest: 'sort.newest',
 };
 
@@ -26,6 +27,7 @@ export const BAG_SORT_DIRS: Readonly<Record<BagSort, readonly [MessageKey, Messa
   type: ['sort.headFirst', 'sort.charmFirst'],
   level: ['sort.highest', 'sort.lowest'],
   quality: ['sort.highest', 'sort.lowest'],
+  refine: ['sort.highest', 'sort.lowest'],
   newest: ['sort.oldest', 'sort.newestFirst'],
 };
 
@@ -84,6 +86,7 @@ type Key = (item: Item) => number;
 /** Higher sorts first. */
 const grade: Key = (i) => GRADE_IDS.indexOf(i.grade);
 const level: Key = (i) => i.level;
+const refines: Key = (i) => i.refines ?? 0;
 // Character-panel order: Head first, so it gets the highest key.
 const type: Key = (i) => -SLOT_IDS.indexOf(i.slot);
 
@@ -93,6 +96,7 @@ const KEYS: Readonly<Record<Exclude<BagSort, 'newest'>, readonly Key[]>> = {
   type: [type, grade, level, quality],
   level: [level, grade, quality],
   quality: [quality, grade, level],
+  refine: [refines, quality, grade, level],
 };
 
 /**

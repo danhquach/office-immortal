@@ -950,11 +950,17 @@ select {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+/* The grade initial in the top-left corner: 7 px, the same size as the
+   refine level across from it, so both fit the 5 px margin above the 32 px
+   icon as closely as they can; either may overlap the icon's top corner by a
+   pixel or so. */
 .cell .grade {
   position: absolute;
-  top: 2px;
+  top: 0;
   left: 3px;
+  font-size: 7px;
   font-weight: 700;
+  line-height: 1;
 }
 /* The item's icon (32 px, from a 64 px atlas cell, so high-density screens
    get the full detail): the grade stays on the border and in the initial,
@@ -1011,6 +1017,29 @@ select {
   background: currentColor;
 }
 .cell .verdict[hidden] {
+  display: none;
+}
+/* The refine level ("+7") in the top-right corner, across from the grade
+   initial and above the badge; hidden at +0. 7 px like the initial, inside
+   the border with no backing, so it may overlap the icon's top-right corner
+   by a pixel or so; a thin --bg halo keeps the digits readable over the art.
+   --ink on --bg passes 4.5:1 in both themes (src/ui/contrast.test.ts). */
+.cell .refine {
+  position: absolute;
+  top: 0;
+  right: 1px;
+  padding: 0 1px;
+  color: var(--ink);
+  text-shadow:
+    0 0 1px var(--bg),
+    0 0 2px var(--bg),
+    0 0 2px var(--bg);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.cell .refine[hidden] {
   display: none;
 }
 /* The line under the details tag that says what quality is. */
@@ -1671,6 +1700,99 @@ button.primary {
 }
 .menu::backdrop {
   background: #0008;
+}
+/* Crafting: a modal over the game in the Menu's look, for one item. The
+   dialog has no padding, so a click on it (not its body) is on the backdrop.
+   Under 768 px it is a full-width sheet along the bottom. */
+.menu.craft {
+  width: min(30rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  /* The body scrolls, never the dialog, so no press on a scrollbar or
+     border lands on the dialog itself (which would read as the backdrop). */
+  overflow: hidden;
+}
+.craft-body {
+  box-sizing: border-box;
+  max-height: calc(100vh - 2rem - 2px);
+  max-height: calc(100dvh - 2rem - 2px);
+  overflow: auto;
+  padding: 0.75rem;
+}
+.craft .item-head {
+  margin-bottom: 0.4rem;
+}
+.craft .title {
+  font-weight: 600;
+}
+.craft .essence {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+.craft .lines {
+  list-style: none;
+  margin: 0.3rem 0;
+  padding: 0;
+}
+.craft .line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+  margin-top: 0.4rem;
+}
+.craft .line[hidden] {
+  display: none;
+}
+.craft .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.4rem;
+  font-size: 0.8rem;
+}
+.craft .cost {
+  font-weight: 600;
+}
+.craft .why {
+  color: var(--down);
+}
+.craft .confirm {
+  margin: 0.5rem 0 0;
+}
+.affix-pick {
+  margin: 0.4rem 0 0;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.affix-pick legend {
+  padding: 0 0.2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.affixes {
+  display: grid;
+  gap: 0.2rem;
+}
+.affix {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+/* The last craft's before → after; space kept so the panel never jumps. */
+.craft-result {
+  min-height: 1.45em;
+  margin: 0.5rem 0 0;
+  font-weight: 600;
+}
+@media (max-width: 767px) {
+  .menu.craft {
+    width: 100%;
+    max-width: 100%;
+    margin: auto 0 0;
+    border-radius: 4px 4px 0 0;
+  }
 }
 .menu-head {
   display: flex;

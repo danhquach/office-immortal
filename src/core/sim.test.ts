@@ -31,6 +31,13 @@ import {
   type TickOptions,
 } from './sim.ts';
 
+/**
+ * Per-test time limit for the long simulations below (hours of sim time, or
+ * 64 seeds per Path). They take a few seconds, close to the 5 s default, so a
+ * loaded machine could time them out; the limit is raised, the work is not cut.
+ */
+const LONG_SIM_MS = 30_000;
+
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
 function run(state: GameState, seconds: number, step: number, opts: TickOptions = {}): GameState {
@@ -50,23 +57,31 @@ describe('determinism', () => {
 });
 
 describe('tick', () => {
-  it.each(PATH_IDS)('gives %s the same result for one big step as many small ones', (path) => {
-    const start = newGame(7, path);
-    const big = tick(start, 3600);
-    const small = run(start, 3600, 1);
-    expect(big).toEqual(small);
-    // A fractional step lands on the same events too.
-    expect(run(start, 3600, 0.25)).toEqual(big);
-  });
+  it.each(PATH_IDS)(
+    'gives %s the same result for one big step as many small ones',
+    (path) => {
+      const start = newGame(7, path);
+      const big = tick(start, 3600);
+      const small = run(start, 3600, 1);
+      expect(big).toEqual(small);
+      // A fractional step lands on the same events too.
+      expect(run(start, 3600, 0.25)).toEqual(big);
+    },
+    LONG_SIM_MS,
+  );
 
-  it('matches one big step within tolerance for a step that is not exact in binary', () => {
-    const start = newGame(7, 'sword');
-    const big = tick(start, 3600);
-    const small = run(start, 3600, 0.1);
-    // Summing 0.1s drifts the clock by a hair; every event still lands the same.
-    expect(small.time).toBeCloseTo(big.time, 6);
-    expect({ ...small, time: 0 }).toEqual({ ...big, time: 0 });
-  });
+  it(
+    'matches one big step within tolerance for a step that is not exact in binary',
+    () => {
+      const start = newGame(7, 'sword');
+      const big = tick(start, 3600);
+      const small = run(start, 3600, 0.1);
+      // Summing 0.1s drifts the clock by a hair; every event still lands the same.
+      expect(small.time).toBeCloseTo(big.time, 6);
+      expect({ ...small, time: 0 }).toEqual({ ...big, time: 0 });
+    },
+    LONG_SIM_MS,
+  );
 
   it('resumes from a saved copy exactly as if it never stopped', () => {
     const half = run(newGame(4, 'talisman'), 600, 1);
@@ -187,23 +202,27 @@ function withBag(state: GameState, items: Item[]): GameState {
 }
 
 describe('drops', () => {
-  it('picks up drops at the item level of the floor they fell on', () => {
-    // Steps short enough for one kill each, through deaths that drop a floor.
-    let s = newGame(21, 'talisman');
-    let checked = 0;
-    let afterDeath = 0;
-    while (s.time < 3600 && s.inventory.length < INVENTORY_SIZE) {
-      const before = s;
-      s = tick(s, 0.05);
-      for (const item of s.inventory.slice(before.inventory.length)) {
-        expect(item.level).toBe(before.floor);
-        checked++;
-        if (before.floor < before.highestFloor) afterDeath++;
+  it(
+    'picks up drops at the item level of the floor they fell on',
+    () => {
+      // Steps short enough for one kill each, through deaths that drop a floor.
+      let s = newGame(21, 'talisman');
+      let checked = 0;
+      let afterDeath = 0;
+      while (s.time < 3600 && s.inventory.length < INVENTORY_SIZE) {
+        const before = s;
+        s = tick(s, 0.05);
+        for (const item of s.inventory.slice(before.inventory.length)) {
+          expect(item.level).toBe(before.floor);
+          checked++;
+          if (before.floor < before.highestFloor) afterDeath++;
+        }
       }
-    }
-    expect(checked).toBeGreaterThan(10);
-    expect(afterDeath).toBeGreaterThan(0);
-  });
+      expect(checked).toBeGreaterThan(10);
+      expect(afterDeath).toBeGreaterThan(0);
+    },
+    LONG_SIM_MS,
+  );
 
   it('sells overflow when the bag is full instead of losing it', () => {
     const full = withBag(
@@ -966,14 +985,18 @@ describe('Path balance', () => {
   // way, and at 16 seeds one Path's unlucky run could cross the line alone.
   const SEEDS = 64;
 
-  it('keeps every Path within 15% of the others on the floor reached', () => {
-    for (const minutes of [10, 60]) {
-      const floors = PATH_IDS.map((path) => {
-        let sum = 0;
-        for (let seed = 1; seed <= SEEDS; seed++) sum += play(seed, path, minutes).highestFloor;
-        return sum / SEEDS;
-      });
-      expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
-    }
-  });
+  it(
+    'keeps every Path within 15% of the others on the floor reached',
+    () => {
+      for (const minutes of [10, 60]) {
+        const floors = PATH_IDS.map((path) => {
+          let sum = 0;
+          for (let seed = 1; seed <= SEEDS; seed++) sum += play(seed, path, minutes).highestFloor;
+          return sum / SEEDS;
+        });
+        expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
+      }
+    },
+    LONG_SIM_MS,
+  );
 });

@@ -305,10 +305,18 @@ Every drop is generated from a seeded roll.
   rolls, each a whole 0–100% within its range, rounded down; the Immortal
   unique effect is not a roll and is left out. It ignores grade, item level and
   the number of affixes (a Mortal item with only its base roll easily reads
-  90%+), so it is not a measure of power. It is shown labeled ("Quality 94%" /
-  "Chất lượng 94%") in the details panel, in the drop toast and in the cell's
-  screen-reader label, but not on the grid cell. The bag can still be
-  sorted by it.
+  90%+), so it is not a measure of power. Crafting changes it: a refine raises
+  the base roll and a reroll replaces an affix roll (§7). It is shown on its
+  own labeled line ("Quality 94%" / "Chất lượng 94%") under the tag in the
+  details panel and the Crafting panel, and in the drop toast; not in
+  the tag (grade · type · Lv), the cell's screen-reader label or on the grid
+  cell. The bag can still be sorted by it.
+- **Refine level:** how many times an item has been refined (§7), 0 to 100,
+  0 on every drop. It is the item's headline progress marker: " +7" after its
+  name (details panel, Crafting panel, the cell's screen-reader label) and
+  "+7" in the top-right corner of its bag or equipment cell; nothing shows at
+  +0. It is display only. The bag can be sorted by it (highest first, quality
+  breaking ties).
 - **Gear badge:** a bag cell shows a badge in its bottom-right corner, worked
   out from the same comparison the details panel shows (stat changes that
   round to nothing are ignored). Per position the item fits: gains and no
@@ -333,22 +341,64 @@ Every drop is generated from a seeded roll.
 ## 7. Sell, salvage and filter
 
 - Unwanted items **sell** for Spirit Stones or **salvage** into **Spirit
-  Essence**, the crafting material (crafting comes later). Both pay by grade
-  and item level.
+  Essence**, the crafting material. Both pay by grade and item level.
 - **Bulk sell:** "sell everything below grade X", after a confirmation that
-  names how many items go and the highest grade among them.
+  names how many items go and the highest grade among them. Refined items
+  (+1 or higher, §7 Crafting) are never bulk sold: the count, highest grade
+  and price leave them out, and the confirmation says they are kept. They can
+  still be sold or salvaged one at a time. (The auto filter is unaffected:
+  every drop is +0.)
 - **Auto filter:** a minimum grade ("keep Earth and above") plus the item types
   to keep. Drops that fail are sold or salvaged on pickup, as the player
   chooses. The filter starts off: everything is kept.
 - **Full bag:** a drop that doesn't fit is sold, never lost.
 - Equipped items are never sold or salvaged.
 
+### Crafting
+
+The details panel's **Craft** button opens the Crafting panel for the
+selected item, in the bag or equipped (Mortal items too). It is a modal with
+one tab per mode, Refine and Reroll; it stays open between crafts, and the
+last mode used is kept for the visit. Both modes cost Spirit Essence and roll
+from the game's seeded stream (`state.rng`), like every other roll.
+
+- **Refine** adds +1 to +10 points to the base roll (a Formation Disc's array
+  strength), capped at 100% of its range; it never goes down. Small gains are
+  likelier, and more so as the roll climbs: the weight of each gain is
+  `LOW × (100 − p) + HIGH × p` at a base roll of `p`%, summing to 10 000.
+
+  | Gain | +1 | +2 | +3 | +4 | +5 | +6 | +7 | +8 | +9 | +10 |
+  |---|---|---|---|---|---|---|---|---|---|---|
+  | LOW (at 0%) | 25 | 20 | 15 | 10 | 8 | 7 | 5 | 4 | 3 | 3 |
+  | HIGH (at 100%) | 50 | 25 | 12 | 5 | 3 | 2 | 1 | 1 | 1 | 0 |
+
+  The average gain is +3.56 at 0%, +2.81 at 50% and +2.22 at 90%: about 37
+  refines take an item from 0% to 100%. Each refine raises the refine level
+  by 1 (§6). The panel shows the reachable range before paying ("Base roll
+  62% → 63–72%", "Damage: 11.7 → 11.8–12.3"); at 100% it reads "Fully
+  refined" and is off.
+- **Reroll** replaces one affix the player picks with a new affix and roll,
+  drawn with the item's favoured weights as on a drop. It never draws one of
+  the item's other affixes, so there are still no repeats; it may land on the
+  same affix with a new roll. It asks first, naming the affix and its value.
+  Items with no affixes (Mortal) have nothing to reroll.
+- **Costs:** refine 2 × and reroll 3 × the item's salvage value, so they scale
+  by grade and item level (a Heaven Lv 40 item salvages for 480 and refines for
+  960). The cost is flat per attempt. Without enough Essence the action is off
+  and says how much more is needed.
+- Never changed: the grade, item level, the number of affixes, an Immortal
+  unique or a disc's array type. Equipped items can be crafted but still not
+  sold or salvaged.
+- After each craft the panel shows the result, before → after ("Base roll
+  62% → 69%", "+0.7% Crit chance → +11% Spirit stone find"), and the bag
+  badges, quality and comparisons update at once.
+
 ## 8. Currencies
 
 | Currency | Source | Spent on |
 |---|---|---|
 | Spirit Stones | Kills and selling | Path change, stat reset, inventory space |
-| Spirit Essence | Salvage | Crafting (later): upgrading base stats, rerolling one affix |
+| Spirit Essence | Salvage | Crafting (§7): refining the base roll, rerolling one affix |
 | Dao Insight | Reincarnation | Permanent passives (§9) |
 
 - **Path change** puts every stat point into the new Path's primary stat.
@@ -404,6 +454,14 @@ treasure find, a higher offline cap, more starting stat points.
 Saved to browser storage, validated on load against an allow-list; a bad
 save starts a new run instead of crashing. The save is versioned JSON, written
 on every autosave, and is always the copy the game plays from.
+
+- **Version 8** adds an item's refine level (`refines`, §6): a whole number
+  from 1 to 100, left out on an item never refined (0 loads as none). It can't
+  exceed the item's base roll in points (each refine adds at least one point),
+  so an item at 37% holds at most 37 refines. Anything else (negative,
+  fractional, above 100 or the base roll, text, huge) is rejected, and so is
+  the field in an older save. Saves from v1 to v7 load with no refine
+  levels; an older build refuses a v8 save rather than drop the field.
 
 ### Backup copy and save code
 
@@ -651,9 +709,19 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   padded to full size. Arrow keys stay on the shown page; turning the page
   clears a bag selection left on the other one. A new run (after
   Reincarnation) opens on page 1.
-  Cells show no quality %; a ▲, ▼ or gold dash marks an upgrade, downgrade or
-  mixed change (§6). Selecting a cell shows a details panel: rolls, labeled
-  quality, and gains / losses against the equipped item.
+  Cells show no quality %. A cell's corners: the grade initial top-left, the
+  refine level ("+7", hidden at +0) top-right, and a ▲, ▼ or gold dash
+  bottom-right marking an upgrade, downgrade or mixed change (§6). The refine
+  level sits inside the border with a transparent background. Both top
+  labels (the grade initial and the refine level) are 7 px, the icon stays
+  centred, and either may overlap the icon's top corner by a pixel or so; a
+  thin halo in the cell's background colour keeps the refine level readable
+  over the art. The badge has a small backing and may touch the icon's
+  corner. Equipment cells show the grade and refine level the same
+  way. Selecting a cell shows
+  a details panel: the name with its refine level, the tag, labeled quality,
+  rolls, gains / losses against the equipped item, and
+  the Craft button (§7).
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or
   with the panel's Equip button (touch and keyboard use the button).
@@ -745,6 +813,9 @@ Grade is also written as text, never shown by colour alone.
 - The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
   which asks first and then deletes the save) and Help (how to play).
+- The Crafting panel (§7) is a modal over the Full view; in the Narrow view
+  it is a full-width sheet along the bottom. Esc, Close or a click outside it
+  closes it, and focus goes back to the Craft button.
 - Full and Narrow are chosen by width; Mini is chosen by height or by being
   the pop-out, and wins when both apply.
 - The Mini view has no inventory or menus. In the pop-out, a click on it

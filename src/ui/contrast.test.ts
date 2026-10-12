@@ -87,6 +87,18 @@ describe('page.css colours', () => {
       },
     );
 
+    it(`${name}: the cell's refine level is at least 4.5:1 on its --bg halo`, () => {
+      const rule = /^\.cell \.refine\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
+      // No backing box: the digits stand on the art with a --bg halo round them.
+      expect(rule).not.toMatch(/background/);
+      expect(rule).toMatch(/text-shadow:[^;]*var\(--bg\)/);
+      const text = /(?:^|[^-])color:\s*var\((--[\w-]+)\)/.exec(rule)?.[1] as string;
+      expect(TEXT).toContain(text);
+      expect(contrast(vars.get(text) as string, vars.get('--bg') as string)).toBeGreaterThanOrEqual(
+        4.5,
+      );
+    });
+
     it.each([
       '--strip-ink',
       '--strip-hurt',
