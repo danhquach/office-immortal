@@ -308,8 +308,7 @@ Every drop is generated from a seeded roll.
   90%+), so it is not a measure of power. Crafting changes it: a refine raises
   the base roll and a reroll replaces an affix roll (§7). It is shown on its
   own labeled line ("Quality 94%" / "Chất lượng 94%") under the tag in the
-  details panel and the Crafting panel, with a helper line under it ("Average
-  of this item's rolls within their ranges"), and in the drop toast; not in
+  details panel and the Crafting panel, and in the drop toast; not in
   the tag (grade · type · Lv), the cell's screen-reader label or on the grid
   cell. The bag can still be sorted by it.
 - **Refine level:** how many times an item has been refined (§7), 0 to 100,
@@ -542,7 +541,8 @@ waits on the network.
   data matching the local save, so it is not shown as a conflict.
 - **Linking.** Joining with a code never overwrites silently: a device that
   already has a run is asked which save to keep, and closing the page mid-choice
-  asks again next time.
+  asks again next time. The hint under the link field says so: "If both saves
+  have progress, you pick one to keep. The other is replaced."
 - **Reset progress** also deletes the cloud save (other linked devices lose it
   too) and is refused, changing nothing, if the cloud can't be reached.
   "Turn off on this device" only forgets the cloud here and leaves the server
@@ -677,6 +677,12 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   (`Q3_Cultivation_Report`), a formula bar, faint cell lines behind the
   panels, summary chips, panels with header bars, tabs and a status bar. The
   combat strip sits in it like an embedded chart, with its own header bar.
+- **Status bar:** "Ready", the one sheet tab, and a live line saying what the
+  cultivator is doing, the first that applies: fighting a Tribulation ("Facing
+  Tribulation"), one due ("Tribulation due"), the floor's boss ("Fighting floor
+  12 boss"), an elite ("Fighting an elite · floor 12"), else "Cultivating ·
+  floor 12". It follows the game every frame and the language on a switch, and
+  is not a live region, so screen readers do not announce each change.
 - **Title stamp:** the game's name sits in the title bar as a red rubber
   stamp (like "CONFIDENTIAL"): capitals, double border, tilted, in the
   Immortal grade colour. It is the one loud mark on the dull shell.
@@ -713,8 +719,8 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   over the art. The badge has a small backing and may touch the icon's
   corner. Equipment cells show the grade and refine level the same
   way. Selecting a cell shows
-  a details panel: the name with its refine level, the tag, labeled quality
-  with its helper line, rolls, gains / losses against the equipped item, and
+  a details panel: the name with its refine level, the tag, labeled quality,
+  rolls, gains / losses against the equipped item, and
   the Craft button (§7).
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or

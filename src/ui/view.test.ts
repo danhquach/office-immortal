@@ -11,6 +11,7 @@ import {
   compareToEquipped,
   equipBlock,
   cellLabel,
+  characterStatusLabel,
   durationLabel,
   formatBonus,
   freshDrops,
@@ -53,8 +54,8 @@ import {
   waveLabel,
   xpBar,
 } from './view.ts';
-import { makeTribulation } from '../core/floors.ts';
-import { DEFAULT_LANG, setLang, t } from './i18n.ts';
+import { makeEnemy, makeTribulation } from '../core/floors.ts';
+import { DEFAULT_LANG, PACKS, setLang, t } from './i18n.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
@@ -500,6 +501,41 @@ function dueAt(level: number): GameState {
   return s;
 }
 
+describe('characterStatusLabel', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  /** A fresh game on floor 12, facing an enemy of `kind` first. */
+  function facing(kind: 'demon' | 'elite' | 'boss'): GameState {
+    const s = newGame(1, 'sword');
+    s.floor = 12;
+    s.enemies = [makeEnemy(12, kind, 'Foe')];
+    return s;
+  }
+
+  it('follows the state, in English', () => {
+    expect(characterStatusLabel(facing('demon'))).toBe('Cultivating · floor 12');
+    expect(characterStatusLabel(facing('elite'))).toBe('Fighting an elite · floor 12');
+    expect(characterStatusLabel(facing('boss'))).toBe('Fighting floor 12 boss');
+    const due = dueAt(10);
+    expect(characterStatusLabel(due)).toBe('Tribulation due');
+    expect(characterStatusLabel(faceTribulation(due))).toBe('Facing Tribulation');
+  });
+
+  it('follows the language', () => {
+    const due = dueAt(10);
+    const s = facing('boss');
+    expect(characterStatusLabel(s)).toBe('Fighting floor 12 boss');
+    setLang('vi');
+    expect(characterStatusLabel(facing('demon'))).toBe('Đang tu luyện · tầng 12');
+    expect(characterStatusLabel(facing('elite'))).toBe('Đang đánh tinh anh · tầng 12');
+    expect(characterStatusLabel(s)).toBe('Đang đánh trùm tầng 12');
+    expect(characterStatusLabel(due)).toBe('Sắp độ kiếp');
+    expect(characterStatusLabel(faceTribulation(due))).toBe('Đang độ kiếp');
+    setLang('en');
+    expect(characterStatusLabel(s)).toBe('Fighting floor 12 boss');
+  });
+});
+
 describe('tribulationCall', () => {
   it('names the due Tribulation and the realm a win reaches', () => {
     expect(tribulationCall(dueAt(10))).toEqual({
@@ -735,10 +771,8 @@ describe('cellLabel', () => {
     expect(cellLabel(stapler, null)).toMatch(/ · Cấp 10$/);
   });
 
-  it('has a quality helper line in both languages', () => {
-    expect(t('item.qualityHint')).toBe("Average of this item's rolls within their ranges");
-    setLang('vi');
-    expect(t('item.qualityHint')).toBe('Trung bình các lần tung của món đồ trong khoảng của chúng');
+  it('has no quality helper line in any language', () => {
+    for (const pack of PACKS) expect(Object.hasOwn(pack.messages, 'item.qualityHint')).toBe(false);
   });
 
   it('keeps the sort option as "Quality %" / "Chất lượng %"', () => {
