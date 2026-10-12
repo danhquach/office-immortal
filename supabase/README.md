@@ -2,15 +2,16 @@
 
 Cloud save (`docs/design.md` §11) needs one Supabase project. The server only
 stores a save and a revision number; all game rules and validation stay in the
-client. This folder holds the whole backend: one SQL migration and its tests.
+client. This folder holds the whole backend: the SQL migrations and their tests.
 
 ## Set up (maintainer, once)
 
 1. Create a project at <https://supabase.com> (the free tier is enough).
 2. Authentication → Sign In / Providers → turn on **Allow anonymous sign-ins**.
    Players have no account: each browser is an anonymous user.
-3. Apply the migration: SQL Editor → paste `migrations/20261010000000_cloud_save.sql`
-   → Run. (Or `supabase link --project-ref <ref>` then `supabase db push`.)
+3. Apply the migrations: SQL Editor → paste each file in `migrations/`, oldest
+   first → Run. (Or `supabase link --project-ref <ref>` then `supabase db push`.)
+   When a new migration lands, apply just that file the same way.
 4. Authentication → Rate limits: keep "anonymous sign-ins" limited (the default
    is 30 an hour per IP) so nobody can mass-create users.
 5. Project Settings → API: copy the project URL (`https://<ref>.supabase.co`) and
@@ -35,7 +36,8 @@ the page's Content-Security-Policy is unchanged.
   [Supabase CLI](https://supabase.com/docs/guides/local-development)):
   `supabase start && supabase test db`. They cover cross-player isolation,
   denied table and anon access, stale-revision conflicts, size and shape limits,
-  link-code expiry and reuse, and cascade deletes. They are not part of CI.
+  link-code expiry, replacement, cleanup and reuse, and cascade deletes. They
+  are not part of CI.
 - Two-browser check: turn on cloud save in browser A, get a link code, enter it
   in browser B, and confirm B shows A's cultivator.
 
@@ -48,7 +50,10 @@ the page's Content-Security-Policy is unchanged.
   (which includes anonymous users) may execute them; `public` and `anon` may not.
 - Inputs are function parameters, never strings built into queries.
 - Link codes are 10 characters from a 32-letter alphabet (50 random bits), single
-  use, and expire after 15 minutes.
+  use, and expire after 15 minutes. A new code for the same save expires the
+  old one. Expired codes are kept for a day (at most the 4 newest per save), so
+  trying one says "expired", not "not valid"; after that a new code from any
+  player deletes them.
 
 When an anonymous user is deleted, their membership goes with them, and a save
 left with no members is deleted by a trigger.

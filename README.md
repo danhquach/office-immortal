@@ -51,7 +51,7 @@ All shipped on `main`:
   storage; all randomness goes through the seeded RNG in `src/core/rng.ts`.
 - `src/storage/`: the save, validated against an allow-list on load, and the
   optional cloud save (REST client and sync logic).
-- `supabase/`: the cloud save's SQL migration and tests, with setup steps.
+- `supabase/`: the cloud save's SQL migrations and tests, with setup steps.
 - `src/ui/`: the DOM view. Text reaches the page only as text nodes.
 - `src/main.ts`: the entry point that mounts the UI.
 
