@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { catchUp, offlineCap, offlineSeconds } from '../core/offline.ts';
-import { newGame } from '../core/sim.ts';
+import { newGame, type GameState } from '../core/sim.ts';
 import {
   CONFIG,
   SAVE_ID,
@@ -20,6 +20,20 @@ const MINUTE = 60_000;
 
 /** A valid save stamped `savedAt`; `seed` makes saves differ. */
 const raw = (savedAt: number, seed = 1): string => encodeSave(newGame(seed, 'sword'), savedAt);
+/** A new run holding one Mortal cap refined 7 times, on a base roll of 50%. */
+function refinedRun(seed = 1): GameState {
+  const s = newGame(seed, 'sword');
+  s.inventory.push({
+    slot: 'head',
+    name: 'Hempen Scholar Cap',
+    level: 1,
+    grade: 'mortal',
+    baseRoll: 0.5,
+    affixes: [],
+    refines: 7,
+  });
+  return s;
+}
 
 function world() {
   const server = fakeServer();
@@ -267,6 +281,20 @@ describe('startup check', () => {
     restarted.sync.begin();
     await until(() => expect(kind(restarted)).toBe('synced'));
     expect(restarted.adopted).not.toHaveBeenCalled();
+  });
+
+  it('loads a cloud save holding a crafted item unchanged', async () => {
+    const w = world();
+    const { a, b } = await pair(w);
+    w.time.t += 5 * MINUTE;
+    const theirs = play(b, w.time.t, 3, encodeSave(refinedRun(3), w.time.t));
+    await b.sync.syncNow();
+    expect(serverData(w)).toEqual([theirs]);
+    const reopened = w.device(a.storage);
+    reopened.sync.begin();
+    await until(() => expect(reopened.adopted).toHaveBeenCalledOnce());
+    expect(reopened.storage.getItem(SAVE_KEY)).toBe(theirs);
+    expect(loadSave(reopened.storage)?.state).toEqual(refinedRun(3));
   });
 
   it('asks when both moved on, and changes neither save', async () => {
@@ -558,6 +586,21 @@ describe('a cloud save that cannot be read', () => {
     ['oversized', good + ' '.repeat(MAX_SAVE_CHARS)],
     ['not JSON', 'definitely not json'],
     ['an array', '[]'],
+    // A crafted item's refine level: only a whole number up to its base roll points.
+    ...(
+      [
+        ['negative', '-1'],
+        ['above 100', '101'],
+        ['fractional', '2.5'],
+        ['a numeric string', '"5"'],
+        ['written as 1e999', '1e999'],
+        ['above its base roll points', '51'],
+        ['beside a pollution key', '7,"__proto__":{"polluted":true}'],
+      ] as const
+    ).map(([what, text]): [string, string] => [
+      `a refine level ${what}`,
+      encodeSave(refinedRun(3), T + 5 * MINUTE).replace('"refines":7', `"refines":${text}`),
+    ]),
   ];
 
   it.each(hostile)('rejects %s and leaves the local save byte for byte', async (_name, payload) => {

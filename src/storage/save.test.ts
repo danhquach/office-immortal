@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { buyBagSpace, changePath, resetStats, setFilter, spendPoints } from '../core/economy.ts';
+import {
+  buyBagSpace,
+  changePath,
+  refine,
+  refineReach,
+  rerollAffix,
+  type ItemAt,
+  resetStats,
+  setFilter,
+  spendPoints,
+} from '../core/economy.ts';
 import { makeTribulation, type Enemy } from '../core/floors.ts';
-import { charmLine, itemPath, type Item } from '../core/loot.ts';
+import { charmLine, itemPath, type EquipSlotId, type Item } from '../core/loot.ts';
+import { createRng, int } from '../core/rng.ts';
 import { derive, xpToNext } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import {
@@ -26,6 +37,7 @@ import {
   writeSave,
   type SaveStorage,
 } from './save.ts';
+import { exportCode, importCode } from './transfer.ts';
 
 const SAVED_AT = 1_800_000_000_000;
 
@@ -1784,5 +1796,204 @@ describe('realm caps and the Tribulation', () => {
       '"kind":"tribulation","__proto__":{"x":1}',
     );
     expect(decodeSave(json)).toBeNull();
+  });
+});
+
+describe('refine level (v8)', () => {
+  /** The bag index of the first item with an affix in the played run. */
+  const WITH_AFFIX = STATE.inventory.findIndex((i) => i.affixes.length > 0);
+  /** The played run with its first bag item and its worn weapon refined, and one affix rerolled. */
+  function crafted(): GameState {
+    let s: GameState = { ...STATE, essence: 1e9 };
+    for (let i = 0; i < 3; i++) s = refine(s, { bag: 0 });
+    const worn = Object.keys(s.cultivator.equipment)[0] as keyof typeof s.cultivator.equipment;
+    s = refine(s, { slot: worn });
+    if (WITH_AFFIX >= 0) s = rerollAffix(s, { bag: WITH_AFFIX }, 0);
+    return s;
+  }
+  const CRAFTED = crafted();
+  /**
+   * The crafted save as JSON with `refines` of the first bag item set to
+   * `value`, and its base roll set to `base` (100% by default, so any refine
+   * level up to 100 fits it).
+   */
+  function withRefines(value: unknown, base = 1): ReturnType<typeof raw> {
+    const save = JSON.parse(encodeSave(CRAFTED, SAVED_AT)) as ReturnType<typeof raw>;
+    item(save).baseRoll = base;
+    item(save).refines = value;
+    return save;
+  }
+  const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+
+  it('saves a run whose worn Max HP affix was rerolled at full HP', () => {
+    const cap: Item = {
+      slot: 'head',
+      name: 'Azure Cloud Circlet',
+      level: 1,
+      grade: 'spirit',
+      baseRoll: 0.5,
+      affixes: [{ id: 'maxHp', roll: 1 }],
+    };
+    for (let seed = 0; seed < 20; seed++) {
+      let s = equip({ ...newGame(seed, 'body'), inventory: [cap], essence: 1e6 }, 0);
+      s.cultivator.hp = derive(s.cultivator).maxHp;
+      s = rerollAffix(s, { slot: 'head' }, 0);
+      expect(decodeSave(encodeSave(s, SAVED_AT))?.state, `seed ${seed}`).toEqual(s);
+    }
+  });
+
+  it('round-trips every step of many seeded refines and rerolls, worn and in the bag', () => {
+    for (let seed = 0; seed < 12; seed++) {
+      const pick = createRng(seed);
+      let s: GameState = { ...structuredClone(STATE), essence: 1e12, rng: { s: seed } };
+      const worn = Object.keys(s.cultivator.equipment) as EquipSlotId[];
+      for (let step = 0; step < 40; step++) {
+        // At full HP before every step, so any craft that lowers Max HP must clamp.
+        s.cultivator.hp = derive(s.cultivator).maxHp;
+        const places: ItemAt[] = [
+          ...worn.map((slot) => ({ slot })),
+          ...s.inventory.map((_, bag) => ({ bag })),
+        ];
+        const at = places[int(pick, 0, places.length - 1)] as ItemAt;
+        const item = 'bag' in at ? s.inventory[at.bag] : s.cultivator.equipment[at.slot];
+        if (!item) continue;
+        if (pick() < 0.5 && refineReach(item)) s = refine(s, at);
+        else if (item.affixes.length) s = rerollAffix(s, at, int(pick, 0, item.affixes.length - 1));
+        else continue;
+        expect(s.cultivator.hp).toBeLessThanOrEqual(derive(s.cultivator).maxHp);
+        expect(decodeSave(encodeSave(s, SAVED_AT))?.state, `seed ${seed} step ${step}`).toEqual(s);
+      }
+    }
+  });
+
+  it('is version 8', () => {
+    expect(SAVE_VERSION).toBe(8);
+  });
+
+  it('really rerolled an affix in the crafted run', () => {
+    expect(WITH_AFFIX).toBeGreaterThanOrEqual(0);
+    const before = STATE.inventory[WITH_AFFIX] as Item;
+    // Rerolling costs Essence and draws from the stream, whatever it lands on.
+    let s: GameState = { ...STATE, essence: 1e9 };
+    for (let i = 0; i < 3; i++) s = refine(s, { bag: 0 });
+    const worn = Object.keys(s.cultivator.equipment)[0] as keyof typeof s.cultivator.equipment;
+    s = refine(s, { slot: worn });
+    expect(CRAFTED.essence).toBeLessThan(s.essence);
+    expect(CRAFTED.rng).not.toEqual(s.rng);
+    expect(CRAFTED.inventory[WITH_AFFIX]?.affixes.slice(1)).toEqual(before.affixes.slice(1));
+  });
+
+  it('allows as many refines as base roll points, and no more', () => {
+    expect(load(withRefines(37, 0.37))?.state.inventory[0]?.refines).toBe(37);
+    expect(load(withRefines(38, 0.37))).toBeNull();
+    expect(load(withRefines(1, 0))).toBeNull();
+    expect(load(withRefines(0, 0))?.state.inventory[0]?.baseRoll).toBe(0);
+  });
+
+  it('round-trips crafted bag and worn items unchanged, through the save and a save code', () => {
+    expect(CRAFTED.inventory[0]?.refines).toBe(3);
+    expect(Object.values(CRAFTED.cultivator.equipment).some((i) => i?.refines === 1)).toBe(true);
+    const text = encodeSave(CRAFTED, SAVED_AT);
+    expect(decodeSave(text)).toEqual({ state: CRAFTED, savedAt: SAVED_AT });
+    const code = importCode(exportCode(text));
+    expect(code.ok && code.save.state).toEqual(CRAFTED);
+  });
+
+  it.each([1, 50, 100])('loads a refine level of %i', (n) => {
+    expect(load(withRefines(n))?.state.inventory[0]?.refines).toBe(n);
+  });
+
+  it('loads a refine level of 0 as none, the way the game keeps it', () => {
+    const st = load(withRefines(0))?.state;
+    expect(st).not.toBeNull();
+    expect(st && Object.hasOwn(st.inventory[0] as object, 'refines')).toBe(false);
+  });
+
+  it.each([
+    ['negative', -1],
+    ['fractional', 2.5],
+    ['above 100', 101],
+    ['huge', 1e300],
+    ['the largest safe integer', Number.MAX_SAFE_INTEGER],
+    ['a numeric string', '5'],
+    ['a string', 'max'],
+    ['null', null],
+    ['a boolean', true],
+    ['an array', [5]],
+    ['an object', { n: 5 }],
+  ])('rejects a refine level that is %s', (_, value) => {
+    expect(load(withRefines(value))).toBeNull();
+  });
+
+  // JSON has no NaN or Infinity, so they go in as raw text; 1e999 parses to Infinity.
+  it.each(['1e999', '-1e999', 'NaN', 'Infinity'])(
+    'rejects a refine level written as %s',
+    (text) => {
+      const json = JSON.stringify(withRefines(7)).replace('"refines":7', `"refines":${text}`);
+      expect(json).toContain(`"refines":${text}`);
+      expect(decodeSave(json)).toBeNull();
+    },
+  );
+
+  it('rejects a pollution key on a refined item', () => {
+    for (const key of ['__proto__', 'constructor', 'prototype']) {
+      const json = JSON.stringify(withRefines(7)).replace(
+        '"refines":7',
+        `"refines":7,"${key}":{"polluted":true}`,
+      );
+      expect(decodeSave(json), key).toBeNull();
+    }
+    expect(({} as J).polluted).toBeUndefined();
+  });
+
+  it('rejects a refine level on a worn item in the same ways', () => {
+    const save = JSON.parse(encodeSave(CRAFTED, SAVED_AT)) as ReturnType<typeof raw>;
+    const eq = cult(save).equipment as Record<string, J>;
+    const worn = Object.values(eq)[0] as J;
+    worn.baseRoll = 0.5;
+    for (const bad of [-1, 0.5, 51, 101, '1']) {
+      worn.refines = bad;
+      expect(load(save)).toBeNull();
+    }
+    worn.refines = 9;
+    expect(load(save)).not.toBeNull();
+  });
+
+  it.each([
+    ['negative', '-1'],
+    ['above 100', '101'],
+    ['a numeric string', '"5"'],
+    ['fractional', '2.5'],
+    ['written as 1e999', '1e999'],
+    ['above its base roll points', '51'],
+  ])('refuses a save code whose refine level is %s', (_, text) => {
+    // The first bag item at a 50% base roll, so 50 refines fit and 51 do not.
+    const json = JSON.stringify(withRefines(7, 0.5)).replace('"refines":7', `"refines":${text}`);
+    expect(json).toContain(`"refines":${text}`);
+    const r = importCode(exportCode(json));
+    expect(r.ok).toBe(false);
+  });
+
+  it('imports a save code whose refine level fits', () => {
+    const r = importCode(exportCode(JSON.stringify(withRefines(50, 0.5))));
+    expect(r.ok && r.save.state.inventory[0]?.refines).toBe(50);
+  });
+
+  it('refuses a save code with a pollution key on a refined item', () => {
+    const json = JSON.stringify(withRefines(7)).replace(
+      '"refines":7',
+      '"refines":7,"__proto__":{"polluted":true}',
+    );
+    expect(importCode(exportCode(json)).ok).toBe(false);
+    expect(({} as J).polluted).toBeUndefined();
+  });
+
+  it('loads a v7 save with no refine levels, and rejects one that has them', () => {
+    const save = raw();
+    save.v = 7;
+    expect(load(save)?.state).toEqual(STATE);
+    const old = withRefines(3);
+    old.v = 7;
+    expect(load(old)).toBeNull();
   });
 });

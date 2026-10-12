@@ -23,6 +23,7 @@ import {
   defaultFilter,
   INVENTORY_SIZE,
   MAX_BAG_SIZE,
+  rollPoints,
   type FilterAction,
   type LootFilter,
 } from '../core/economy.ts';
@@ -44,6 +45,7 @@ import {
   GRADES,
   isDisc,
   MAX_BINDING,
+  MAX_REFINES,
   namesFor,
   renamed,
   SLOTS,
@@ -65,14 +67,15 @@ import { arr, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 7;
+export const SAVE_VERSION = 8;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
  * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners;
- * v6 had seven realms, so a due Tribulation may carry another realm's name.
+ * v6 had seven realms, so a due Tribulation may carry another realm's name;
+ * v7 came before crafting, so no item has a refine level.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -210,7 +213,11 @@ function readState(v: unknown, version: number): GameState {
   const before6 = version < 6;
   // Before v7 the realm ladder was shorter: a due Tribulation is renamed for its realm.
   const before7 = version < 7;
-  const slot: SlotName = before4 ? fromPants : (id) => id;
+  // Before v8 there was no crafting, so no item carries a refine level.
+  const items: ItemReader = {
+    slot: before4 ? fromPants : (id) => id,
+    refines: version >= 8,
+  };
   const o = obj(v, [
     'time',
     'rng',
@@ -244,7 +251,7 @@ function readState(v: unknown, version: number): GameState {
     highestFloor,
     v1,
     bonusPoints(passives),
-    slot,
+    items,
     before4,
   );
   const state: GameState = {
@@ -261,11 +268,11 @@ function readState(v: unknown, version: number): GameState {
       : num(o.arrayNextAt, 0, time + ENEMY_ARRIVAL + ARRAY_TICK),
     // Only an equipped banner holds souls, and never more than its cap.
     souls: before6 ? 0 : int(o.souls, 0, soulCap(cultivator.equipment)),
-    inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, slot)),
+    inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, items)),
     bagSize,
     stones: v1 ? 0 : int(o.stones, 0, COUNT),
     essence: v1 ? 0 : int(o.essence, 0, COUNT),
-    filter: v1 ? defaultFilter() : readFilter(o.filter, slot),
+    filter: v1 ? defaultFilter() : readFilter(o.filter, items.slot),
     dropsSold: v1 ? 0 : int(o.dropsSold, 0, COUNT),
     dropsSalvaged: v1 ? 0 : int(o.dropsSalvaged, 0, COUNT),
     kills: int(o.kills, 0, COUNT),
@@ -288,6 +295,13 @@ const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];
 
 /** An older save's name for an item type or position, as it is called now. */
 type SlotName = (id: unknown) => unknown;
+
+/** How a save of some version stores its items. */
+interface ItemReader {
+  slot: SlotName;
+  /** True from v8 on, when an item may carry a refine level. */
+  refines: boolean;
+}
 
 /**
  * Pants became Boots in v4: the type, and the position that takes it. A save
@@ -316,7 +330,7 @@ function readCultivator(
   highestFloor: number,
   v1: boolean,
   bonus: number,
-  slot: SlotName,
+  items: ItemReader,
   before4: boolean,
 ): Cultivator {
   const o = obj(v, [
@@ -348,7 +362,7 @@ function readCultivator(
   for (const [i, at] of EQUIP_IDS.entries()) {
     const key = saved[i] as string;
     if (!Object.hasOwn(eq, key)) continue;
-    const item = readItem(eq[key], highestFloor, slot);
+    const item = readItem(eq[key], highestFloor, items);
     if (EQUIP_SLOTS[at].takes !== item.slot) fail('item in wrong slot');
     equipment[at] = item;
   }
@@ -416,9 +430,13 @@ function readEnemies(v: unknown, floor: number, c: Cultivator, oldLadder: boolea
   });
 }
 
-function readItem(v: unknown, highestFloor: number, slotName: SlotName): Item {
-  const o = obj(v, ['slot', 'name', 'level', 'grade', 'baseRoll', 'affixes'], ['unique', 'array']);
-  const slot = oneOf(slotName(o.slot), SLOT_IDS);
+function readItem(v: unknown, highestFloor: number, reader: ItemReader): Item {
+  const o = obj(
+    v,
+    ['slot', 'name', 'level', 'grade', 'baseRoll', 'affixes'],
+    ['unique', 'array', ...(reader.refines ? ['refines'] : [])],
+  );
+  const slot = oneOf(reader.slot(o.slot), SLOT_IDS);
   const grade = oneOf(o.grade, GRADE_IDS);
   const [min, max] = GRADES[grade].affixes;
   const affixes: Affix[] = arr(o.affixes, max).map((a) => {
@@ -442,5 +460,12 @@ function readItem(v: unknown, highestFloor: number, slotName: SlotName): Item {
   // Formation Discs, and only they, carry one array.
   if (isDisc(item)) item.array = oneOf(o.array, ARRAY_IDS);
   else if (Object.hasOwn(o, 'array')) fail('array on an item that is not a disc');
+  // A refine level is a whole number up to MAX_REFINES; 0 is the same as none,
+  // and is left out as the game leaves it out. Each refine adds at least a
+  // point of base roll, so there are never more refines than base roll points.
+  if (Object.hasOwn(o, 'refines')) {
+    const refines = int(o.refines, 0, Math.min(MAX_REFINES, rollPoints(item.baseRoll)));
+    if (refines > 0) item.refines = refines;
+  }
   return item;
 }
