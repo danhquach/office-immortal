@@ -61,3 +61,29 @@ export function frameStep(hasFrame: boolean, shown: boolean): 'add' | 'drop' | '
   if (!shown && hasFrame) return 'drop';
   return 'keep';
 }
+
+/** The line showing a link code, split around the code so it can be set apart in its own type. */
+export interface CodeLine {
+  before: string;
+  /** The code in two groups of five, as the eye reads it. */
+  code: string;
+  /** The code a character at a time, for a screen reader (which would read a group as a word). */
+  spoken: string;
+  after: string;
+}
+
+/** Marks where the code goes in the translated line; no language pack holds it. */
+const CODE_MARK = '\u0000';
+
+/** The line under a fresh link code, `ttl` seconds from expiring, in the current language. */
+export function linkCodeLine(code: string, ttl: number): CodeLine {
+  const text = t('cloud.code', { code: CODE_MARK, minutes: Math.round(ttl / 60) });
+  const at = text.indexOf(CODE_MARK);
+  const groups = [code.slice(0, 5), code.slice(5)].filter((g) => g !== '');
+  return {
+    before: at < 0 ? text : text.slice(0, at),
+    code: groups.join(' '),
+    spoken: groups.map((g) => [...g].join(' ')).join(', '),
+    after: at < 0 ? '' : text.slice(at + CODE_MARK.length),
+  };
+}

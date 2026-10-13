@@ -68,7 +68,7 @@ describe('where the code frame shows anything', () => {
   it('starts with its button and no code', () => {
     const c = frame();
     expect(c.f).not.toBeNull();
-    expect(c.last()).toEqual({ label: 'Get link code', busy: false, line: '' });
+    expect(c.last()).toEqual({ label: 'Get link code', busy: false, line: '', code: null });
     expect(c.createLinkCode).not.toHaveBeenCalled();
   });
 });
@@ -94,7 +94,13 @@ describe('making a code', () => {
     expect(c.last()).toEqual({
       label: 'Get link code',
       busy: false,
-      line: 'Link code: ABCDEFGH12. Enter it on your other device within 15 minutes. It works once.',
+      line: '',
+      code: {
+        before: 'Link code: ',
+        code: 'ABCDE FGH12',
+        spoken: 'A B C D E, F G H 1 2',
+        after: '. Enter it on your other device within 15 minutes. It works once.',
+      },
     });
   });
 
@@ -116,8 +122,9 @@ describe('making a code', () => {
     await c.f?.press(true);
     make.mockRejectedValueOnce(new CloudError('offline'));
     await c.f?.press(true);
-    expect(c.views.some((v) => v.busy && v.line === '')).toBe(true);
-    expect(c.last()?.line).not.toContain('ABCDEFGH12');
+    expect(c.views.some((v) => v.busy && v.line === '' && v.code === null)).toBe(true);
+    expect(c.last()?.code).toBeNull();
+    expect(c.last()?.line).not.toBe('');
   });
 });
 
@@ -128,8 +135,8 @@ describe('language', () => {
     c.storage.setItem(LANG_KEY, 'vi');
     c.f?.redraw();
     expect(c.last()?.label).toBe('Lấy mã liên kết');
-    expect(c.last()?.line).toContain('ABCDEFGH12');
-    expect(c.last()?.line).toContain('Mã liên kết');
+    expect(c.last()?.code?.code).toBe('ABCDE FGH12');
+    expect(c.last()?.code?.before).toContain('Mã liên kết');
   });
 
   it('falls back to the browser language for a hostile stored value', () => {
@@ -154,8 +161,8 @@ describe('with the storage frame', () => {
         createCloud({ config: CONFIG, storage: s, fetch: pair.server.fetch, now: pair.time.now }),
     });
     await c.f?.press(true);
-    const code = /Link code: ([0-9A-Z]{10})\./.exec(c.last()?.line ?? '')?.[1];
-    expect(code).toBeDefined();
+    const code = c.last()?.code?.code.replace(' ', '');
+    expect(code).toMatch(/^[0-9A-Z]{10}$/);
     expect(JSON.stringify(pair.posted.map((p) => p.message))).not.toContain(code);
   });
 });

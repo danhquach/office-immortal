@@ -13,6 +13,7 @@ import { createHost } from './storage/frame-host.ts';
 import { browserStorage, type SaveStorage } from './storage/save.ts';
 import { createSync } from './storage/sync.ts';
 import { createCodeFrame, createLinkFrame, LINK_FIELD_MAX, linkSender } from './ui/code-frame.ts';
+import { showCodeLine } from './ui/code-line.ts';
 import { lang, LANG_KEY } from './ui/i18n.ts';
 import { readTheme, showTheme, THEME_KEY } from './ui/theme.ts';
 
@@ -113,7 +114,8 @@ function showCode(): void {
       document.documentElement.lang = lang().code;
       button.textContent = view.label;
       button.setAttribute('aria-disabled', String(view.busy));
-      line.textContent = view.line;
+      if (view.code) showCodeLine(line, view.code);
+      else line.textContent = view.line;
     },
   });
   if (!frame) return;

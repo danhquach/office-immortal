@@ -9,6 +9,7 @@ import {
   cloudText,
   cloudStatusLine,
   frameStep,
+  linkCodeLine,
   needsChoice,
   saveSummary,
 } from './cloud-view.ts';
@@ -112,5 +113,37 @@ describe('frameStep', () => {
     // Turned off or signed out (relink): the code frame and any code in it go.
     expect(frameStep(true, false)).toBe('drop');
     expect(frameStep(false, false)).toBe('keep');
+  });
+});
+
+describe('linkCodeLine', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  it('shows the code in two groups of five, spelled out for a screen reader', () => {
+    expect(linkCodeLine('0D6G5S2Z8B', 900)).toEqual({
+      before: 'Link code: ',
+      code: '0D6G5 S2Z8B',
+      spoken: '0 D 6 G 5, S 2 Z 8 B',
+      after: '. Enter it on your other device within 15 minutes. It works once.',
+    });
+  });
+
+  it('puts the code where every language pack puts it, and only once', () => {
+    for (const pack of PACKS) {
+      setLang(pack.code);
+      const line = linkCodeLine('ABCDEFGH12', 600);
+      const whole = `${line.before}${line.code}${line.after}`;
+      expect(whole).not.toContain('{code}');
+      expect(whole).not.toContain('\u0000');
+      expect(whole).toContain('10');
+      expect(line.before).not.toBe('');
+      expect(whole.split('ABCDE FGH12')).toHaveLength(2);
+    }
+  });
+
+  it('a grouped or spoken code typed back reads as the same code', () => {
+    const line = linkCodeLine('ABCDEFGH12', 900);
+    expect(line.code.replace(/\s/g, '')).toBe('ABCDEFGH12');
+    expect(line.spoken.replace(/[\s,]/g, '')).toBe('ABCDEFGH12');
   });
 });
