@@ -636,6 +636,12 @@ select {
     border-radius: 0 4px 0 0;
     background: var(--head);
   }
+  /* Each label on one line and tighter, so the longer Vietnamese ones keep
+     the bar one row tall beside the title. */
+  .inventory > .tabs .tab {
+    white-space: nowrap;
+    padding-inline: 0.35rem;
+  }
   .inventory > .tabpanel {
     grid-area: 2 / 1 / 3 / 3;
   }
@@ -1286,6 +1292,29 @@ select {
   color: var(--ink);
   font-weight: 600;
 }
+/* The Inventory's tabs each wear a colour, so the three read apart at a
+   glance: Bag the accent, Auto filter the Salvage colour, Store the Spirit
+   Stones colour. The label still names each tab, so colour is never the only cue. */
+.inventory > .tabs .tab {
+  border-color: color-mix(in srgb, var(--tab-tone) 45%, transparent);
+  border-top: 3px solid var(--tab-tone);
+}
+.inventory > .tabs .tab:hover {
+  background: color-mix(in srgb, var(--tab-tone) 10%, transparent);
+}
+.inventory > .tabs .tab[aria-selected='true'] {
+  border-color: var(--tab-tone);
+  background: color-mix(in srgb, var(--tab-tone) 12%, var(--panel));
+}
+#tab-bag {
+  --tab-tone: var(--accent);
+}
+#tab-filter {
+  --tab-tone: var(--salvage);
+}
+#tab-store {
+  --tab-tone: var(--sell);
+}
 
 /* Paper doll: the figure is 64 x 80 pixel art at 4x and the box is its size,
    so it stays whole-pixel; each slot is placed in % where it is worn. The
@@ -1859,9 +1888,15 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 .offer .why:empty {
   display: none;
 }
+/* Chests and boosts each under their own heading. */
+.offer-group h3 {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
 .offers {
   list-style: none;
-  margin: 0.5rem 0 0;
+  margin: 0.3rem 0 0;
   padding: 0;
   display: grid;
   gap: 0.4rem;

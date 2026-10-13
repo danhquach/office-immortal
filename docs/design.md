@@ -999,8 +999,12 @@ Grade is also written as text, never shown by colour alone.
 - The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
   which asks first and then deletes the save) and Help (how to play).
-- The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Store
-  cards stack in one column in every view.
+- The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
+  tab wears a colour on its border (Bag the accent, Auto filter the Salvage
+  colour, Store the Spirit Stones colour), tinted while open. The Store groups
+  its cards under **Gear chests** and **Boosts** headings, in stock order
+  within each; a group with nothing in stock is hidden. Store cards stack in
+  one column in every view.
 - The Crafting panel (§7) is a modal over the Full view; in the Narrow view
   it is a full-width sheet along the bottom. Esc, Close or a click outside it
   closes it, and focus goes back to the Craft button.

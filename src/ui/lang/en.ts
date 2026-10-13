@@ -199,6 +199,7 @@ const messages = {
   'store.boostEffect.stones': '+{percent}% spirit stone find',
   'store.boostLine': '{name} ({effect}): {time} left',
   'store.boosts': 'Boosts',
+  'store.chests': 'Gear chests',
   'store.chip': '{effect} · {time}',
   'store.noBoosts': 'No boosts running. Buy them in the Store.',
   'inventory.title': 'Inventory',
