@@ -45,7 +45,7 @@ import {
   favouredBy,
   itemFacts,
   unequipBlock,
-  overtimeLines,
+  overtimeView,
   pageOf,
   passiveRow,
   realmLabel,
@@ -1323,7 +1323,7 @@ describe('durationLabel', () => {
   });
 });
 
-describe('overtimeLines', () => {
+describe('overtimeView', () => {
   const summary = {
     seconds: 7500,
     capped: false,
@@ -1337,21 +1337,25 @@ describe('overtimeLines', () => {
     essence: 0,
     boostsEnded: [],
   };
+  const text = (v: ReturnType<typeof overtimeView>): string[] =>
+    v.chips.map((c) => `${c.label} ${c.value}`);
 
-  it('lists every count', () => {
-    expect(overtimeLines(summary)).toEqual([
-      'Away 2 h 5 min',
-      'Floors climbed: 3',
-      'Levels gained: 4',
-      'Kills: 120',
-      'Drops kept: 9',
-      'Spirit Stones: +450',
-      'Items drop at 50% of the usual rate while away. Keep the tab open for more loot.',
+  it('shows the time away, a chip per count, and the drop-rate note', () => {
+    const v = overtimeView(summary);
+    expect(v.away).toBe('Away 2 h 5 min');
+    expect(text(v)).toEqual([
+      'Floors +3',
+      'Levels +4',
+      'Kills 120',
+      'Kept 9',
+      'Spirit Stones +450',
     ]);
+    expect(v.chips.find((c) => c.label === 'Spirit Stones')?.icon).toBe('stones');
+    expect(v.note).toBe('Drops at 50% while away');
   });
 
   it('says when the cap cut the time short, and shows drops sold and salvaged', () => {
-    const lines = overtimeLines({
+    const v = overtimeView({
       ...summary,
       seconds: 8 * 3600,
       capped: true,
@@ -1359,15 +1363,15 @@ describe('overtimeLines', () => {
       dropsSalvaged: 3,
       essence: 40,
     });
-    expect(lines[0]).toBe('Away more than 8 h 0 min (the most replayed)');
-    expect(lines.slice(5)).toEqual([
-      'Drops sold: 2',
-      'Drops salvaged: 3',
-      'Spirit Stones: +450',
-      'Spirit Essence: +40',
-      'Items drop at 50% of the usual rate while away. Keep the tab open for more loot.',
+    expect(v.away).toBe('Away 8 h 0 min+ (cap)');
+    expect(text(v).slice(4)).toEqual([
+      'Sold 2',
+      'Salvaged 3',
+      'Spirit Stones +450',
+      'Spirit Essence +40',
     ]);
-    expect(lines.join()).not.toMatch(/lost/i);
+    expect(v.chips.at(-1)?.icon).toBe('essence');
+    expect(text(v).join()).not.toMatch(/lost/i);
   });
 });
 
@@ -1999,10 +2003,12 @@ describe('the store', () => {
       bagCells: 0,
       boosts: 0,
     };
-    expect(overtimeLines({ ...summary, boostsEnded: [] }).join()).not.toContain('ran out');
-    expect(overtimeLines({ ...summary, boostsEnded: ['xp', 'treasure'] })).toContain(
-      'Boosts that ran out: Focus Tea, Lucky Charm',
-    );
+    expect(overtimeView({ ...summary, boostsEnded: [] }).chips.some((c) => c.boost)).toBe(false);
+    expect(overtimeView({ ...summary, boostsEnded: ['xp', 'treasure'] }).chips.at(-1)).toEqual({
+      label: 'Boosts ended',
+      value: 'Focus Tea, Lucky Charm',
+      boost: true,
+    });
     expect(retireLines({ ...preview, boosts: 2 }).lost).toContain(
       '2 running boosts and the store stock',
     );

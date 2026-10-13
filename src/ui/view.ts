@@ -999,27 +999,46 @@ export function durationLabel(seconds: number): string {
   return h > 0 ? t('time.hours', { h, m }) : t('time.minutes', { m });
 }
 
-/** The Overtime Cultivation summary, one line per count. */
-export function overtimeLines(summary: OvertimeSummary): string[] {
+/** One Overtime Cultivation chip: "Label value", with a currency icon or as an ended boost. */
+export interface OvertimeChip {
+  label: string;
+  value: string;
+  icon?: 'stones' | 'essence';
+  boost?: true;
+}
+
+/** The Overtime Cultivation summary: the time away, a chip per count, and the drop-rate note. */
+export function overtimeView(summary: OvertimeSummary): {
+  away: string;
+  chips: OvertimeChip[];
+  note: string;
+} {
   const time = durationLabel(summary.seconds);
-  const lines = [
-    t(summary.capped ? 'overtime.awayCapped' : 'overtime.away', { time }),
-    t('overtime.floors', { n: summary.floorsClimbed }),
-    t('overtime.levels', { n: summary.levels }),
-    t('overtime.kills', { n: summary.kills }),
-    t('overtime.kept', { n: summary.dropsKept }),
+  const chip = (key: MessageKey, value: string): OvertimeChip => ({ label: t(key), value });
+  const chips = [
+    chip('overtime.floors', `+${summary.floorsClimbed}`),
+    chip('overtime.levels', `+${summary.levels}`),
+    chip('overtime.kills', String(summary.kills)),
+    chip('overtime.kept', String(summary.dropsKept)),
   ];
-  if (summary.dropsSold > 0) lines.push(t('overtime.sold', { n: summary.dropsSold }));
-  if (summary.dropsSalvaged > 0) lines.push(t('overtime.salvaged', { n: summary.dropsSalvaged }));
-  lines.push(t('overtime.stones', { n: summary.stones }));
-  if (summary.essence > 0) lines.push(t('overtime.essence', { n: summary.essence }));
+  if (summary.dropsSold > 0) chips.push(chip('overtime.sold', String(summary.dropsSold)));
+  if (summary.dropsSalvaged > 0) {
+    chips.push(chip('overtime.salvaged', String(summary.dropsSalvaged)));
+  }
+  chips.push({ ...chip('overtime.stones', `+${summary.stones}`), icon: 'stones' });
+  if (summary.essence > 0) {
+    chips.push({ ...chip('overtime.essence', `+${summary.essence}`), icon: 'essence' });
+  }
   if (summary.boostsEnded.length > 0) {
     const names = summary.boostsEnded.map((id) => t(`store.boost.${id}`)).join(', ');
-    lines.push(t('overtime.boostsEnded', { names }));
+    chips.push({ ...chip('overtime.boostsEnded', names), boost: true });
   }
-  // So a lower drop count isn't read as a bug.
-  lines.push(t('overtime.rate', { percent: Math.round(OFFLINE_DROP_MULTIPLIER * 100) }));
-  return lines;
+  return {
+    away: t(summary.capped ? 'overtime.awayCapped' : 'overtime.away', { time }),
+    chips,
+    // So a lower drop count isn't read as a bug.
+    note: t('overtime.rate', { percent: Math.round(OFFLINE_DROP_MULTIPLIER * 100) }),
+  };
 }
 
 /** How a passive's row looks: affordable, too dear, or at max rank. */
