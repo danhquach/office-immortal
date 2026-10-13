@@ -222,6 +222,25 @@ function readSave(v: unknown): Save {
 
 const COUNT = Number.MAX_SAFE_INTEGER;
 
+/**
+ * How far a number the sim derives with `**` may drift between browsers. The
+ * engines may round `**` differently in the last bits, and a rounded or very
+ * large result can land a step apart. The drift seen is at most about 4e-14
+ * of the value; this allows a wide margin over that, and far less than any
+ * change that would matter in a fight.
+ */
+const ENGINE_DRIFT = 1e-9;
+
+/** Whether `saved` is this build's `ours`, give or take another engine's rounding. */
+function same(saved: unknown, ours: number): boolean {
+  return typeof saved === 'number' && Math.abs(saved - ours) <= Math.abs(ours) * ENGINE_DRIFT;
+}
+
+/** A limit of ours widened by another engine's rounding; what passes is then kept within ours. */
+function give(limit: number): number {
+  return limit + Math.abs(limit) * ENGINE_DRIFT;
+}
+
 /** Reads a state of `version`; an older state gets the defaults of what it lacks. */
 function readState(v: unknown, version: number): GameState {
   const v1 = version === 1;
@@ -390,8 +409,11 @@ function readCultivator(
   const c: Cultivator = {
     path,
     level,
-    // XP past a realm cap is held until the Tribulation is won.
-    xp: int(o.xp, 0, isRealmCap(level) ? COUNT : xpToNext(level) - 1),
+    // XP past a realm cap is held until the Tribulation is won. Below one, the
+    // limit may be another engine's (see same()), so it is kept within ours.
+    xp: isRealmCap(level)
+      ? int(o.xp, 0, COUNT)
+      : Math.min(int(o.xp, 0, give(xpToNext(level) - 1)), xpToNext(level) - 1),
     stats,
     unspent,
     equipment,
@@ -443,10 +465,14 @@ function readEnemies(v: unknown, floor: number, c: Cultivator, oldLadder: boolea
     // it. An old ladder's Tribulation may have another realm's, but still one of ours.
     if (oldLadder && kind === 'tribulation') oneOf(o.name, TRIBULATIONS);
     else if (o.name !== enemy.name) fail('enemy name');
-    for (const k of ['maxHp', 'damage', 'defence', 'attackInterval', 'xp'] as const) {
+    // HP, damage and XP grow by `**`, so may carry another engine's rounding.
+    for (const k of ['maxHp', 'damage', 'xp'] as const) {
+      if (!same(o[k], enemy[k])) fail(`enemy ${k}`);
+    }
+    for (const k of ['defence', 'attackInterval'] as const) {
       if (o[k] !== enemy[k]) fail(`enemy ${k}`);
     }
-    enemy.hp = num(o.hp, Number.MIN_VALUE, enemy.maxHp);
+    enemy.hp = Math.min(num(o.hp, Number.MIN_VALUE, give(enemy.maxHp)), enemy.maxHp);
     return enemy;
   });
 }
