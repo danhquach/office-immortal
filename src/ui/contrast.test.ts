@@ -295,6 +295,15 @@ describe('fight strip names', () => {
     }
     return '';
   };
+  /**
+   * page.css without the under-720 px block: that compact strip (one line per
+   * fighter, the tier as a symbol) is checked in "Full view layout"; these rules
+   * hold everywhere else.
+   */
+  const roomy = code.replace(
+    media('(min-width: 940px) and (min-height: 600px) and (max-height: 719px)'),
+    '',
+  );
 
   it('wraps a long name onto 2 reserved lines instead of clipping it', () => {
     const name = all('.fighter .name');
@@ -312,8 +321,8 @@ describe('fight strip names', () => {
     const fighter = rules('.fighter');
     expect(fighter.join('\n')).toMatch(/grid-template-areas:\s*'name'\s*'bar'\s*'hp'/);
     expect(fighter.join('\n')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/);
-    // No rule anywhere (in any media query) puts the name beside the HP.
-    expect(code).not.toMatch(/'name hp'|'hp name'/);
+    // No rule (in any other media query) puts the name beside the HP.
+    expect(roomy).not.toMatch(/'name hp'|'hp name'/);
     expect(rules('.foe').join('\n')).not.toMatch(/grid-template/);
     // The foe's tier and name both sit on the right; the player's stay on the left.
     expect(all('.foe')).toMatch(/text-align:\s*right/);
@@ -334,8 +343,8 @@ describe('fight strip names', () => {
     expect(inNarrow).toMatch(/font-size:\s*0\.8rem/);
     // Above 480 px the name keeps the strip's size: the rule exists only in that query.
     expect(code.split('.fighter .name > :not(.enemy-tier)')).toHaveLength(2);
-    // No rule anywhere gives the tier unit its own font size.
-    for (const m of code.matchAll(/([^{}]+){([^{}]*)}/g)) {
+    // No other rule gives the tier unit its own font size.
+    for (const m of roomy.matchAll(/([^{}]+){([^{}]*)}/g)) {
       const sel = m[1] as string;
       if (/\.enemy-tier(?!\))/.test(sel)) expect(m[2]).not.toMatch(/font-size/);
     }
@@ -353,7 +362,7 @@ describe('fight strip names', () => {
     // Every tier rule sits under .fighter, so the passives panel's .rank can't pick it up.
     for (const m of code.matchAll(/([^{}]+){/g)) {
       for (const sel of (m[1] as string).split(',')) {
-        if (sel.includes('enemy-tier')) expect(sel.trim()).toMatch(/^\.fighter \./);
+        if (sel.includes('enemy-tier')) expect(sel.trim()).toMatch(/^(?:\.game )?\.fighter \./);
       }
     }
   });
@@ -487,6 +496,29 @@ describe('Full view layout', () => {
     expect(rule(code, '.game .strip .where')).toMatch(/padding:/);
     expect(rule(shorter, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0\.1rem/);
     expect(rule(shortest, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0;/);
+    // Each fighter is a thin name-and-HP line over its bar, so the stage shows.
+    expect(rule(shortest, '.game .fighter')).toMatch(
+      /grid-template-areas:\s*'name hp'\s*'bar bar'/,
+    );
+    expect(rule(shortest, '.game .foe')).toMatch(/grid-template-areas:\s*'hp name'\s*'bar bar'/);
+    expect(rule(shortest, '.game .fighter .name')).toMatch(/text-overflow:\s*ellipsis/);
+    // The tier is a badge icon before the name; its label stays for screen readers.
+    expect(rule(shortest, '.game .fighter .enemy-tier')).toMatch(/font-size:\s*0/);
+    const badge = rule(shortest, '.game .fighter .enemy-tier::before');
+    expect(badge).toMatch(/content:\s*''/);
+    expect(badge).toMatch(/var\(--rank-art\)[^;]*\/\s*300% 100%/);
+    expect(rule(shortest, '.game .fighter .enemy-tier--boss::before')).toMatch(/position-x:\s*50%/);
+    expect(rule(shortest, '.game .fighter .enemy-tier--tribulation::before')).toMatch(
+      /position-x:\s*100%/,
+    );
+    // The Tribulation alert takes the XP bar's row instead of adding one.
+    const alert = rule(shortest, '.game .strip > .trial-call');
+    expect(alert).toMatch(/grid-row:\s*4/);
+    expect(alert).toMatch(/flex-wrap:\s*nowrap/);
+    // Its row only wins over the under-810 px block's because it comes later.
+    expect(code.indexOf(`@media ${SHORTEST} {`)).toBeGreaterThan(
+      code.indexOf(`@media ${SHORTER} {`),
+    );
   });
 
   it('keeps the details panel’s action row still while the item scrolls under it', () => {

@@ -807,8 +807,84 @@ select {
     padding-block: 0;
     font-size: 0.85rem;
   }
+  /* A tighter header and bottom edge, so a whole line of drops shows. */
   .beside > .log {
     min-height: 2.5rem;
+    padding-bottom: 0.15rem;
+  }
+  .beside > .log > h2 {
+    margin-bottom: 0.2rem;
+    padding-block: 0.15rem;
+  }
+  /* Each fighter as one line of name and HP over a thin bar, so the names
+     and HP cover only the stage's top edge and the zone and sprites show under
+     them. The name ends in an ellipsis; its title attribute holds the full name. */
+  .game .strip > .fighters {
+    padding-block: 0.1rem 0;
+  }
+  .game .fighter {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name hp' 'bar bar';
+    row-gap: 0.1rem;
+  }
+  .game .foe {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'hp name' 'bar bar';
+  }
+  .game .fighter .bar {
+    height: 5px;
+  }
+  /* The Tribulation alert takes the XP bar's place (full while one is due, and
+     saying the same) as one line, so it never makes the strip taller. */
+  .game .strip > .trial-call {
+    grid-row: 4;
+    z-index: 1;
+    flex-wrap: nowrap;
+    min-width: 0;
+    padding-block: 0;
+    overflow: hidden;
+    align-items: center;
+    border-width: 0 1px;
+    white-space: nowrap;
+    font-size: 0.75rem;
+    line-height: 1.45;
+  }
+  .game .strip > .trial-call > strong {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .game .strip > .trial-call > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .game .fighter .name {
+    display: block;
+    min-height: 0;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  /* The tier as a badge icon before the name (ranks.png: elite, boss,
+     tribulation; app.ts puts its URL in --rank-art): the label's text, drawn
+     at size 0, stays for screen readers and the tooltip. The gap after the
+     icon is the space app.ts puts between the tier and the name. */
+  .game .fighter .enemy-tier {
+    display: inline;
+    font-size: 0;
+  }
+  .game .fighter .enemy-tier::before {
+    content: '';
+    display: inline-block;
+    width: 1.35rem;
+    height: 1.35rem;
+    vertical-align: -0.4rem;
+    background: var(--rank-art) no-repeat 0 0 / 300% 100%;
+  }
+  .game .fighter .enemy-tier--boss::before {
+    background-position-x: 50%;
+  }
+  .game .fighter .enemy-tier--tribulation::before {
+    background-position-x: 100%;
   }
 }
 .columns > .character {

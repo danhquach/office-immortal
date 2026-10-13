@@ -10,6 +10,7 @@ Outputs: src/assets/art/*.png (shipped).
   python3 tools/art/build.py               # build everything
   python3 tools/art/build.py <id>...       # build only these
   python3 tools/art/build.py summary       # build only the summary chip icons
+  python3 tools/art/build.py ranks         # build only the enemy rank badges
   python3 tools/art/build.py icons:<id>... # rebuild only these icon columns,
                                            # keeping every other column of the
                                            # shipped atlas as it is
@@ -46,6 +47,12 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               summary chips' icons (Spirit Stones, Spirit Essence, one per
               realm), one row in manifest order, drawn like the item icons
               into summary.png. Build them alone with `summary`.
+  store       id*, source*, seed, prompt: the store offers' icons, built the
+              same way into store.png. Build them alone with `store`.
+  ranks       id*, source*, seed, prompt: the enemy rank badges shown before a
+              ranked enemy's name in the compact strip, in the order page.css
+              expects (elite, boss, tribulation), built the same way into
+              ranks.png. Build them alone with `ranks`.
 """
 
 import json
@@ -569,6 +576,7 @@ KNOBS = {
     "icon": {"id", "sources", "renders", "pair", "source", "seed", "prompt"},
     "summary": {"id", "source", "seed", "prompt"},
     "store": {"id", "source", "seed", "prompt"},
+    "ranks": {"id", "source", "seed", "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -577,9 +585,11 @@ REQUIRED = {
     "icon": {"id"},
     "summary": {"id", "source"},
     "store": {"id", "source"},
+    "ranks": {"id", "source"},
 }
-# Manifest rows built as one-row atlases of the same name (summary.png, store.png).
-ROWS = ("summary", "store")
+# Manifest rows built as one-row atlases of the same name (summary.png, store.png,
+# ranks.png).
+ROWS = ("summary", "store", "ranks")
 
 
 def check_manifest(builds=lambda kind, name: True) -> None:

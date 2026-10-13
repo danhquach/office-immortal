@@ -743,6 +743,26 @@
       "prompt": "game inventory icon, a single red paper gift envelope with gold trim and a round gold seal, slightly open at the top with glowing pale cyan faceted crystal gems peeking out, small sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
     }
   ],
+  "ranks": [
+    {
+      "id": "elite",
+      "source": "ranks/elite.jpg",
+      "seed": 7402,
+      "prompt": "game UI enemy rank badge icon, elite rank: a round dark iron medallion with a polished bronze-gold inner ring and four short steel spikes pointing up, down, left and right like a compass, in the middle a bone-white skull with two curved horns, sharp fangs and glowing orange-red eyes, clean bold cartoon game art with thick black outline and flat colours with simple shading, front view, symmetrical, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "boss",
+      "source": "ranks/boss.jpg",
+      "seed": 7504,
+      "prompt": "game UI enemy rank badge icon, boss rank: a large fearsome demon skull filling most of the badge, with huge curling ram horns, long fangs and blazing glowing red eyes, set on a dark crimson round medallion with a thick iron rim and eight short thick bright steel spikes around it, clean bold cartoon game art with thick black outline and flat colours with simple shading, front view, symmetrical, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "tribulation",
+      "source": "ranks/tribulation.jpg",
+      "seed": 7604,
+      "prompt": "game UI rank badge icon, heavenly tribulation: a large bold silhouette of a human cultivator in flowing white robes soaring straight upward with both arms raised high, the figure filling most of a round deep violet medallion with a thick silver rim, three big thick jagged bright yellow lightning bolts striking around the figure, clean bold cartoon game art with thick black outline and flat colours with simple shading, front view, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    }
+  ],
   "icon_size": 32,
   "icon_scale": 2
 }

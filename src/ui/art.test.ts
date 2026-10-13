@@ -38,6 +38,7 @@ const manifest = JSON.parse(manifestText) as {
   }[];
   summary: { id: string; source: string }[];
   store: { id: string; source: string }[];
+  ranks: { id: string; source: string }[];
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -55,6 +56,7 @@ describe('shipped art', () => {
       'paperdoll',
       'summary',
       'store',
+      'ranks',
     ];
     for (const name of sheets) expect(exists(name), name).toBe(true);
   });
@@ -134,6 +136,22 @@ describe('store icons', () => {
     const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
     const cell = manifest.icon_size * manifest.icon_scale;
     expect([u32(16), u32(20)]).toEqual([cell * STORE_ICONS.length, cell]);
+  });
+});
+
+describe('rank badges', () => {
+  // page.css picks a tier's cell by position: elite 0, boss 50%, tribulation 100%.
+  const RANKS = ['elite', 'boss', 'tribulation'];
+
+  it('uses the atlas columns in the order page.css expects', () => {
+    expect(manifest.ranks.map((r) => r.id)).toEqual(RANKS);
+  });
+
+  it('is one row of item icon cells, one per tier', () => {
+    const png = atob((INLINE['../assets/art/ranks.png'] ?? '').split(',')[1] ?? '');
+    const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect([u32(16), u32(20)]).toEqual([cell * RANKS.length, cell]);
   });
 });
 
