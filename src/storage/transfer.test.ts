@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../core/sim.ts';
-import { encodeSave } from './save.ts';
+import { encodeSave, SAVE_VERSION } from './save.ts';
 import {
   CODE_TAG,
   exportCode,
@@ -35,6 +35,22 @@ describe('save code', () => {
   it('ignores spaces and line breaks a mail or notes app adds', () => {
     const broken = `  ${code.slice(0, 20)}\r\n${code.slice(20, 50)}\n\t${code.slice(50)}  \n`;
     expect(why(importCode(broken))).toBe('ok');
+  });
+
+  it('tells a save from a newer release apart from a bad code', () => {
+    const later = JSON.stringify({ v: SAVE_VERSION + 1, savedAt: 1, state: { more: [1] } });
+    expect(why(importCode(codeOf(later)))).toBe('newer');
+    // Anything off in the outer shape is just not a save code.
+    for (const bad of [
+      JSON.stringify({ v: SAVE_VERSION + 1, savedAt: 1, state: [] }),
+      JSON.stringify({ v: SAVE_VERSION + 1, savedAt: -1, state: {} }),
+      JSON.stringify({ v: SAVE_VERSION + 1, savedAt: 1, state: {}, extra: 1 }),
+      JSON.stringify({ v: 1001, savedAt: 1, state: {} }),
+      JSON.stringify({ v: '9', savedAt: 1, state: {} }),
+      `{"__proto__":{"x":1},"v":${SAVE_VERSION + 1},"savedAt":1,"state":{}}`,
+    ]) {
+      expect(why(importCode(codeOf(bad)))).toBe('bad');
+    }
   });
 
   it('refuses an empty paste', () => {

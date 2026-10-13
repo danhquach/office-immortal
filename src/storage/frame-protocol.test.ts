@@ -16,7 +16,7 @@ import {
   readRequest,
   toWire,
 } from './frame-protocol.ts';
-import { decodeSave, encodeSave, REJECTED_KEY, SAVE_KEY } from './save.ts';
+import { decodeSave, encodeSave, REJECTED_KEY, SAVE_KEY, SAVE_VERSION } from './save.ts';
 
 const T = 1_800_000_000_000;
 
@@ -118,6 +118,32 @@ describe('status on the wire', () => {
     expect(read).toEqual({ ev: 'status', status: { kind: 'conflict', local, server } });
   });
 
+  it('reads a conflict over a save from a newer release (a newer frame) as an update', () => {
+    const local = encodeSave(newGame(1, 'sword'), T);
+    const later = JSON.stringify({ v: SAVE_VERSION + 1, savedAt: T + 5, state: { more: 1 } });
+    for (const status of [
+      { kind: 'conflict', local, server: later },
+      { kind: 'conflict', local: later, server: later },
+    ]) {
+      expect(readFrameMessage({ p: PROTOCOL, ev: 'status', status })).toEqual({
+        ev: 'status',
+        status: { kind: 'update' },
+      });
+    }
+    // A damaged save beside a newer one is still dropped, not taken as an update.
+    expect(
+      readFrameMessage({
+        p: PROTOCOL,
+        ev: 'status',
+        status: { kind: 'conflict', local: '{"__proto__":{}}', server: later },
+      }),
+    ).toBeNull();
+    // An update carries nothing else.
+    expect(
+      readFrameMessage({ p: PROTOCOL, ev: 'status', status: { kind: 'update', at: T } }),
+    ).toBeNull();
+  });
+
   it('round-trips the plain kinds', () => {
     for (const status of [
       { kind: 'off' },
@@ -126,6 +152,7 @@ describe('status on the wire', () => {
       { kind: 'offline', message: 'server' },
       { kind: 'relink' },
       { kind: 'unreadable' },
+      { kind: 'update' },
     ] as const) {
       expect(readFrameMessage({ p: PROTOCOL, ev: 'status', status: toWire(status) })).toEqual({
         ev: 'status',

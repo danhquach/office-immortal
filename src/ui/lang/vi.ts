@@ -309,6 +309,7 @@ const vi: Pack = {
     'menu.importEmpty': 'Hãy dán mã lưu trước.',
     'menu.importTooBig': 'Mã này quá dài, không phải mã lưu. Không có gì thay đổi.',
     'menu.importBad': 'Đây không phải mã lưu của trò chơi này. Không có gì thay đổi.',
+    'menu.importNewer': 'Bản lưu này thuộc phiên bản mới của trò chơi. Hãy tải lại trang để nhập.',
     'menu.importText':
       'Thay lượt chơi hiện tại bằng dữ liệu này ({summary})? Lượt chơi hiện tại sẽ mất nếu bạn chưa xuất mã.',
     'menu.importYes': 'Thay lượt chơi',
@@ -347,6 +348,7 @@ const vi: Pack = {
     'cloud.status.conflict': 'Cần bạn chọn: thiết bị này và đám mây đều đã thay đổi.',
     'cloud.status.unreadable':
       'Không đọc được bản lưu trên đám mây. Bản lưu của thiết bị này được giữ nguyên.',
+    'cloud.status.update': 'Tạm dừng cho đến khi trang chạy phiên bản mới của trò chơi.',
     'cloud.ago.now': 'vừa xong',
     'cloud.ago.min': '{n} phút trước',
     'cloud.ago.hour': '{n} giờ trước',
@@ -386,6 +388,9 @@ const vi: Pack = {
       'Trình duyệt từ chối bản lưu trên đám mây, nên thiết bị này giữ bản của mình.',
     'cloud.msg.refused-settings': 'Trình duyệt từ chối thay đổi bộ nhớ. Lưu đám mây vẫn đang bật.',
     'cloud.msg.relink-first': 'Hãy liên kết thiết bị này hoặc tắt lưu đám mây ở đây trước.',
+    'update.reloading': 'Đang chuyển sang phiên bản mới của trò chơi…',
+    'update.sync': 'Đã có phiên bản mới. Hãy tải lại trang để tiếp tục đồng bộ.',
+    'update.play': 'Đã có phiên bản mới. Hãy tải lại trang để chơi tiếp.',
     'help.1':
       'Tu sĩ của bạn tự chiến đấu, hết tầng này đến tầng khác. Mỗi tầng gồm các đợt yêu ma, một tinh anh và một trùm.',
     'help.2': 'Thua một trận sẽ lùi một tầng để mạnh lên.',

@@ -83,7 +83,12 @@ import {
   writeBoth,
   type Backup,
 } from '../storage/backup.ts';
-import { CODE_HASH, LINK_HASH, type FrameConfig } from '../storage/frame-config.ts';
+import {
+  CODE_HASH,
+  LINK_HASH,
+  readFrameConfig,
+  type FrameConfig,
+} from '../storage/frame-config.ts';
 import {
   loadFramed,
   openFrame,
@@ -93,6 +98,7 @@ import {
 import {
   browserStorage,
   encodeSave,
+  isNewerSave,
   loadSave,
   SAVE_KEY,
   type Save,
@@ -144,6 +150,16 @@ import {
 } from './sort.ts';
 import { advance, request, type Action, type Playing } from './sprite.ts';
 import { canPopOut, notifier, popOut, setFavicon } from './tab.ts';
+import {
+  CHECK_EVERY_MS,
+  createUpdater,
+  holdsStart,
+  IMPORT_KEY,
+  isBuildId,
+  servedBuild,
+  takeKept,
+  updateStep,
+} from './update.ts';
 import {
   arraySetUp,
   BAG_PAGE,
@@ -360,6 +376,140 @@ function newSeed(): number {
 /** The one run playing; starting or loading another stops its timers and listeners first. */
 const run = runs();
 
+/** Session storage, or null where it is blocked. */
+function sessionStore(): SaveStorage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+/** Time between tries at a safe moment to reload onto a newer release. */
+const UPDATE_RETRY_MS = 5000;
+/** A tab looked at again after this long checks for a new release at once. */
+const STALE_CHECK_MS = 60_000;
+/** The itch.io build (one upload, one build) never reloads itself onto a new release. */
+const selfUpdates = readFrameConfig(import.meta.env) === null;
+const updater = createUpdater({
+  build: __BUILD_ID__,
+  selfUpdates,
+  // The itch.io build never reloads itself, so it leaves the tab's shared session storage alone.
+  session: selfUpdates ? sessionStore() : null,
+  reload: () => window.location.reload(),
+});
+/** Why this page should run a newer release: it met a save it can't read, or one is out. */
+let outdated: 'save' | 'release' | null = null;
+/** The save before an update's reload was refused (storage full): ask the player to reload instead. */
+let saveRefused = false;
+/**
+ * Set by the run playing: whether the player is in the middle of a choice, and
+ * a save that says whether it was written. Null with no run (the Path choice),
+ * where nothing is lost.
+ */
+let saveForUpdate: { choosing(): boolean; save(): boolean } | null = null;
+/**
+ * A save code from a later release, kept by an import just before this page
+ * reloaded to update; read (and removed) once as the page loads, and asked
+ * about again in the first run. Only the GitHub Pages build keeps one: on
+ * itch.io the tab's session storage is shared with every other game there.
+ */
+let stashedImport: string | null = takeKept(sessionStore(), selfUpdates);
+/** Says, over the game, that the page is moving onto a newer release or that the player should reload. */
+const updateNote = el('section', 'panel cloud-panel');
+updateNote.setAttribute('role', 'status');
+const updateText = el('p');
+updateNote.append(updateText);
+updateNote.hidden = true;
+
+/** Writes the update note in the current language; `running` says whether a run is being played. */
+function drawUpdate(running: boolean): void {
+  updateNote.hidden = outdated === null;
+  if (!outdated) return;
+  const moving = updater.canReload && !saveRefused;
+  const key = moving ? 'update.reloading' : running ? 'update.sync' : 'update.play';
+  setText(updateText, t(key));
+}
+
+/**
+ * A save from a later release turned up, or a new release is out: move onto it
+ * at the next safe moment, or, where the page can't, ask the player to reload.
+ */
+function needUpdate(why: 'save' | 'release'): void {
+  if (outdated !== 'save') outdated = why;
+  drawUpdate(saveForUpdate !== null);
+  tryUpdate();
+}
+
+function tryUpdate(): void {
+  const run = saveForUpdate;
+  const step = updateStep({
+    wanted: outdated !== null,
+    canReload: updater.canReload,
+    playing: run !== null,
+    choosing: run?.choosing() ?? false,
+  });
+  // A save that wasn't written (storage full or refused) waits: a reload would lose the progress.
+  if (step === 'reload') updater.reload();
+  else if (step === 'save') {
+    const saved = run?.save() ?? false;
+    if (saveRefused === saved) {
+      saveRefused = !saved;
+      drawUpdate(true);
+    }
+    if (saved) updater.reload();
+  }
+}
+
+let updatesWatched = false;
+/** Once per page: retries a wanted update, and checks for a new release while the tab is in front. */
+function watchUpdates(): void {
+  if (updatesWatched) return;
+  updatesWatched = true;
+  window.setInterval(tryUpdate, UPDATE_RETRY_MS);
+  if (!selfUpdates || !isBuildId(__BUILD_ID__)) return;
+  let checkedAt = Date.now();
+  const check = (): void => {
+    if (document.hidden || outdated) return;
+    checkedAt = Date.now();
+    void servedBuild((url, init) => fetch(url, init)).then((served) => {
+      if (updater.isNew(served)) needUpdate('release');
+    });
+  };
+  window.setInterval(check, CHECK_EVERY_MS);
+  // A tab left in the background for hours checks as soon as it is looked at again.
+  document.addEventListener('visibilitychange', () => {
+    if (Date.now() - checkedAt >= STALE_CHECK_MS) check();
+  });
+}
+
+/** The itch.io build without its frame: it plays on itch.io's storage, which every game there shares. */
+function sharedStorage(): boolean {
+  return !selfUpdates && !frameLink;
+}
+
+/** Whether browser storage or the backup holds a save from a later release than this build. */
+async function newerCopy(storage: SaveStorage | null): Promise<boolean> {
+  return newerLocal(storage) || isNewerSave(await backup().read());
+}
+
+function newerLocal(storage: SaveStorage | null): boolean {
+  try {
+    return isNewerSave(storage?.getItem(SAVE_KEY));
+  } catch {
+    return false;
+  }
+}
+
+/** Moves onto a newer release when the sync meets a save from one. */
+function watchSync(s: Sync): Sync {
+  s.subscribe((status) => {
+    if (status.kind === 'update') needUpdate('save');
+  });
+  if (s.status.kind === 'update') needUpdate('save');
+  return s;
+}
+
 /** The cloud save's sync, made on first use; null where the build has no cloud config or storage is blocked. */
 let sync: Sync | null = null;
 /** A message from the cloud save for the player, shown over the game until dismissed. */
@@ -378,24 +528,26 @@ function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null 
   const config = readCloudConfig(import.meta.env);
   if (!config) return null;
   current = { root, storage };
-  sync = createSync({
-    cloud: createCloud({
-      config,
+  sync = watchSync(
+    createSync({
+      cloud: createCloud({
+        config,
+        storage,
+        fetch: (url, init) => fetch(url, init),
+        now: Date.now,
+        // Web Locks keep two tabs from renewing the sign-in at once; older browsers go without.
+        locks: navigator.locks
+          ? { request: (name, callback) => navigator.locks.request(name, callback) }
+          : null,
+      }),
       storage,
-      fetch: (url, init) => fetch(url, init),
       now: Date.now,
-      // Web Locks keep two tabs from renewing the sign-in at once; older browsers go without.
-      locks: navigator.locks
-        ? { request: (name, callback) => navigator.locks.request(name, callback) }
-        : null,
+      visible: () => !document.hidden,
+      // The adopted save is in browser storage; its stamp may be older than the backup's.
+      onAdopt: adopted,
+      onNote: noted,
     }),
-    storage,
-    now: Date.now,
-    visible: () => !document.hidden,
-    // The adopted save is in browser storage; its stamp may be older than the backup's.
-    onAdopt: adopted,
-    onNote: noted,
-  });
+  );
   return sync;
 }
 
@@ -436,7 +588,7 @@ export async function startWithFrame(root: HTMLElement, config: FrameConfig): Pr
   }
   frameLink = link;
   frameUrl = config.url;
-  sync = link.sync;
+  sync = link.sync && watchSync(link.sync);
   backupCopy = withFallbackCopy(link.backup, browserStorage(), idbBackup(browserIdb()));
   start(root, link.storage);
 }
@@ -483,6 +635,8 @@ export function start(
   from?: 'local' | Save,
 ): void {
   run.stop();
+  saveForUpdate = null;
+  watchUpdates();
   // Before play() saves over the local run: the cloud check compares against it.
   cloudSync(root, storage)?.begin();
   labels = [];
@@ -490,12 +644,40 @@ export function start(
   setLang(pickedLang ?? readLang(storage, navigator.languages ?? []));
   document.documentElement.lang = lang().code;
   const token = ++starts;
-  const begin = (saved: Save | null): void => {
-    if (token === starts) resume(root, storage, saved);
+  const begin = (saved: Save | null, newer: boolean): void => {
+    if (token !== starts) return;
+    if (holdsStart({ newer, readable: saved !== null, shared: sharedStorage() })) {
+      waitForUpdate(root, storage);
+    } else resume(root, storage, saved);
   };
-  if (from === 'local') begin(storage && loadSave(storage));
-  else if (from) begin(from);
-  else void loadStart(storage).then(begin);
+  if (from === 'local') {
+    const saved = storage && loadSave(storage);
+    begin(saved, !saved && newerLocal(storage));
+  } else if (from) begin(from, false);
+  else {
+    void Promise.all([loadStart(storage), newerCopy(storage)]).then(([saved, newer]) =>
+      begin(saved, newer),
+    );
+  }
+}
+
+/**
+ * The save here is from a later release than this build: no run starts, as
+ * its autosave would write over it. The page moves onto that release, or asks
+ * the player to reload.
+ */
+function waitForUpdate(root: HTMLElement, storage: SaveStorage | null): void {
+  labels = [];
+  document.title = gameTitle();
+  document.querySelector('link[rel="icon"]')?.remove();
+  const bar = titleBar(storage, () => {
+    drawUpdate(false);
+    root.querySelector<HTMLButtonElement>('.lang > button')?.focus();
+  });
+  root.replaceChildren(bar, updateNote);
+  say(() => drawUpdate(false));
+  stashedImport = null;
+  needUpdate('save');
 }
 
 function resume(root: HTMLElement, storage: SaveStorage | null, saved: Save | null): void {
@@ -515,6 +697,8 @@ let typedLink = '';
 /** Draws the Path choice. A language switch calls this alone: no restart, so the cloud check isn't redone. */
 function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
   labels = [];
+  // A kept import is asked about only in the run the reload resumed, never in a later one.
+  stashedImport = null;
   document.title = gameTitle();
   // No run, no HP ring: the browser's default icon.
   document.querySelector('link[rel="icon"]')?.remove();
@@ -526,9 +710,11 @@ function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
   });
   root.replaceChildren(
     bar,
+    updateNote,
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
     ...(cloud ? [pathLink(cloud)] : []),
   );
+  say(() => drawUpdate(false));
 }
 
 /** The title bar; its language switch calls `relabel` once the language has changed. */
@@ -2009,6 +2195,7 @@ function play(
   const cloud = sync;
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
+  game.append(updateNote);
   // Beside the strip: the summary chips over Recent drops.
   const beside = el('div', 'beside');
   beside.append(kpis, log.box);
@@ -2165,13 +2352,28 @@ function play(
       importText.textContent = t('menu.importText', { summary: saveSummary(imported, Date.now()) });
   });
   const importBtn = buttonT('menu.import', '', () => {
-    const result = importCode(importBox.value);
+    const pasted = importBox.value;
+    const result = importCode(pasted);
     importBox.value = '';
     imported = null;
     importConfirm.hidden = true;
     if (!result.ok) {
+      if (result.why === 'newer' && updater.canReload) {
+        // Kept for this tab only, and imported again (with the player's yes) once the page runs that release.
+        try {
+          sessionStore()?.setItem(IMPORT_KEY, pasted);
+        } catch {
+          // Too big or blocked: the player pastes it again after the reload.
+        }
+        needUpdate('save');
+      }
       const key = (
-        { empty: 'menu.importEmpty', tooBig: 'menu.importTooBig', bad: 'menu.importBad' } as const
+        {
+          empty: 'menu.importEmpty',
+          tooBig: 'menu.importTooBig',
+          bad: 'menu.importBad',
+          newer: 'menu.importNewer',
+        } as const
       )[result.why];
       showCode(() => t(key));
       return;
@@ -3152,6 +3354,14 @@ function play(
     // Another tab took the cloud's save: this tab's run is stale and would overwrite it.
     // Only an adoption writes this key, so autosaving tabs can't set each other off.
     else if (key === ADOPT_KEY) start(root, storage, 'local');
+    // A tab on a newer release saved: this run is older, and its autosave would write over that.
+    // Not on itch.io's shared storage (no frame), where any game can write a "newer" save:
+    // there this readable run carries on, as at start.
+    else if (
+      key === SAVE_KEY &&
+      holdsStart({ newer: isNewerSave(value), readable: true, shared: sharedStorage() })
+    )
+      start(root, storage, 'local');
     // Something else cleared browser storage: put this run's save straight back.
     else if (key === null) save();
   }, signal);
@@ -3239,18 +3449,43 @@ function play(
     draw(prev);
   }
 
-  /** Plays up to now, then saves, so the stamp and the state agree. */
-  function save(): void {
-    if (clearing) return;
+  /** Plays up to now, then saves, so the stamp and the state agree; true when browser storage took it. */
+  function save(): boolean {
+    if (clearing) return false;
     step();
     const savedAt = Date.now();
     const raw = encodeSave(state, savedAt);
-    if (writeBoth(storage, backup(), raw)) cloud?.offer(raw, savedAt);
+    const written = writeBoth(storage, backup(), raw);
+    if (written) cloud?.offer(raw, savedAt);
+    return written;
   }
 
   scope.every(TICK_MS, step);
   scope.every(FRAME_TICK_MS, drawSprites);
   autosave(scope, save, { doc: document, win: window }, SAVE_MS);
+
+  /** A choice the player is in the middle of: an update waits until it is closed. */
+  const choosing = (): boolean =>
+    clearing ||
+    pending !== null ||
+    [retireBox, confirmBox, resetBox, importConfirm, rerollAsk, cloudUi?.choice].some(
+      (box) => box && !box.hidden,
+    );
+  const forUpdate = { choosing, save };
+  saveForUpdate = forUpdate;
+  signal.addEventListener('abort', () => {
+    if (saveForUpdate === forUpdate) saveForUpdate = null;
+  });
+  say(() => drawUpdate(true));
+  // A save code from a later release, pasted before this page moved onto it: ask about it again.
+  const stashed = stashedImport;
+  stashedImport = null;
+  if (stashed !== null) {
+    menu.showModal();
+    importBox.value = stashed;
+    importBtn.click();
+  }
+  tryUpdate();
   if (cloud) {
     // After autosave's own listeners, so the upload sends the save they just wrote.
     document.addEventListener('visibilitychange', () => document.hidden && cloud.flush('hidden'), {

@@ -29,6 +29,7 @@ import {
   clearSave,
   decodeSave,
   encodeSave,
+  isNewerSave,
   loadSave,
   MAX_SAVE_CHARS,
   REJECTED_KEY,
@@ -214,6 +215,46 @@ describe('round trip', () => {
     expect(loadSave(broken)).toBeNull();
     expect(writeSave(broken, STATE, SAVED_AT)).toBe(false);
     expect(clearSave(broken)).toBe(false);
+  });
+});
+
+describe('a save from a newer release', () => {
+  const later = (o: Record<string, unknown> = {}): string =>
+    JSON.stringify({ v: SAVE_VERSION + 1, savedAt: 1_700_000_000_000, state: { x: 1 }, ...o });
+
+  it('is not loaded, but is told apart from a damaged save', () => {
+    expect(decodeSave(later())).toBeNull();
+    expect(isNewerSave(later())).toBe(true);
+    expect(isNewerSave(later({ v: 1000 }))).toBe(true);
+  });
+
+  it('is not this build’s own save, an older one or anything damaged', () => {
+    const own = encodeSave(newGame(1, 'sword'), 1);
+    for (const raw of [
+      own,
+      later({ v: SAVE_VERSION }),
+      later({ v: 1 }),
+      later({ v: 0 }),
+      later({ v: 1001 }),
+      later({ v: 1e308 }),
+      later({ v: SAVE_VERSION + 1.5 }),
+      later({ v: `${SAVE_VERSION + 1}` }),
+      later({ savedAt: -1 }),
+      later({ savedAt: '1' }),
+      later({ state: null }),
+      later({ state: [] }),
+      later({ state: 'x' }),
+      later({ extra: true }),
+      `{"__proto__":{"polluted":1},"v":${SAVE_VERSION + 1},"savedAt":1,"state":{}}`,
+      `{"v":${SAVE_VERSION + 1},"savedAt":1}`,
+      later() + ' '.repeat(MAX_SAVE_CHARS),
+      'not json',
+      null,
+      42,
+    ]) {
+      expect(isNewerSave(raw)).toBe(false);
+    }
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
 

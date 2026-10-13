@@ -36,6 +36,8 @@ const cloud = readCloudConfig(env);
 /** The itch.io build's storage frame; null for the GitHub Pages build. */
 const frame = readFrameConfig(env);
 const CSP = buildCsp(cloud?.url ?? null, frame?.origin ?? null);
+/** The commit CI builds; 'dev' elsewhere, which never checks for a newer release. */
+const BUILD_ID = (process.env.GITHUB_SHA ?? '').slice(0, 12) || 'dev';
 
 /** Build only: the dev server's hot reload needs inline script and a websocket. */
 const cspMeta: Plugin = {
@@ -50,8 +52,27 @@ const cspMeta: Plugin = {
   ],
 };
 
+/**
+ * GitHub Pages build only: version.json names the build the site serves, so an
+ * open page can tell a new release is out (src/ui/update.ts). The itch.io
+ * build has none: each upload is served from its own address.
+ */
+const versionFile: Plugin = {
+  name: 'version-file',
+  apply: 'build',
+  generateBundle() {
+    if (frame || BUILD_ID === 'dev') return;
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify({ build: BUILD_ID }),
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [cspMeta],
+  plugins: [cspMeta, versionFile],
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   // Relative asset URLs so the same build works at the site root (local preview)
   // and under the repository sub-path on GitHub Pages.
   base: './',

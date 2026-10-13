@@ -486,7 +486,67 @@ on every autosave, and is always the copy the game plays from.
   so an item at 37% holds at most 37 refines. Anything else (negative,
   fractional, above 100 or the base roll, text, huge) is rejected, and so is
   the field in an older save. Saves from v1 to v7 load with no refine
-  levels; an older build refuses a v8 save rather than drop the field.
+  levels; an older build refuses a v8 save rather than drop the field, and
+  moves onto the newer release instead (Updates, below).
+
+### Updates
+
+Releases land on top of the session being played; a tab left open for days
+never has to settle a version conflict.
+
+- **A save from a newer release.** A save whose outer shape is a save's
+  (`v`, `savedAt`, `state`) with a version above this build's (up to 1000) is
+  newer, not damaged. Anything else that fails the allow-list is damaged and is
+  handled as before ("That cloud save can't be read."). Wherever the game meets
+  a newer save (the cloud check, a refused upload, a link from the Path choice
+  or the Menu, an import, the local save or its backup at start, another tab
+  taking the cloud's save or saving from a newer release) it keeps this device's progress, saved locally as it
+  is now, and moves onto the latest release by reloading the page. The newer
+  release upgrades older saves as usual, so Overtime Cultivation and progress
+  carry on.
+- **Carrying on.** The interrupted action finishes after the reload: a link
+  keeps its sign-in and the cloud save it joined (as when the page closes
+  mid-choice), so it completes with no new link code, loading the cloud save
+  or asking which to keep; a sync settles as usual; an imported code is kept
+  for this tab (session storage) and asked about again, with the player's yes,
+  in the run the reload resumes (never a later one). The kept code goes through
+  the import allow-list again and is removed as it is read. Only the GitHub
+  Pages build keeps one: on itch.io a tab's session storage is shared with every
+  other game there, so the itch.io build neither keeps nor reads it, and the
+  player pastes the code again after reloading.
+- **Nothing is lost.** An older build never writes over, merges into or
+  discards a newer save: the sync stops uploading and loading (status "Paused
+  until the page runs the new version of the game."), a newer local save
+  starts no run, since its autosave would write over it, and a run saved since
+  the last write is saved again just before the reload; if that save is
+  refused (storage full), the reload waits. One exception: the itch.io build
+  running without its frame, on itch.io's shared storage, where any other game
+  could plant a "newer" save to lock the game out, plays a readable save of its
+  own instead, at start and when another tab writes one mid-run (that storage
+  never overrides the frame's, as before).
+- **A new release while playing.** The GitHub Pages build names its build (the
+  commit) and ships `version.json` with it. While the tab is in front it asks
+  for that file every 15 minutes, and when the tab is looked at again after a
+  while; fetched fresh, without credentials, at most 200 characters, and read
+  through an allow-list (one key, a lowercase hex id). A different build means a
+  new release is out. Build ids can't be ordered, so a rollback (or a stale
+  cache serving an older file) also counts; it costs at most one reload, then
+  the fallback (No loops, below).
+- **A safe moment.** The reload waits until no choice is open (the bag, retire,
+  reroll, reset and import confirmations, the cloud save's choice) and the run
+  is saved just before it; with no run (the Path choice) it goes at once. The
+  page says "Moving to the new version of the game…" meanwhile.
+- **Fallback.** Where the game can't move itself onto the latest release, it
+  says "A new version is out. Reload the page to keep syncing." (or "…to keep
+  playing." with no run). The game stays playable, except where the local save
+  itself is newer: no run starts over it until the reload. The itch.io build is
+  one upload per release, so it never reloads itself and never polls; it shows
+  the fallback when it meets a newer save, including one its storage frame
+  (always the newest GitHub Pages build when loaded) reports.
+- **No loops.** Before reloading, the page notes in session storage the build
+  it is leaving. If the reload brings back that same build (a cached or blocked
+  update), it shows the fallback instead of reloading again. Where session
+  storage is blocked, it never reloads itself and shows the fallback.
 
 ### Backup copy and save code
 
@@ -508,7 +568,8 @@ on every autosave, and is always the copy the game plays from.
   clipboard as one line of text (`OI1:` and the save JSON in base64); where
   the browser won't copy, the code is shown to copy by hand. Keep it anywhere
   outside the browser. To restore, paste it into the field and press
-  **Import**: the game shows the code's realm, level, floor and last-played
+  **Import** (a code from a newer release moves the game onto it first, see
+  Updates): the game shows the code's realm, level, floor and last-played
   time, and replaces the current run only after the player confirms. Overtime
   Cultivation replays from the code's own time stamp.
 - **Import is untrusted input.** At most twice the longest possible code is
@@ -542,7 +603,8 @@ waits on the network.
   load check as a local save (§11 above), plus checks on the reply's shape.
   A rejected cloud save never replaces the local one: the player is told, the
   local save is kept, and the cloud save is overwritten only if the player
-  asks ("Overwrite cloud with this device's save").
+  asks ("Overwrite cloud with this device's save"). A save from a newer
+  release is not rejected: sync pauses and the game updates (Updates, above).
 - **Sync timing.** At most one upload a minute while playing, plus when the tab
   is hidden or the page is left, plus a **Sync now** button. Nothing uploads
   until the startup check (below) has answered. Failed requests back off from
@@ -599,7 +661,11 @@ save and its cloud save in a **storage frame**: a page without visible content
   request to the backend. The token never leaves the frame. The game works from
   a copy of the frame's storage kept in memory, so play never waits on a
   message: writes go to the copy at once and on to the frame, and the frame's
-  own writes (taking the cloud's save) come back as messages. An autosave
+  own writes (taking the cloud's save) come back as messages. The frame may
+  run a newer release than the game (GitHub Pages deploys every change, itch.io
+  only tagged releases): its "update" status, and a conflict over a save the
+  game can't read but is newer, reach the game as "update" and it shows the
+  fallback (Updates, above). An autosave
   sent just as the frame takes the cloud's save can land after it; the game
   restarts from the cloud's save either way and its next save puts it back, as
   between two tabs.
