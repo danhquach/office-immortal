@@ -482,6 +482,7 @@ const vi: Pack = {
     'discreet.initial.earth': 'CN',
     'discreet.initial.heaven': 'CC',
     'discreet.initial.immortal': 'DN',
+    'discreet.chest': 'Gói {grade}',
     'discreet.ok': 'Đúng tiến độ',
     'discreet.due': 'Đến hạn duyệt',
     'discreet.wave': 'Bước {n} / {of}',

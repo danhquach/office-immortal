@@ -52,7 +52,7 @@ import {
   type SlotId,
 } from '../core/loot.ts';
 import type { OvertimeSummary } from '../core/offline.ts';
-import { gradeName } from './discreet.ts';
+import { gradeName, isDiscreet } from './discreet.ts';
 import {
   noPassives,
   passiveCost,
@@ -1217,7 +1217,11 @@ const OFFER_BLOCK_TEXT: Readonly<Record<Exclude<OfferBlock, 'stones'>, MessageKe
 /** The name of offer `id` in the player's language. */
 export function offerName(id: OfferId): string {
   const grade = chestGrade(id);
-  return grade ? t(`store.chest.${grade}`) : t(`store.boost.${boostOf(id) as BoostId}`);
+  if (!grade) return t(`store.boost.${boostOf(id) as BoostId}`);
+  // Discreet mode: the grade in office words, never the game's.
+  return isDiscreet()
+    ? t('discreet.chest', { grade: gradeName(grade) })
+    : t(`store.chest.${grade}`);
 }
 
 /** Offer `at` of the current stock as its card shows it. */
@@ -1229,7 +1233,7 @@ export function offerCard(state: GameState, at: number): OfferCard {
   const grade = chestGrade(id);
   let desc: string;
   if (grade) {
-    desc = t('store.chestDesc', { level: state.floor, grade: tn('grade', GRADES[grade].name) });
+    desc = t('store.chestDesc', { level: state.floor, grade: gradeName(grade) });
   } else {
     const boost = boostOf(id) as BoostId;
     desc = t(`store.boostDesc.${boost}`, {

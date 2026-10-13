@@ -1024,9 +1024,10 @@ Grade is also written as text, never shown by colour alone.
   Discreet view's seven rows (no sprites, background, damage numbers or
   flashing Tribulation alert: Status says Review due as plain text); the title
   bar hides the stamp and its file name becomes `Q3_Budget_Review`; the
-  summary chips lose their icons; item icons and the paper-doll figure are
-  hidden; every grade colour is the plain text colour, and grades are named in
-  office words (Standard to Enterprise; Std, Plus, Pro, Prem, Ent on a cell).
+  summary chips lose their icons; item icons, store icons and the paper-doll
+  figure are hidden; every grade colour is the plain text colour, and grades are named in
+  office words (Standard to Enterprise; Std, Plus, Pro, Prem, Ent on a cell;
+  a store chest is a Plus, Pro or Premium Bundle).
   An open Mini pop-out shows the Discreet view until it is switched off. Help
   lists the key.
 - All the views render the same state; switching never pauses the sim.

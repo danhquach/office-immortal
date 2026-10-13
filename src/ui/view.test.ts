@@ -1899,6 +1899,17 @@ describe('the store', () => {
     expect(card.buyName).toBe('Buy · 900: Earth Chest for 900 Spirit Stones');
   });
 
+  it('names a chest and its grade in office words in Discreet mode', () => {
+    setDiscreet(true);
+    try {
+      const card = offerCard(shop('chest-earth'), 0);
+      expect(card.name).toBe('Pro Bundle');
+      expect(card.desc).toBe('One Lv 20 item, Pro or better');
+    } finally {
+      setDiscreet(false);
+    }
+  });
+
   it('says what is short, sold out, a full bag or a boost at its cap', () => {
     expect(offerCard(shop('chest-earth', 850), 0)).toMatchObject({
       off: true,

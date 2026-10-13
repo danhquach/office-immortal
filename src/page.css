@@ -2217,7 +2217,16 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   font-size: 0.85rem;
 }
 :root[data-discreet]
-  :is(.stamp, .paths .avatar, .game .strip, .kpi-icon, .figure, .cell .icon, .item-head .icon) {
+  :is(
+    .stamp,
+    .paths .avatar,
+    .store-icon,
+    .game .strip,
+    .kpi-icon,
+    .figure,
+    .cell .icon,
+    .item-head .icon
+  ) {
   display: none;
 }
 :root[data-discreet] .cell .grade {

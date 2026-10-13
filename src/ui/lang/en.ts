@@ -475,6 +475,7 @@ const messages = {
   'discreet.initial.earth': 'Pro',
   'discreet.initial.heaven': 'Prem',
   'discreet.initial.immortal': 'Ent',
+  'discreet.chest': '{grade} Bundle',
   'discreet.ok': 'On track',
   'discreet.due': 'Review due',
   'discreet.wave': 'Step {n} / {of}',
