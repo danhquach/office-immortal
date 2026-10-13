@@ -35,6 +35,8 @@ import {
   treasureTier,
   charmLineName,
   favouredBy,
+  itemFacts,
+  unequipBlock,
   overtimeLines,
   pageOf,
   passiveRow,
@@ -1457,9 +1459,9 @@ describe('soulsLine', () => {
     s.cultivator.equipment.sideArm = banner;
     s.cultivator.stats.spirit = 67;
     s.souls = 7;
-    expect(soulsLine(banner, s)).toBe('Souls: 7 / 20 (+4.7 damage per attack)');
+    expect(soulsLine(banner, s)).toBe('7 / 20 (+4.7 damage per attack)');
     s.souls = 0;
-    expect(soulsLine(banner, s)).toBe('Souls: 0 / 20 (+0 damage per attack)');
+    expect(soulsLine(banner, s)).toBe('0 / 20 (+0 damage per attack)');
   });
 
   it('shows no souls on a banner in the bag', () => {
@@ -1467,7 +1469,7 @@ describe('soulsLine', () => {
     s.cultivator.equipment.sideArm = item('Jade Hundred Ghosts Banner');
     s.souls = 7;
     const bag = item('Ten-Thousand Souls Banner', 'immortal');
-    expect(soulsLine(bag, s)).toMatch(/^Souls: 0 \/ 30 /);
+    expect(soulsLine(bag, s)).toMatch(/^0 \/ 30 /);
   });
 
   it('has no line for any other item', () => {
@@ -1502,7 +1504,7 @@ describe('favouredBy', () => {
     ['accessory', 'Jade Wind Chime', 'Talisman Master'],
     ['accessory', 'Jade Demon-Revealing Mirror', 'Sword Cultivator'],
   ] as const)('names the Path a %s %s leans to', (slot, name, path) => {
-    expect(favouredBy(item(slot, name), 'body')?.text).toBe(`Favoured by: ${path}`);
+    expect(favouredBy(item(slot, name), 'body')?.text).toBe(path);
   });
 
   it("marks a match only on the player's Path", () => {
@@ -1518,6 +1520,70 @@ describe('favouredBy', () => {
     expect(favouredBy(item('charm', 'Jade Vajra Talisman'), 'body')).toBeNull();
     expect(favouredBy(item('weapon', 'Iron Flying Sword', 'earth'), 'sword')).toBeNull();
     expect(favouredBy(item('weapon', '__proto__'), 'sword')).toBeNull();
+  });
+});
+
+describe('itemFacts', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+  const item = (slot: Item['slot'], name: string, grade: Item['grade'] = 'earth'): Item => ({
+    slot,
+    name,
+    level: 7,
+    grade,
+    baseRoll: 0.5,
+    affixes: [],
+  });
+  const pairs = (facts: ReturnType<typeof itemFacts>) => facts.map((f) => [f.label, f.value]);
+
+  it('labels a weapon by grade, type, level, quality, tier and the Path it favours', () => {
+    const s = newGame(1, 'body');
+    const seal = item('weapon', 'Jade Mountain Seal');
+    expect(pairs(itemFacts(seal, s))).toEqual([
+      ['Grade', 'Earth'],
+      ['Type', 'Weapon'],
+      ['Level', '7'],
+      ['Quality', `${qualityLine(seal).replace(/\D/g, '')}%`],
+      ['Tier', 'Spirit Treasure'],
+      ['Favoured by', 'Body Refiner'],
+    ]);
+    const tones = Object.fromEntries(itemFacts(seal, s).map((f) => [f.id, f.tone]));
+    expect(tones.grade).toBe('grade-earth');
+    expect(tones.favouredBy).toBe('up');
+    expect(itemFacts(seal, newGame(1, 'sword')).find((f) => f.id === 'favouredBy')?.tone).toBe('');
+  });
+
+  it("adds a charm's line and a banner's souls, and leaves out what does not apply", () => {
+    const s = newGame(1, 'talisman');
+    const ids = (it: Item) => itemFacts(it, s).map((f) => f.id);
+    expect(ids(item('charm', 'Jade Vajra Talisman'))).toEqual([
+      'grade',
+      'type',
+      'level',
+      'quality',
+      'line',
+    ]);
+    expect(ids(item('head', 'Jade Lotus Crown'))).toEqual(['grade', 'type', 'level', 'quality']);
+    const banner = item('sideArm', 'Jade Hundred Ghosts Banner');
+    expect(itemFacts(banner, s).at(-1)).toMatchObject({ id: 'souls', label: 'Souls' });
+    expect(itemFacts(banner, s).at(-1)?.value).toMatch(/^0 \/ 20 /);
+  });
+
+  it('labels in Vietnamese too', () => {
+    setLang('vi');
+    const labels = itemFacts(item('weapon', 'Jade Mountain Seal'), newGame(1, 'body')).map(
+      (f) => f.label,
+    );
+    expect(labels).toEqual(['Phẩm cấp', 'Loại', 'Cấp', 'Chất lượng', 'Bậc', 'Hợp với']);
+  });
+});
+
+describe('unequipBlock', () => {
+  it('blocks only when the bag is full', () => {
+    const s = newGame(1, 'sword');
+    expect(unequipBlock(s)).toBeNull();
+    const full = { ...s, inventory: Array.from({ length: s.bagSize }, () => stapler) };
+    expect(unequipBlock(full)).toMatch(/^Bag is full/);
+    expect(unequipBlock({ ...full, inventory: full.inventory.slice(1) })).toBeNull();
   });
 });
 
