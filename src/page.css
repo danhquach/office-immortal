@@ -83,6 +83,16 @@
   --utility: #c6e04a;
 }
 
+/* Discreet mode (docs/design.md §14; app.ts sets data-discreet): every grade
+   colour is the theme's plain text colour, which passes 4.5:1 in both themes. */
+:root[data-discreet] {
+  --grade-mortal: var(--ink);
+  --grade-spirit: var(--ink);
+  --grade-earth: var(--ink);
+  --grade-heaven: var(--ink);
+  --grade-immortal: var(--ink);
+}
+
 /* The page is a sheet: faint cell lines behind every panel. */
 body {
   margin: 0;
@@ -2118,6 +2128,26 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 }
 .discreet tr > :nth-child(2) {
   width: 30%;
+}
+/* Discreet mode on the main page: the sheet takes the strip's place, and no
+   art, stamp or summary icon shows. Grade colours are plain (:root above),
+   and a cell says its grade in office words where the icon was. */
+.discreet.in-page {
+  height: auto;
+  align-self: start;
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+}
+:root[data-discreet]
+  :is(.stamp, .paths .avatar, .game .strip, .kpi-icon, .figure, .cell .icon, .item-head .icon) {
+  display: none;
+}
+:root[data-discreet] .cell .grade {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.65rem;
+  font-weight: 400;
 }
 
 /* Main menu: Settings and Help, a modal dialog over the game. */

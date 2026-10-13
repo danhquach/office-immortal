@@ -46,7 +46,6 @@ import {
 import {
   defaultSlot,
   EQUIP_SLOTS,
-  GRADES,
   SLOTS,
   slotsFor,
   type EquipSlotId,
@@ -113,6 +112,7 @@ import { exportCode, importCode } from '../storage/transfer.ts';
 import {
   dropToast,
   faviconHref,
+  sheetFaviconHref,
   gameTitle,
   immortalNotice,
   miniStatus,
@@ -148,6 +148,15 @@ import {
 } from './i18n.ts';
 import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
+import {
+  gradeInitial,
+  gradeName,
+  isDiscreet,
+  isDiscreetKey,
+  readDiscreet,
+  setDiscreet,
+  writeDiscreet,
+} from './discreet.ts';
 import {
   pickPopStyle,
   POP_STYLES,
@@ -273,6 +282,7 @@ const HELP_LINES: readonly MessageKey[] = [
   'help.6',
   'help.7',
   'help.8',
+  'help.9',
 ];
 const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
@@ -663,6 +673,14 @@ export function start(
   cloudSync(root, storage)?.begin();
   labels = [];
   showTheme([document.documentElement], pickedTheme ?? readTheme(storage), osDark.matches);
+  discreetStore = storage;
+  showDiscreet(pickedDiscreet ?? readDiscreet(storage));
+  // Once per page: the key works on every screen, run or not.
+  if (!discreetKeyOn) {
+    discreetKeyOn = true;
+    document.addEventListener('keydown', onDiscreetKey);
+  }
+  redrawDiscreet = relabelScreen;
   setLang(pickedLang ?? readLang(storage, navigator.languages ?? []));
   document.documentElement.lang = lang().code;
   const token = ++starts;
@@ -690,7 +708,8 @@ export function start(
  */
 function waitForUpdate(root: HTMLElement, storage: SaveStorage | null): void {
   labels = [];
-  document.title = gameTitle();
+  redrawDiscreet = relabelScreen;
+  document.title = pageTitle();
   document.querySelector('link[rel="icon"]')?.remove();
   const bar = titleBar(storage, () => {
     drawUpdate(false);
@@ -719,9 +738,10 @@ let typedLink = '';
 /** Draws the Path choice. A language switch calls this alone: no restart, so the cloud check isn't redone. */
 function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
   labels = [];
+  redrawDiscreet = relabelScreen;
   // A kept import is asked about only in the run the reload resumed, never in a later one.
   stashedImport = null;
-  document.title = gameTitle();
+  document.title = pageTitle();
   // No run, no HP ring: the browser's default icon.
   document.querySelector('link[rel="icon"]')?.remove();
   const cloud = sync;
@@ -740,17 +760,98 @@ function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
   say(() => drawUpdate(false));
 }
 
+/**
+ * Discreet mode on or off (docs/design.md §14): later grade names and initials
+ * follow it, and page.css reads `data-discreet` on the root to hide the art.
+ */
+function showDiscreet(on: boolean): void {
+  setDiscreet(on);
+  document.documentElement.toggleAttribute('data-discreet', on);
+}
+
+/** The page's title outside a run: a dull file name while Discreet is on. */
+function pageTitle(): string {
+  return isDiscreet() ? t('discreet.file') : gameTitle();
+}
+
+/** Where the shown screen keeps Discreet mode; start() sets it. */
+let discreetStore: SaveStorage | null = null;
+/** Redraws the shown screen after a Discreet switch; each screen sets its own. */
+let redrawDiscreet = (): void => {};
+/** The fixed texts and the title again: enough for a screen with no run. */
+function relabelScreen(): void {
+  for (const fn of labels) fn();
+  document.title = pageTitle();
+}
+
+/** Switches Discreet mode, keeping it as a display preference; the game runs on. */
+function switchDiscreet(): void {
+  const on = !isDiscreet();
+  pickedDiscreet = on;
+  // Blocked storage still switches it for this visit.
+  writeDiscreet(discreetStore, on);
+  showDiscreet(on);
+  redrawDiscreet();
+}
+
+/** Discreet mode's key, on the page or in the pop-out (docs/design.md §14). */
+function onDiscreetKey(e: KeyboardEvent): void {
+  if (!isDiscreetKey(e)) return;
+  e.preventDefault();
+  switchDiscreet();
+}
+let discreetKeyOn = false;
+
 /** The title bar; its language switch calls `relabel` once the language has changed. */
 function titleBar(storage: SaveStorage | null, relabel: () => void): HTMLElement {
   const bar = el('header', 'titlebar');
   // A generic sheet glyph, drawn in CSS: no real product's logo.
   const glyph = el('span', 'glyph');
   glyph.setAttribute('aria-hidden', 'true');
+  const file = el('h1', 'file');
+  say(() => (file.textContent = t(isDiscreet() ? 'discreet.file' : 'game.file')));
+  // Discreet mode: this button, or its key anywhere on the page (docs/design.md §14).
+  const discreetBtn = buttonT('tools.discreet', '', switchDiscreet);
+  say(() => discreetBtn.setAttribute('aria-pressed', String(isDiscreet())));
   // The game's name as a red rubber stamp; CSS sets the capitals, so screen readers say the words.
   const tools = el('div', 'tools');
-  tools.append(langSwitch(storage, relabel));
-  bar.append(glyph, elt('h1', 'file', 'game.file'), elt('span', 'stamp', 'game.title'), tools);
+  tools.append(discreetBtn, langSwitch(storage, relabel));
+  bar.append(glyph, file, elt('span', 'stamp', 'game.title'), tools);
   return bar;
+}
+
+/**
+ * A plain sheet of label / value rows under an A, B header, as in the Discreet
+ * pop-out and the main page's Discreet mode; `fill` puts rows in its cells.
+ */
+function plainSheet(className: string): {
+  box: HTMLElement;
+  fill: (rows: readonly (readonly [string, string])[]) => void;
+} {
+  const box = el('div', className);
+  const table = el('table');
+  const head = el('tr');
+  for (const col of ['', 'A', 'B']) head.append(el('th', '', col));
+  table.append(head);
+  const cells: { label: HTMLElement; value: HTMLElement }[] = [];
+  box.append(table);
+  return {
+    box,
+    fill(rows) {
+      rows.forEach(([label, value], i) => {
+        let cell = cells[i];
+        if (!cell) {
+          const row = el('tr');
+          cell = { label: el('td'), value: el('td') };
+          row.append(el('th', '', String(i + 1)), cell.label, cell.value);
+          table.append(row);
+          cells.push(cell);
+        }
+        setText(cell.label, label);
+        setText(cell.value, value);
+      });
+    },
+  };
 }
 
 /** A globe, drawn as SVG nodes (never markup); decorative, the code beside it is the text. */
@@ -1223,7 +1324,7 @@ function fillCell(
   refined.hidden = mark === '';
   refined.textContent = mark;
   b.className = item ? `cell grade-${item.grade}` : 'cell empty';
-  grade.textContent = item ? t(`grade.initial.${item.grade}`) : '';
+  grade.textContent = item ? gradeInitial(item.grade) : '';
   setIcon(icon, item);
   badge.hidden = v === null;
   badge.className = v ? `verdict ${v}` : 'verdict';
@@ -1308,6 +1409,8 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const osDark = matchMedia('(prefers-color-scheme: dark)');
 /** The theme picked this visit: kept across runs even where storage is blocked. */
 let pickedTheme: Theme | null = null;
+/** Discreet mode as switched this visit: kept across runs even where storage is blocked. */
+let pickedDiscreet: boolean | null = null;
 /** The bag sort picked this visit: kept across runs even where storage is blocked. */
 let pickedSort: BagSort | null = null;
 let pickedReverse: boolean | null = null;
@@ -1970,7 +2073,6 @@ function play(
 
   // Bulk sell or salvage: pick a grade, then confirm a message naming the
   // count, the highest grade taken and what it pays (§7).
-  const gradeName = (g: GradeId): string => tn('grade', GRADES[g].name);
   const below = choice(
     'inventory.bulkBelow',
     GRADE_IDS.slice(1).map((g) => [g, () => gradeName(g)] as const),
@@ -2306,6 +2408,15 @@ function play(
   beside.append(kpis, log.box);
   const top = el('div', 'top');
   top.append(strip, beside);
+  // Discreet mode: a plain sheet in the strip's place (docs/design.md §14). Only
+  // in the page while it shows, so a popped-out strip still leaves the chips the row.
+  const pageSheet = plainSheet('discreet in-page');
+  /** Puts the sheet in or out of the page as Discreet mode says. */
+  const placeSheet = (): void => {
+    if (!isDiscreet()) pageSheet.box.remove();
+    else if (!top.contains(pageSheet.box)) top.prepend(pageSheet.box);
+  };
+  placeSheet();
   game.append(top, columns);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
@@ -2589,24 +2700,13 @@ function play(
   // A click on the pop-out brings the game's tab forward (docs/design.md §14).
   mini.addEventListener('click', () => window.focus());
   // Discreet view, the other pop-out: a plain sheet of the same numbers, in office words.
-  const discreet = el('div', 'discreet');
-  const sheet = el('table');
-  const head = el('tr');
-  for (const col of ['', 'A', 'B']) head.append(el('th', '', col));
-  sheet.append(head);
-  const cells = discreetRows(state, null, false).map((_, i) => {
-    const row = el('tr');
-    const label = el('td');
-    const value = el('td');
-    row.append(el('th', '', String(i + 1)), label, value);
-    sheet.append(row);
-    return { label, value };
-  });
-  discreet.append(sheet);
-  discreet.addEventListener('click', () => window.focus());
+  const discreetPop = plainSheet('discreet');
+  discreetPop.box.addEventListener('click', () => window.focus());
   let pip: Window | null = null;
-  /** Which view the open pop-out shows. */
+  /** Which view the open pop-out was opened as. */
   let popped: PopStyle = 'mini';
+  /** What the open pop-out shows: the Discreet sheet while Discreet mode is on, whichever was picked. */
+  const popView = (): PopStyle => (isDiscreet() ? 'discreet' : popped);
   /** A pop-out request is waiting on the browser; further clicks wait for it. */
   let opening = false;
   /** Drops kept while the tab was hidden: the title counts them, the favicon marks the best. */
@@ -3471,27 +3571,28 @@ function play(
   function drawHud(): void {
     const c = state.cultivator;
     const due = tribulationCall(state) !== null;
-    const title = tabTitle(state.floor, unseen.count, due);
+    const plain = isDiscreet();
+    // Discreet: a dull file name and a still sheet icon, never the floor, drops or game name.
+    const title = plain ? t('discreet.file') : tabTitle(state.floor, unseen.count, due);
     if (document.title !== title) document.title = title;
-    // A Heaven-or-better drop blinks the favicon's dot, flipping on each redraw at most
-    // every BLINK_MS: about once a second in a throttled background tab, and on each
-    // (rarer) step under heavier throttling. Held still for reduced motion.
-    const now = performance.now();
-    if (unseen.mark && !reducedMotion.matches && now - blinkAt >= BLINK_MS) {
-      blinkOn = !blinkOn;
-      blinkAt = now;
+    if (plain) setFavicon(document, sheetFaviconHref());
+    else {
+      // A Heaven-or-better drop blinks the favicon's dot, flipping on each redraw at most
+      // every BLINK_MS: about once a second in a throttled background tab, and on each
+      // (rarer) step under heavier throttling. Held still for reduced motion.
+      const now = performance.now();
+      if (unseen.mark && !reducedMotion.matches && now - blinkAt >= BLINK_MS) {
+        blinkOn = !blinkOn;
+        blinkAt = now;
+      }
+      const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
+      setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
     }
-    const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
-    setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
-    if (pip && popped === 'discreet') {
-      const rows = discreetRows(state, recent[0] ?? null, due);
-      rows.forEach(([label, value], i) => {
-        const cell = cells[i];
-        if (!cell) return;
-        setText(cell.label, label);
-        setText(cell.value, value);
-      });
-      // A dull file name, never the game's floor or name.
+    const sheetShown = pip !== null && popView() === 'discreet';
+    const rows = plain || sheetShown ? discreetRows(state, recent[0] ?? null, due) : [];
+    if (plain) pageSheet.fill(rows);
+    if (pip && sheetShown) {
+      discreetPop.fill(rows);
       const file = t('discreet.file');
       if (pip.document.title !== file) pip.document.title = file;
     } else if (pip) {
@@ -3500,6 +3601,13 @@ function play(
       if (pip.document.title !== title) pip.document.title = title;
     }
   }
+
+  /** After a Discreet switch: the sheet, the pop-out, and every grade name and initial, in place. */
+  redrawDiscreet = (): void => {
+    placeSheet();
+    if (pip) pip.document.body.replaceChildren(popContent(popView()));
+    relabel();
+  };
 
   /** Counts drops the player has not seen yet, and notifies on an Immortal one. */
   function noteDrops(items: Item[]): void {
@@ -3515,12 +3623,23 @@ function play(
       blinkAt = performance.now();
     }
     unseen = noted.unseen;
-    if (noted.notify) notices.show(immortalNotice(state.floor));
+    // Discreet: no notification, as every one names the game.
+    if (noted.notify && !isDiscreet()) notices.show(immortalNotice(state.floor));
   }
 
   /** Puts the strip back above the summary chips, unless this run has ended. */
   function restoreStrip(): void {
     if (!signal.aborted && !game.contains(strip)) beside.before(strip);
+  }
+
+  /** The pop-out's content for `view`; the Mini view takes the strip in. */
+  function popContent(view: PopStyle): HTMLElement {
+    if (view === 'discreet') {
+      restoreStrip();
+      return discreetPop.box;
+    }
+    mini.replaceChildren(miniFile, strip, miniLine, miniToast);
+    return mini;
   }
 
   /** Opens the pop-out in `style`, or closes the open one. */
@@ -3533,11 +3652,7 @@ function play(
     opening = true;
     const opened = await popOut(
       window,
-      () => {
-        if (style === 'discreet') return discreet;
-        mini.replaceChildren(miniFile, strip, miniLine, miniToast);
-        return mini;
-      },
+      () => popContent(isDiscreet() ? 'discreet' : style),
       (closed) => {
         // Only the open pop-out's own close counts.
         if (pip !== closed) return;
@@ -3555,6 +3670,8 @@ function play(
     }
     pip = opened;
     popped = style;
+    // The key works in the pop-out too; the listener goes with its window.
+    opened.document.addEventListener('keydown', onDiscreetKey);
     drawTools();
     drawHud();
   }
@@ -3666,7 +3783,7 @@ function play(
     const fresh = freshDrops(prev, state);
     logDrops(fresh);
     noteDrops(fresh);
-    if (document.hidden && tribulationFellDue(prev, state)) {
+    if (document.hidden && !isDiscreet() && tribulationFellDue(prev, state)) {
       notices.show(tribulationNotice(state.floor));
     }
     draw(prev);

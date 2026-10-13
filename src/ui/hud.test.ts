@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GradeId, Item } from '../core/loot.ts';
+import { setDiscreet } from './discreet.ts';
 import { DEFAULT_LANG, setLang } from './i18n.ts';
 import {
   bestGrade,
@@ -12,6 +13,8 @@ import {
   miniStatus,
   noteUnseen,
   NOTHING_UNSEEN,
+  sheetFaviconHref,
+  sheetFaviconSvg,
   tabTitle,
   tribulationNotice,
 } from './hud.ts';
@@ -206,5 +209,22 @@ describe('noteUnseen', () => {
   it('changes nothing for no drops', () => {
     const u = { count: 2, mark: 'heaven' as const };
     expect(noteUnseen(u, [], true)).toEqual({ unseen: u, notify: false });
+  });
+});
+
+describe('Discreet mode', () => {
+  it('draws a still sheet favicon: no ring, no grade colour', () => {
+    const svg = sheetFaviconSvg();
+    expect(svg).not.toContain('stroke-dasharray');
+    expect(svg).not.toMatch(/#3fb56b|#e0533d|#e8bb2a|#e0233f/);
+    expect(sheetFaviconHref()).toBe(`data:image/svg+xml,${encodeURIComponent(svg)}`);
+  });
+
+  it('words the drop toast with office grades', () => {
+    setDiscreet(true);
+    const text = dropToast(item('immortal'));
+    setDiscreet(false);
+    expect(text).toContain('Enterprise');
+    expect(text).not.toContain('Immortal');
   });
 });
