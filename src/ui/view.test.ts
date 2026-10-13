@@ -16,6 +16,7 @@ import {
   formatBonus,
   freshDrops,
   gridMove,
+  itemLineGroups,
   itemLines,
   itemTag,
   itemName,
@@ -92,6 +93,30 @@ describe('items', () => {
   it('lists base stat then affixes, at the item level', () => {
     // 8–14 damage at level 10, rolled to the top; crit 0.7% at its minimum; max HP 20–50.
     expect(itemLines(stapler)).toEqual(['+14 Damage', '+0.7% Crit chance', '+50 Max HP']);
+  });
+
+  it('groups the lines by what they do: offence, defence, then utility', () => {
+    expect(itemLineGroups(stapler)).toEqual([
+      { kind: 'offence', lines: ['+14 Damage', '+0.7% Crit chance'] },
+      { kind: 'defence', lines: ['+50 Max HP'] },
+    ]);
+    const charmed = {
+      ...stapler,
+      affixes: [{ id: 'stoneFind' as const, roll: 0 }, ...stapler.affixes],
+    };
+    expect(itemLineGroups(charmed).map((g) => g.kind)).toEqual(['offence', 'defence', 'utility']);
+    // Every line lands in exactly one group, the unique effect too.
+    const immortal = { ...stapler, grade: 'immortal' as const, unique: 'parachute' as const };
+    expect(
+      itemLineGroups(immortal)
+        .flatMap((g) => g.lines)
+        .sort(),
+    ).toEqual(itemLines(immortal).sort());
+    expect(
+      itemLineGroups(immortal)
+        .find((g) => g.kind === 'defence')
+        ?.lines.at(-1),
+    ).toBe('Golden Parachute: +25% Max HP');
   });
 
   it('adds the unique effect on an Immortal item', () => {
@@ -624,6 +649,17 @@ describe('Formation Discs', () => {
     expect(itemLines(disc('killing', 1))[0]).toBe(
       'Killing Array: the enemy takes 20% of your damage per second',
     );
+  });
+
+  it('groups Binding and Illusion with defence, Killing with offence', () => {
+    expect(itemLineGroups(disc('binding'))).toEqual([
+      {
+        kind: 'defence',
+        lines: ["Binding Array: the enemy's first attack comes 1.75 s later", '+60 Max HP'],
+      },
+    ]);
+    expect(itemLineGroups(disc('illusion'))[0]?.kind).toBe('defence');
+    expect(itemLineGroups(disc('killing')).map((g) => g.kind)).toEqual(['offence', 'defence']);
   });
 
   /** A run wearing `item`, played until its first kill. */

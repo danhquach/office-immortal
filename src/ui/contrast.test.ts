@@ -46,6 +46,10 @@ const TEXT = [
   '--down',
   '--sell',
   '--salvage',
+  '--craft',
+  '--offence',
+  '--defence',
+  '--utility',
   ...GRADES.map((g) => `--grade-${g}`),
 ];
 const SURFACES = ['--bg', '--panel', '--head'];
@@ -78,6 +82,7 @@ describe('page.css colours', () => {
     for (const block of [light, dark]) {
       expect(block).toMatch(/--sell:\s*#[0-9a-f]{6}\s*;/i);
       expect(block).toMatch(/--salvage:\s*#[0-9a-f]{6}\s*;/i);
+      expect(block).toMatch(/--craft:\s*#[0-9a-f]{6}\s*;/i);
     }
     // Each sits apart in hue from the other and from the colours that mean
     // something else nearby (grades, badges, accent, strip tiers).
@@ -94,11 +99,42 @@ describe('page.css colours', () => {
     for (const vars of [t.light, t.dark]) {
       const hueOf = (v: string) => hue(vars.get(v) as string);
       expect(hueGap(hueOf('--sell'), hueOf('--salvage'))).toBeGreaterThan(90);
-      for (const action of ['--sell', '--salvage']) {
+      for (const action of ['--sell', '--salvage'])
+        expect(hueGap(hueOf(action), hueOf('--craft')), `${action} vs --craft`).toBeGreaterThan(60);
+      for (const action of ['--sell', '--salvage', '--craft']) {
         for (const other of others) {
           expect(hueGap(hueOf(action), hueOf(other)), `${action} vs ${other}`).toBeGreaterThan(15);
         }
       }
+    }
+  });
+
+  it('gives each attribute kind its own colour, apart from the others nearby', () => {
+    const others = [
+      '--up',
+      '--down',
+      '--mixed',
+      '--accent',
+      '--sell',
+      '--salvage',
+      '--craft',
+      '--strip-tribulation',
+      ...GRADES.filter((g) => g !== 'mortal').map((g) => `--grade-${g}`),
+    ];
+    const kinds = ['--offence', '--defence', '--utility'];
+    for (const vars of [t.light, t.dark]) {
+      const hueOf = (v: string) => hue(vars.get(v) as string);
+      for (const kind of kinds) {
+        for (const other of [...others, ...kinds.filter((k) => k !== kind)]) {
+          expect(hueGap(hueOf(kind), hueOf(other)), `${kind} vs ${other}`).toBeGreaterThan(15);
+        }
+      }
+    }
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    for (const kind of ['offence', 'defence', 'utility']) {
+      expect(new RegExp(`\\.kind-${kind}\\s*{[^}]*color:\\s*var\\(--${kind}\\)`).test(code)).toBe(
+        true,
+      );
     }
   });
 
@@ -115,6 +151,11 @@ describe('page.css colours', () => {
       )?.[1];
       expect(box).toMatch(new RegExp(`border-color:\\s*var\\(--${action}\\)`));
     }
+    const craft = /button\[data-action='craft'\]:not\(\[aria-disabled='true'\]\)\s*{([^}]*)}/.exec(
+      code,
+    )?.[1];
+    expect(craft).toMatch(/(?:^|[^-])color:\s*var\(--craft\)/);
+    expect(craft).toMatch(/border-color:\s*var\(--craft\)/);
   });
 
   it('tints the bulk grade picker and the confirmation grade name with the grade tokens', () => {
@@ -227,9 +268,13 @@ describe('fight strip names', () => {
       .filter((m) => (m[1] as string).split(',').some((s) => s.trim() === selector))
       .map((m) => m[2] as string);
   const all = (selector: string) => rules(selector).join('\n');
-  /** The body of the `@media` rule whose condition is `query`, nested braces and all. */
-  const media = (query: string): string => {
-    const start = code.indexOf(`@media ${query} {`);
+  /**
+   * The body of the `@media` rule whose condition is `query`, nested braces and
+   * all: the first such rule, or the one holding offset `at`.
+   */
+  const media = (query: string, at = -1): string => {
+    const head = `@media ${query} {`;
+    const start = at < 0 ? code.indexOf(head) : code.lastIndexOf(head, at);
     if (start < 0) return '';
     let depth = 0;
     for (let i = code.indexOf('{', start); i < code.length; i++) {
@@ -327,9 +372,13 @@ describe('title stamp', () => {
 describe('Full view layout', () => {
   /** page.css without its comments. */
   const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  /** The body of the `@media` rule whose condition is `query`, nested braces and all. */
-  const media = (query: string): string => {
-    const start = code.indexOf(`@media ${query} {`);
+  /**
+   * The body of the `@media` rule whose condition is `query`, nested braces and
+   * all: the first such rule, or the one holding offset `at`.
+   */
+  const media = (query: string, at = -1): string => {
+    const head = `@media ${query} {`;
+    const start = at < 0 ? code.indexOf(head) : code.lastIndexOf(head, at);
     if (start < 0) return '';
     let depth = 0;
     for (let i = code.indexOf('{', start); i < code.length; i++) {
@@ -406,6 +455,14 @@ describe('Full view layout', () => {
     expect(shorter).not.toMatch(/zoom/);
     // Only the itch.io frame's height shrinks the stage to 0.55.
     expect(rule(media(SHORTEST), '.game .strip > .stage')).toMatch(/zoom:\s*0\.55/);
+  });
+
+  it('keeps the details panel’s action row still while the item scrolls under it', () => {
+    // The (min-width: 940px) block that holds the column rules, not the strip's.
+    const full = media('(min-width: 940px)', code.indexOf('.columns > .side {'));
+    expect(rule(full, '.side > .details')).toMatch(/overflow:\s*hidden/);
+    expect(rule(full, '.side > .details > .detail-body')).toMatch(/min-height:\s*0/);
+    expect(rule(full, '.side .detail-info')).toMatch(/overflow-y:\s*auto/);
   });
 
   it('sets the link code panel under the Path choice at its width', () => {

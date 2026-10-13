@@ -362,8 +362,9 @@ Every drop is generated from a seeded roll.
 - **Colours:** every sell control (the details panel's Sell, bulk Sell… and
   its confirm) wears the Spirit Stones colour (`--sell`, cyan like the stone
   icon); every salvage control (Salvage, bulk Salvage… and its confirm) wears
-  the Spirit Essence colour (`--salvage`, orange like the essence drop). Both
-  are theme tokens with light and dark values that pass 4.5:1 on every
+  the Spirit Essence colour (`--salvage`, orange like the essence drop); the
+  details panel's Craft button wears violet (`--craft`, a hue no grade uses).
+  All three are theme tokens with light and dark values that pass 4.5:1 on every
   surface, and the labels still name the action, so colour is never the only
   cue.
 - **Grade colours:** the bulk grade picker wears the chosen grade's colour
@@ -814,15 +815,23 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   over the art. The badge has a small backing and may touch the icon's
   corner. Equipment cells show the grade and refine level the same
   way. Selecting a cell shows
-  a details panel: the name with its refine level, the tag, labeled quality,
-  rolls, gains / losses against the equipped item, and
-  the Craft button (§7).
+  a details panel: Sell, Salvage and the Craft button (§7) on a row at its
+  top, then blocks for the item (name with its refine level, the tag,
+  labeled quality), its attributes, and the gains / losses against each
+  position it fits, with that position's Equip button. The attributes are
+  grouped by what they do, each group on a pill naming it in its colour:
+  Offence (`--offence`, rose: damage, crit, attack speed, the Killing
+  Array), Defence (`--defence`, indigo: HP, defence, lifesteal, the Binding
+  and Illusion Arrays) and Utility (`--utility`, lime: qi regen, stone and
+  treasure find).
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or
   with the panel's Equip button (touch and keyboard use the button).
 - In the Full view the character, inventory and side panels keep fixed widths
   and one shared height whatever tab is open; a taller tab or item scrolls
-  inside its panel.
+  inside its panel. The details panel's Sell, Salvage and Craft row sits at
+  its top, over the item, and only the item's lines scroll, so the buttons
+  never move under the pointer.
 - Dark theme by default; Menu → Settings offers Light and Match system. The
   choice is a display preference, so Reset progress keeps it, and the page
   paints in it from the first frame. Text 4.5:1 or more on its background in
