@@ -4,6 +4,7 @@ import {
   BASE_STAT,
   breakThrough,
   derive,
+  effectiveStats,
   gainXp,
   isRealmCap,
   LAST_CAP,
@@ -14,7 +15,11 @@ import {
   PATHS,
   readyForTribulation,
   REALM_BONUS,
+  REALM_CAPS,
+  REALM_PRIMARY_STEP,
   realmOf,
+  realmPrimaryBonus,
+  realmPrimaryShare,
   REALMS,
   STARTING_PRIMARY_BONUS,
   STAT_POINTS_PER_LEVEL,
@@ -194,15 +199,18 @@ describe('realms', () => {
       'Tribulation Transcendence',
       'Immortal Ascension',
     ]);
-    expect([1, 10, 11, 20, 21, 50, 51, 60, 61, 90, 91, 500].map(realmOf)).toEqual([
-      0, 0, 1, 1, 2, 4, 5, 5, 6, 8, 9, 9,
+    expect([1, 10, 11, 22, 23, 52, 53, 90, 91, 162, 163, 500].map(realmOf)).toEqual([
+      0, 0, 1, 1, 2, 3, 4, 5, 6, 8, 9, 9,
     ]);
   });
 
-  it('caps every 10 levels up to Tribulation Transcendence, then never', () => {
-    const caps = Array.from({ length: 200 }, (_, i) => i + 1).filter(isRealmCap);
-    expect(caps).toEqual([10, 20, 30, 40, 50, 60, 70, 80, 90]);
-    expect(LAST_CAP).toBe(90);
+  it('caps at the end of each realm, each 2 levels longer, up to Tribulation Transcendence, then never', () => {
+    const caps = Array.from({ length: 300 }, (_, i) => i + 1).filter(isRealmCap);
+    expect(caps).toEqual([10, 22, 36, 52, 70, 90, 112, 136, 162]);
+    expect(caps).toEqual(REALM_CAPS);
+    expect(LAST_CAP).toBe(162);
+    const lengths = REALM_CAPS.map((cap, i) => cap - (REALM_CAPS[i - 1] ?? 0));
+    expect(lengths).toEqual([10, 12, 14, 16, 18, 20, 22, 24, 26]);
   });
 });
 
@@ -216,9 +224,9 @@ describe('realm caps', () => {
   });
 
   it('keeps holding however much XP comes in', () => {
-    const c = atLevel('body', 20);
+    const c = atLevel('body', 22);
     for (let i = 0; i < 50; i++) gainXp(c, 1e6);
-    expect(c.level).toBe(20);
+    expect(c.level).toBe(22);
     expect(c.xp).toBe(5e7);
   });
 
@@ -231,12 +239,12 @@ describe('realm caps', () => {
   });
 
   it('never caps after Immortal Ascension', () => {
-    const c = atLevel('sword', 90);
-    c.xp = xpToNext(90);
+    const c = atLevel('sword', 162);
+    c.xp = xpToNext(162);
     breakThrough(c);
-    expect(c.level).toBe(91);
-    gainXp(c, xpToNext(91) + xpToNext(92) + xpToNext(93));
-    expect(c.level).toBe(94);
+    expect(c.level).toBe(163);
+    gainXp(c, xpToNext(163) + xpToNext(164) + xpToNext(165));
+    expect(c.level).toBe(166);
     expect(readyForTribulation({ ...c, level: 100, xp: 1e9 })).toBe(false);
   });
 });
@@ -245,19 +253,22 @@ describe('breakThrough', () => {
   it('passes the cap and spends the held XP up to the next one', () => {
     const c = atLevel('sword', 10);
     let xp = 0;
-    for (let l = 10; l < 20; l++) xp += xpToNext(l);
-    c.xp = xp + xpToNext(20) + 9;
+    for (let l = 10; l < 22; l++) xp += xpToNext(l);
+    c.xp = xp + xpToNext(22) + 9;
     breakThrough(c);
-    expect(c.level).toBe(20);
-    expect(c.xp).toBe(xpToNext(20) + 9);
+    expect(c.level).toBe(22);
+    expect(c.xp).toBe(xpToNext(22) + 9);
     expect(readyForTribulation(c)).toBe(true);
   });
 
   it('applies the realm bonus once, on top of the level-up', () => {
-    const held = atLevel('body', 10);
+    // Sword's primary is Agility, so the primary boost moves damage but not max HP.
+    const held = atLevel('sword', 10);
     held.xp = xpToNext(10);
-    // The same stats one realm lower: what level 11 would be without the bonus.
-    const noBonus = derive({ ...held, stats: { ...held.stats, body: held.stats.body + 3 } });
+    // The same stats one realm lower: what level 11 would be without the realm
+    // bonus, its +1% Agility already applied.
+    const agility = (held.stats.agility + 3) * (1 + REALM_PRIMARY_STEP);
+    const noBonus = derive({ ...held, stats: { ...held.stats, agility } });
     breakThrough(held);
     const after = derive(held);
     expect(after.maxHp).toBe(Math.round(noBonus.maxHp * (1 + REALM_BONUS)));
@@ -281,6 +292,14 @@ describe('breakThrough', () => {
     expect(Number.isFinite(d.maxHp) && Number.isFinite(d.damage)).toBe(true);
   });
 
+  it("keeps every cap's XP to the next level within what a save can hold", () => {
+    // Held XP is clamped to MAX_SAFE_INTEGER, so each cap's price must fit under it.
+    expect(xpToNext(LAST_CAP)).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
+    for (const cap of REALM_CAPS) {
+      expect(Number.isSafeInteger(xpToNext(cap))).toBe(true);
+    }
+  });
+
   it('never holds more XP than a whole number can store', () => {
     const c = atLevel('body', 10);
     c.xp = Number.MAX_SAFE_INTEGER;
@@ -296,5 +315,90 @@ describe('breakThrough', () => {
     const immortal = atLevel('sword', 61);
     immortal.xp = 0;
     expect(() => breakThrough(immortal)).toThrow(RangeError);
+  });
+});
+
+describe('realm primary stat bonus', () => {
+  it('adds 1% for realm 1, steps evenly up to 6% for the last, cumulative', () => {
+    const at = (level: number) => realmPrimaryBonus(level);
+    expect(at(10)).toBe(0);
+    expect(at(11)).toBeCloseTo(0.01);
+    expect(at(22)).toBeCloseTo(0.01);
+    expect(at(23)).toBeCloseTo(0.02625);
+    expect(at(37)).toBeCloseTo(0.04875);
+    expect(at(162)).toBeCloseTo(0.255);
+    expect(at(163)).toBeCloseTo(0.315);
+    expect(at(5000)).toBeCloseTo(0.315);
+  });
+
+  it('gives a bigger step at every harder realm', () => {
+    const steps = REALMS.map((_, r) => realmPrimaryShare(r + 1) - realmPrimaryShare(r)).slice(
+      0,
+      -1,
+    );
+    for (let r = 1; r < steps.length; r++) {
+      expect(steps[r] as number).toBeGreaterThan(steps[r - 1] as number);
+      // Spread evenly: the same rise every realm.
+      expect((steps[r] as number) - (steps[r - 1] as number)).toBeCloseTo(0.00625);
+    }
+    expect(steps[0]).toBeCloseTo(0.01);
+    expect(steps.at(-1)).toBeCloseTo(0.06);
+  });
+
+  it.each(PATH_IDS)('raises only the primary stat of %s', (path) => {
+    const c = atLevel(path, 163);
+    const eff = effectiveStats(c);
+    const primary = PATHS[path].primary;
+    for (const stat of ['body', 'agility', 'spirit'] as const) {
+      if (stat === primary) {
+        expect(eff[stat]).toBeCloseTo(c.stats[stat] * 1.315);
+        expect(eff[stat]).toBeGreaterThan(c.stats[stat]);
+      } else expect(eff[stat]).toBe(c.stats[stat]);
+    }
+  });
+
+  it('counts a step too small to make a whole point', () => {
+    // Foundation Establishment's +1% of a 40-point stat is 0.4: it still adds damage.
+    const c = atLevel('sword', 11);
+    c.stats.agility = 40;
+    expect(effectiveStats(c).agility).toBeCloseTo(40.4);
+    expect(derive(c).damage).toBeGreaterThan(
+      derive({ ...c, level: 10 }).damage * (1 + REALM_BONUS) - 1e-9,
+    );
+  });
+
+  it('does not change the stored stats, and is the plain stats in the first realm', () => {
+    const c = atLevel('sword', 60);
+    const before = structuredClone(c.stats);
+    effectiveStats(c);
+    expect(c.stats).toEqual(before);
+    const first = atLevel('sword', 10);
+    expect(effectiveStats(first)).toEqual(first.stats);
+  });
+
+  it('raises damage at a breakthrough by the realm bonus and the primary boost together', () => {
+    const held = atLevel('sword', 10);
+    const primary = PATHS.sword.primary;
+    held.stats[primary] = 1000;
+    held.xp = xpToNext(10);
+    breakThrough(held);
+    // The same stats and gear one realm lower: no realm bonus, no primary boost.
+    const plain = derive({ ...held, level: 10 });
+    const after = derive(held);
+    const boost = Math.round(held.stats[primary] * 1.01) / held.stats[primary];
+    expect(boost).toBeGreaterThan(1);
+    const expected =
+      ((4 + 1.5 * held.stats[primary] * boost) / (4 + 1.5 * held.stats[primary])) *
+      (1 + REALM_BONUS);
+    expect(after.damage / plain.damage).toBeCloseTo(expected);
+    expect(after.damage / plain.damage).toBeGreaterThan(1 + REALM_BONUS);
+  });
+
+  it('feeds derive: the max HP and defence of a Body path use the boosted stat', () => {
+    const c = atLevel('body', 163);
+    const eff = effectiveStats(c);
+    const d = derive(c);
+    expect(d.maxHp).toBe(Math.round((40 + 12 * eff.body) * (1 + REALM_BONUS * 9)));
+    expect(d.defence).toBe(eff.body);
   });
 });

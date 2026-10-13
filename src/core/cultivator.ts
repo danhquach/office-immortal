@@ -90,14 +90,15 @@ export interface Derived {
 }
 
 export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipment'>): Derived {
-  const { body, agility } = c.stats;
+  const stats = effectiveStats(c);
+  const { body, agility } = stats;
   const path = PATHS[c.path];
   const b = equipmentBonuses(c.equipment);
   const realm = REALM_BONUS * realmOf(c.level);
   return {
     maxHp: Math.round((40 + 12 * body + b.maxHp) * (1 + b.maxHpPct + realm)),
     defence: body + b.defence,
-    damage: (4 + 1.5 * c.stats[path.primary] + b.damage) * (1 + b.damagePct + realm),
+    damage: (4 + 1.5 * stats[path.primary] + b.damage) * (1 + b.damagePct + realm),
     attackInterval: Math.max(MIN_ATTACK_INTERVAL, 1 / (1 + 0.008 * agility + b.attackSpeed)),
     critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.002 * agility + b.critChance),
     critMultiplier: path.critMultiplier + b.critDamage,
@@ -108,9 +109,9 @@ export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipme
   };
 }
 
-// Realms (docs/design.md §4): every LEVELS_PER_REALM levels is a cap that only
-// a Tribulation win breaks through. Up to Tribulation Transcendence; Immortal
-// Ascension is endless.
+// Realms (docs/design.md §4): each realm ends at a cap that only a Tribulation
+// win breaks through. Up to Tribulation Transcendence; Immortal Ascension is
+// endless.
 
 export interface Realm {
   readonly name: string;
@@ -131,20 +132,61 @@ export const REALMS: readonly Realm[] = [
   { name: 'Immortal Ascension', title: null },
 ];
 
-export const LEVELS_PER_REALM = 10;
+/** The first realm's length in levels; each realm after it is REALM_GROWTH longer. */
+export const FIRST_REALM_LEVELS = 10;
+export const REALM_GROWTH = 2;
+/** The last level of each realm below Immortal Ascension: 10, 22, 36, … 162. */
+export const REALM_CAPS: readonly number[] = Array.from(
+  { length: REALMS.length - 1 },
+  (_, i) => (i + 1) * FIRST_REALM_LEVELS + (REALM_GROWTH * i * (i + 1)) / 2,
+);
 /** Max HP and damage each realm reached adds, as a share. */
 export const REALM_BONUS = 0.1;
+/**
+ * Breaking into a realm raises the Path's primary stat by a share that grows
+ * evenly from REALM_PRIMARY_STEP (Foundation Establishment) to
+ * REALM_PRIMARY_LAST_STEP (Immortal Ascension), so each harder realm gives a
+ * bigger boost: +1%, +1.625%, … +6%, 31.5% in all.
+ */
+export const REALM_PRIMARY_STEP = 0.01;
+export const REALM_PRIMARY_LAST_STEP = 0.06;
+const REALM_PRIMARY_STEP_GROWTH =
+  (REALM_PRIMARY_LAST_STEP - REALM_PRIMARY_STEP) / (REALMS.length - 2);
 /** The last capped level; past it, Immortal Ascension levels without end. */
-export const LAST_CAP = LEVELS_PER_REALM * (REALMS.length - 1);
+export const LAST_CAP = REALM_CAPS[REALM_CAPS.length - 1] as number;
 
-/** Index into REALMS for a level: 1–10 is 0, 11–20 is 1, …, 91+ is Immortal Ascension. */
+/** Index into REALMS for a level: 1–10 is 0, 11–22 is 1, …, 163+ is Immortal Ascension. */
 export function realmOf(level: number): number {
-  return Math.min(REALMS.length - 1, Math.floor((level - 1) / LEVELS_PER_REALM));
+  const i = REALM_CAPS.findIndex((cap) => level <= cap);
+  return i < 0 ? REALMS.length - 1 : i;
 }
 
-/** True for 10, 20, … 60: the level can't be passed without a Tribulation win. */
+/** The levels realm `i` spans; `to` is null for endless Immortal Ascension. */
+export function realmLevels(i: number): { from: number; to: number | null } {
+  return { from: (REALM_CAPS[i - 1] ?? 0) + 1, to: REALM_CAPS[i] ?? null };
+}
+
+/** True for 10, 22, … 162: the level can't be passed without a Tribulation win. */
 export function isRealmCap(level: number): boolean {
-  return level % LEVELS_PER_REALM === 0 && level <= LAST_CAP;
+  return REALM_CAPS.includes(level);
+}
+
+/** The share realm `r` (an index into REALMS) and those below it add to the primary stat. */
+export function realmPrimaryShare(r: number): number {
+  return REALM_PRIMARY_STEP * r + (REALM_PRIMARY_STEP_GROWTH * r * (r - 1)) / 2;
+}
+
+/** The share the realms reached at `level` add to the primary stat. */
+export function realmPrimaryBonus(level: number): number {
+  return realmPrimaryShare(realmOf(level));
+}
+
+/** Stats as they fight: the primary one raised by the realm bonus (not rounded, so +1% of a small stat still counts). */
+export function effectiveStats(c: Pick<Cultivator, 'path' | 'level' | 'stats'>): Stats {
+  const primary = PATHS[c.path].primary;
+  const stats = { ...c.stats };
+  stats[primary] *= 1 + realmPrimaryBonus(c.level);
+  return stats;
 }
 
 /** At a cap with the XP for the next level held: the Tribulation is due. */

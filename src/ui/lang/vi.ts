@@ -88,6 +88,7 @@ const vi: Pack = {
     'realm.current': '(hiện tại)',
     'realm.levels': 'Cấp {from}–{to}',
     'realm.levelsFrom': 'Cấp {from}+',
+    'realm.withBonus': '{levels} · +{pct}% chỉ số chính',
 
     'character.title': 'Nhân vật',
     'character.equipped': 'Đang trang bị',
@@ -103,6 +104,7 @@ const vi: Pack = {
     'stat.agility': 'Thân Pháp',
     'stat.spirit': 'Thần Thức',
     'stats.base': 'Chỉ số gốc',
+    'stats.realmTip': 'Thưởng từ cảnh giới: {realm} ({base} + {boost} = {total})',
     'stats.plusOne': '+1 {stat}',
     'stats.all': 'Tất cả',
     'stats.allTo': 'Tất cả vào {stat}',

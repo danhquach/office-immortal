@@ -105,11 +105,11 @@ const saves: Record<string, GameState> = {
   'early-floor': playUntil(newGame(7, 'sword'), (s) => s.floor >= 3, DAY),
   // The late run with room in the bag; an Immortal item drops within the minute.
   'immortal-drop': immortalSoon(bulkTake(late, 'sell', 'heaven'), 60),
-  // A Body Refiner held at the Foundation Establishment cap, the Tribulation started.
+  // A Body Refiner held at the Foundation Establishment cap (level 22), the Tribulation started.
   tribulation: faceTribulation(
     playUntil(
       newGame(1, 'body'),
-      (s) => s.cultivator.level >= 20 && readyForTribulation(s.cultivator) && canFaceTribulation(s),
+      (s) => s.cultivator.level >= 22 && readyForTribulation(s.cultivator) && canFaceTribulation(s),
       5 * DAY,
     ),
   ),

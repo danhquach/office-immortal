@@ -410,7 +410,7 @@ describe('treasure tier realm gate', () => {
     ['spirit', 1, null],
     ['earth', 10, 11],
     ['heaven', 10, 11],
-    ['immortal', 20, 21],
+    ['immortal', 22, 23],
   ] as const)('gates a %s weapon: blocked at %s, allowed from %s', (grade, below, from) => {
     if (from === null) {
       expect(equip(at(below, grade), 0).cultivator.equipment.weapon?.grade).toBe(grade);
@@ -634,10 +634,10 @@ describe('faceTribulation', () => {
     expect(next.enemyNextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL);
   });
 
-  it('faces the last realm cap, level 90, with its own Tribulation', () => {
+  it('faces the last realm cap, level 162, with its own Tribulation', () => {
     const s = newGame(7, 'sword');
-    s.cultivator.level = 90;
-    s.cultivator.xp = xpToNext(90);
+    s.cultivator.level = 162;
+    s.cultivator.xp = xpToNext(162);
     expect(canFaceTribulation(s)).toBe(true);
     const next = faceTribulation(s);
     expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[8] });

@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { derive, newCultivator, REALMS, type Cultivator } from '../core/cultivator.ts';
+import {
+  derive,
+  newCultivator,
+  realmLevels,
+  realmOf,
+  REALMS,
+  type Cultivator,
+} from '../core/cultivator.ts';
 import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE, refineCost, rerollCost } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
@@ -41,6 +48,8 @@ import {
   pageOf,
   passiveRow,
   realmLabel,
+  realmBoost,
+  realmBoostTip,
   realmRows,
   retireLabel,
   SUMMARY_ICONS,
@@ -203,8 +212,8 @@ describe('equipBlock', () => {
 
   it('names the realm an Immortal Treasure needs below it, and nothing from it', () => {
     const relic = { ...stapler, grade: 'immortal' } as const;
-    expect(equipBlock(at(20), relic)).toBe('Requires Golden Core');
-    expect(equipBlock(at(21), relic)).toBeNull();
+    expect(equipBlock(at(22), relic)).toBe('Requires Golden Core');
+    expect(equipBlock(at(23), relic)).toBeNull();
   });
 
   it('never blocks a Magic Tool or another item type', () => {
@@ -433,10 +442,12 @@ describe('summaryIcon', () => {
     expect(summaryIcon('realm', 1)).toBe(2);
     expect(summaryIcon('realm', 10)).toBe(2);
     expect(summaryIcon('realm', 11)).toBe(3);
-    expect(summaryIcon('realm', 90)).toBe(10);
-    expect(summaryIcon('realm', 91)).toBe(11);
+    expect(summaryIcon('realm', 162)).toBe(10);
+    expect(summaryIcon('realm', 163)).toBe(11);
     expect(summaryIcon('realm', 3000)).toBe(11);
-    const cols = Array.from({ length: REALMS.length }, (_, r) => summaryIcon('realm', r * 10 + 1));
+    const cols = Array.from({ length: REALMS.length }, (_, r) =>
+      summaryIcon('realm', realmLevels(r).from),
+    );
     expect(new Set(cols).size).toBe(REALMS.length);
     expect(cols.every((c) => c >= 0 && c < SUMMARY_ICONS.length)).toBe(true);
   });
@@ -447,11 +458,11 @@ describe('realmLabel', () => {
     expect(realmLabel(1)).toBe('Qi Condensation · Intern');
     expect(realmLabel(10)).toBe('Qi Condensation · Intern');
     expect(realmLabel(11)).toBe('Foundation Establishment · Associate');
-    expect(realmLabel(90)).toBe('Tribulation Transcendence · Chairman');
+    expect(realmLabel(162)).toBe('Tribulation Transcendence · Chairman');
   });
 
   it('shows Immortal Ascension alone: it has no job title', () => {
-    expect(realmLabel(91)).toBe('Immortal Ascension');
+    expect(realmLabel(163)).toBe('Immortal Ascension');
     expect(realmLabel(3000)).toBe('Immortal Ascension');
   });
 });
@@ -460,16 +471,66 @@ describe('realmRows', () => {
   it('lists every realm in order with its job title and levels', () => {
     expect(realmRows(1).map((r) => [r.name, r.title, r.levels])).toEqual([
       ['Qi Condensation', 'Intern', 'Lv 1–10'],
-      ['Foundation Establishment', 'Associate', 'Lv 11–20'],
-      ['Golden Core', 'Team Lead', 'Lv 21–30'],
-      ['Nascent Soul', 'Manager', 'Lv 31–40'],
-      ['Spirit Transformation', 'Senior Manager', 'Lv 41–50'],
-      ['Void Refinement', 'Director', 'Lv 51–60'],
-      ['Body Integration', 'VP', 'Lv 61–70'],
-      ['Mahayana', 'CEO', 'Lv 71–80'],
-      ['Tribulation Transcendence', 'Chairman', 'Lv 81–90'],
-      ['Immortal Ascension', '', 'Lv 91+'],
+      ['Foundation Establishment', 'Associate', 'Lv 11–22 · +1% main stat'],
+      ['Golden Core', 'Team Lead', 'Lv 23–36 · +2.6% main stat'],
+      ['Nascent Soul', 'Manager', 'Lv 37–52 · +4.9% main stat'],
+      ['Spirit Transformation', 'Senior Manager', 'Lv 53–70 · +7.8% main stat'],
+      ['Void Refinement', 'Director', 'Lv 71–90 · +11.2% main stat'],
+      ['Body Integration', 'VP', 'Lv 91–112 · +15.4% main stat'],
+      ['Mahayana', 'CEO', 'Lv 113–136 · +20.1% main stat'],
+      ['Tribulation Transcendence', 'Chairman', 'Lv 137–162 · +25.5% main stat'],
+      ['Immortal Ascension', '', 'Lv 163+ · +31.5% main stat'],
     ]);
+  });
+
+  it('names the main-stat boost on every realm but the first', () => {
+    const rows = realmRows(1);
+    expect(rows[0]?.levels).toBe('Lv 1–10');
+    expect(rows[0]?.levels).not.toContain('main stat');
+    expect(rows[1]?.levels).toContain('+1% main stat');
+    expect(rows[9]?.levels).toBe('Lv 163+ · +31.5% main stat');
+  });
+});
+
+describe('realm boost on the Stats tab', () => {
+  /** A Sword cultivator at `level` with `agility` base points. */
+  function sword(level: number, agility: number): Cultivator {
+    const c = newGame(1, 'sword').cultivator;
+    return { ...c, level, stats: { ...c.stats, agility } };
+  }
+
+  it('shows what the realms add to the main stat only, apart from its base', () => {
+    const c = sword(47, 146);
+    // Nascent Soul: +4.875% of 146.
+    expect(realmBoost(c, 'agility')).toBe('+7.1');
+    expect(realmBoost(c, 'body')).toBe('');
+    expect(realmBoost(c, 'spirit')).toBe('');
+  });
+
+  it('shows nothing in the first realm', () => {
+    expect(realmBoost(sword(10, 146), 'agility')).toBe('');
+  });
+
+  it('gives a sum that adds up as shown, whatever the rounding', () => {
+    for (let agility = 5; agility < 2000; agility += 7) {
+      for (const level of [11, 23, 47, 100, 163]) {
+        const c = sword(level, agility);
+        const m = /\((\d+) \+ ([\d.]+) = ([\d.]+)\)/.exec(realmBoostTip(c, 'agility'));
+        expect(m).not.toBeNull();
+        const [, base, boost, total] = (m as RegExpExecArray).map(Number);
+        expect(Number(((base as number) + (boost as number)).toFixed(1))).toBe(total);
+        expect(realmBoost(c, 'agility')).toBe(boost === 0 ? '' : `+${boost}`);
+      }
+    }
+  });
+
+  it('names the realm and gives the sum in the tip', () => {
+    expect(realmBoostTip(sword(47, 146), 'agility')).toBe(
+      'Bonus from your realm: Nascent Soul (146 + 7.1 = 153.1)',
+    );
+    expect(realmBoostTip(sword(163, 200), 'agility')).toBe(
+      'Bonus from your realm: Immortal Ascension (200 + 63 = 263)',
+    );
   });
 
   it('marks only the realm the level is in as current, at both edges of a realm', () => {
@@ -478,10 +539,12 @@ describe('realmRows', () => {
     expect(current(1)).toEqual([0]);
     expect(current(10)).toEqual([0]);
     expect(current(11)).toEqual([1]);
-    expect(current(60)).toEqual([5]);
-    expect(current(61)).toEqual([6]);
-    expect(current(90)).toEqual([8]);
-    expect(current(91)).toEqual([9]);
+    expect(current(22)).toEqual([1]);
+    expect(current(23)).toEqual([2]);
+    expect(current(90)).toEqual([5]);
+    expect(current(91)).toEqual([6]);
+    expect(current(162)).toEqual([8]);
+    expect(current(163)).toEqual([9]);
     expect(current(3000)).toEqual([9]);
   });
 });
@@ -528,7 +591,7 @@ function dueAt(level: number): GameState {
   const s = newGame(1, 'sword');
   s.cultivator.level = level;
   s.cultivator.xp = xpToNext(level);
-  s.enemies.push(makeTribulation(1, Math.floor((level - 1) / 10)));
+  s.enemies.push(makeTribulation(1, realmOf(level)));
   return s;
 }
 
@@ -573,7 +636,7 @@ describe('tribulationCall', () => {
       name: 'Probation Review',
       next: 'Foundation Establishment',
     });
-    expect(tribulationCall(dueAt(90))).toEqual({
+    expect(tribulationCall(dueAt(162))).toEqual({
       name: 'Heavenly Audit',
       next: 'Immortal Ascension',
     });
