@@ -291,23 +291,23 @@ describe('t and tn', () => {
 
   it('puts the cultivation terms on the page in Vietnamese', () => {
     setLang('vi');
-    expect([1, 11, 23, 37].map(realmLabel)).toEqual([
+    expect([1, 11, 21, 41].map(realmLabel)).toEqual([
       'Luyện Khí · Thực Tập Sinh',
       'Trúc Cơ · Nhân Viên',
       'Kết Đan · Trưởng Nhóm',
       'Nguyên Anh · Trưởng Phòng',
     ]);
-    expect(realmLabel(137)).toBe('Độ Kiếp · Chủ Tịch');
-    expect(realmLabel(163)).toBe('Phi Thăng');
+    expect(realmLabel(171)).toBe('Độ Kiếp · Chủ Tịch');
+    expect(realmLabel(211)).toBe('Phi Thăng');
     expect(tabTitle(12, 3, true)).toBe('T12 · Đến lúc Độ Thiên Kiếp · 3 món đồ');
     const rows = realmRows(15);
     expect(rows[1]).toEqual({
       name: 'Trúc Cơ',
       title: 'Nhân Viên',
-      levels: 'Cấp 11–22 · +1% chỉ số chính',
+      levels: 'Cấp 11–20 · +1% chỉ số chính',
       current: true,
     });
-    expect(rows[9]?.levels).toBe('Cấp 163+ · +31.5% chỉ số chính');
+    expect(rows[9]?.levels).toBe('Cấp 211+ · +31.5% chỉ số chính');
   });
 
   it('keeps numbers in the same format in both languages', () => {

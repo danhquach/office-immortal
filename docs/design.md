@@ -48,30 +48,34 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 
 ## 4. Realms and levels
 
-Level-ups give stat points. Realms get longer and longer: the first is 10
-levels, and each one after it is 2 levels longer than the last. Each realm ends
-in a Tribulation boss that must be beaten to advance.
+Level-ups give stat points. Realms get longer as the run goes on: the first two
+are 10 levels, then 20, then 30 and the last 40, so every realm ends on a
+multiple of 10 and none is shorter than the one before. Each realm ends in a
+Tribulation boss that must be beaten to advance.
+
+The XP to the next level is 50 × 1.15^(level − 1): it grows at the same rate as
+a kill's XP per floor, so the pace of levelling holds as the run deepens, and
+even the price of level 210 is a whole number a save can hold.
 
 | Realm | Job title | Levels |
 |---|---|---|
 | Qi Condensation | Intern | 1–10 |
-| Foundation Establishment | Associate | 11–22 |
-| Golden Core | Team Lead | 23–36 |
-| Nascent Soul | Manager | 37–52 |
-| Spirit Transformation | Senior Manager | 53–70 |
-| Void Refinement | Director | 71–90 |
-| Body Integration | VP | 91–112 |
-| Mahayana | CEO | 113–136 |
-| Tribulation Transcendence | Chairman | 137–162 |
-| Immortal Ascension | — | 163+ (endless) |
+| Foundation Establishment | Associate | 11–20 |
+| Golden Core | Team Lead | 21–40 |
+| Nascent Soul | Manager | 41–60 |
+| Spirit Transformation | Senior Manager | 61–80 |
+| Void Refinement | Director | 81–110 |
+| Body Integration | VP | 111–140 |
+| Mahayana | CEO | 141–170 |
+| Tribulation Transcendence | Chairman | 171–210 |
+| Immortal Ascension | — | 211+ (endless) |
 
 The realm name is primary; the job title is shown beside it.
 
-- **The cap:** at level 10, 22, 36 … 162 (the last level of each realm) the
-  level stops; XP keeps coming and is
-  held. Once the next level's XP is held, the realm's Tribulation falls due and
-  joins the end of the current floor, so that floor can't be passed until it is
-  won.
+- **The cap:** at level 10, 20, 40, 60, 80, 110, 140, 170 and 210 (the last
+  level of each realm) the level stops; XP keeps coming and is held. Once the
+  next level's XP is held, the realm's Tribulation falls due and joins the end
+  of the current floor, so that floor can't be passed until it is won. Winning the one at level 210 opens Immortal Ascension.
 - **Facing it early:** while a Tribulation is due, a flashing alert above the
   fight names it and the realm it leads to. A click starts it at once: it steps
   to the front, the enemy it interrupts waits behind it, and the cultivator
@@ -102,11 +106,18 @@ The realm name is primary; the job title is shown beside it.
   is fought on.
 - **Older saves:** a save from the seven-realm ladder keeps its level; its realm
   is read from the table above. A Tribulation it had due is renamed for that
-  realm. A version 8 save (a cap every 10 levels) moves onto the longer realms
-  on load: XP it held at a cap that is no longer one buys its levels up to the
-  next cap, a Tribulation that is no longer due is dropped (a fresh floor
-  starts if it was the last enemy), one that is now due is queued, and HP above
-  the new max is clamped.
+  realm. A version 8 save (a cap every 10 levels) or a version 9 or 10 save (caps
+  at 10, 22, 36 … 162) moves onto the current realms on load: XP it held at a
+  cap that is no longer one buys its levels up to the next cap, a Tribulation
+  that is no longer due is dropped (a fresh floor starts if it was the last
+  enemy), one that is now due is queued, and HP above the new max is clamped.
+  A save before version 11 was also priced on the old XP curve (each level
+  1.2× the one before): it is read on that price, then moves onto the cheaper
+  one, so the XP it held buys the levels it now pays for (and may carry it onto
+  a cap, with that Tribulation queued if the cap's price is held too).
+  Realm is worked out from level, so a level can land in another realm: it may
+  move up one (levels 21–22) or down (most levels from 37 up), losing that
+  realm's +10% HP and damage and its main-stat bonus until it levels back up.
 
 ## 5. Floors and combat
 
@@ -283,7 +294,7 @@ Every drop is generated from a seeded roll.
   an **Immortal Treasure**.
 - **Tier gate:** a tier needs a minimum realm to equip. A Magic Tool needs
   none, a Spirit Treasure needs Foundation Establishment (level 11) and an
-  Immortal Treasure needs Golden Core (level 23). The gates sit low so a rare
+  Immortal Treasure needs Golden Core (level 21). The gates sit low so a rare
   drop is usable early in a run. Below the realm, Details names it ("Requires
   Golden Core to equip.") and the Equip action is disabled; a double-click or
   drag does nothing. The gate applies only when equipping, so a weapon already
@@ -565,8 +576,11 @@ on every autosave, and is always the copy the game plays from.
   moves onto the newer release instead (Updates, below).
 
 - **Version 9** has the longer realms (§4): a cap at 10, 22, 36 … 162 instead
-  of every 10 levels up to 90, so XP is held only at those levels. Version 8
-  saves are moved onto them on load (§4, older saves).
+  of every 10 levels up to 90, so XP is held only at those levels.
+- **Version 11** has the caps on multiples of 10 (§4): 10, 20, 40, 60, 80, 110,
+  140, 170, 210, and the cheaper XP curve of 50 × 1.15^(level − 1) per level
+  (it was 1.2 before). Version 8, 9 and 10 saves are moved onto both on load,
+  held XP buying the levels it now pays for (§4, older saves).
 
 ### Updates
 
@@ -868,7 +882,7 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   Spirit Essence open with a small icon (decorative, hidden from screen
   readers); the Realm icon changes at each breakthrough. Hovering or focusing
   the Realm chip lists every realm in order with its job title and levels ("Lv
-  11–22 · +1% main stat"; Immortal Ascension "Lv 163+ · +31.5% main stat"),
+  11–20 · +1% main stat"; Immortal Ascension "Lv 211+ · +31.5% main stat"),
   the current one highlighted; it closes when the pointer and focus leave, or
   on Escape. A tap opens it on a touch screen; tapping elsewhere closes it.
   Level and XP to the next level are a yellow progress bar along the foot of

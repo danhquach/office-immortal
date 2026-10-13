@@ -232,8 +232,8 @@ describe('equipBlock', () => {
 
   it('names the realm an Immortal Treasure needs below it, and nothing from it', () => {
     const relic = { ...stapler, grade: 'immortal' } as const;
-    expect(equipBlock(at(22), relic)).toBe('Requires Golden Core');
-    expect(equipBlock(at(23), relic)).toBeNull();
+    expect(equipBlock(at(20), relic)).toBe('Requires Golden Core');
+    expect(equipBlock(at(21), relic)).toBeNull();
   });
 
   it('never blocks a Magic Tool or another item type', () => {
@@ -552,8 +552,8 @@ describe('summaryIcon', () => {
     expect(summaryIcon('realm', 1)).toBe(2);
     expect(summaryIcon('realm', 10)).toBe(2);
     expect(summaryIcon('realm', 11)).toBe(3);
-    expect(summaryIcon('realm', 162)).toBe(10);
-    expect(summaryIcon('realm', 163)).toBe(11);
+    expect(summaryIcon('realm', 210)).toBe(10);
+    expect(summaryIcon('realm', 211)).toBe(11);
     expect(summaryIcon('realm', 3000)).toBe(11);
     const cols = Array.from({ length: REALMS.length }, (_, r) =>
       summaryIcon('realm', realmLevels(r).from),
@@ -568,11 +568,11 @@ describe('realmLabel', () => {
     expect(realmLabel(1)).toBe('Qi Condensation · Intern');
     expect(realmLabel(10)).toBe('Qi Condensation · Intern');
     expect(realmLabel(11)).toBe('Foundation Establishment · Associate');
-    expect(realmLabel(162)).toBe('Tribulation Transcendence · Chairman');
+    expect(realmLabel(210)).toBe('Tribulation Transcendence · Chairman');
   });
 
   it('shows Immortal Ascension alone: it has no job title', () => {
-    expect(realmLabel(163)).toBe('Immortal Ascension');
+    expect(realmLabel(211)).toBe('Immortal Ascension');
     expect(realmLabel(3000)).toBe('Immortal Ascension');
   });
 });
@@ -581,15 +581,15 @@ describe('realmRows', () => {
   it('lists every realm in order with its job title and levels', () => {
     expect(realmRows(1).map((r) => [r.name, r.title, r.levels])).toEqual([
       ['Qi Condensation', 'Intern', 'Lv 1–10'],
-      ['Foundation Establishment', 'Associate', 'Lv 11–22 · +1% main stat'],
-      ['Golden Core', 'Team Lead', 'Lv 23–36 · +2.6% main stat'],
-      ['Nascent Soul', 'Manager', 'Lv 37–52 · +4.9% main stat'],
-      ['Spirit Transformation', 'Senior Manager', 'Lv 53–70 · +7.8% main stat'],
-      ['Void Refinement', 'Director', 'Lv 71–90 · +11.2% main stat'],
-      ['Body Integration', 'VP', 'Lv 91–112 · +15.4% main stat'],
-      ['Mahayana', 'CEO', 'Lv 113–136 · +20.1% main stat'],
-      ['Tribulation Transcendence', 'Chairman', 'Lv 137–162 · +25.5% main stat'],
-      ['Immortal Ascension', '', 'Lv 163+ · +31.5% main stat'],
+      ['Foundation Establishment', 'Associate', 'Lv 11–20 · +1% main stat'],
+      ['Golden Core', 'Team Lead', 'Lv 21–40 · +2.6% main stat'],
+      ['Nascent Soul', 'Manager', 'Lv 41–60 · +4.9% main stat'],
+      ['Spirit Transformation', 'Senior Manager', 'Lv 61–80 · +7.8% main stat'],
+      ['Void Refinement', 'Director', 'Lv 81–110 · +11.2% main stat'],
+      ['Body Integration', 'VP', 'Lv 111–140 · +15.4% main stat'],
+      ['Mahayana', 'CEO', 'Lv 141–170 · +20.1% main stat'],
+      ['Tribulation Transcendence', 'Chairman', 'Lv 171–210 · +25.5% main stat'],
+      ['Immortal Ascension', '', 'Lv 211+ · +31.5% main stat'],
     ]);
   });
 
@@ -598,7 +598,7 @@ describe('realmRows', () => {
     expect(rows[0]?.levels).toBe('Lv 1–10');
     expect(rows[0]?.levels).not.toContain('main stat');
     expect(rows[1]?.levels).toContain('+1% main stat');
-    expect(rows[9]?.levels).toBe('Lv 163+ · +31.5% main stat');
+    expect(rows[9]?.levels).toBe('Lv 211+ · +31.5% main stat');
   });
 });
 
@@ -623,7 +623,7 @@ describe('realm boost on the Stats tab', () => {
 
   it('gives a sum that adds up as shown, whatever the rounding', () => {
     for (let agility = 5; agility < 2000; agility += 7) {
-      for (const level of [11, 23, 47, 100, 163]) {
+      for (const level of [11, 21, 47, 100, 211]) {
         const c = sword(level, agility);
         const m = /\((\d+) \+ ([\d.]+) = ([\d.]+)\)/.exec(realmBoostTip(c, 'agility'));
         expect(m).not.toBeNull();
@@ -638,7 +638,7 @@ describe('realm boost on the Stats tab', () => {
     expect(realmBoostTip(sword(47, 146), 'agility')).toBe(
       'Bonus from your realm: Nascent Soul (146 + 7.1 = 153.1)',
     );
-    expect(realmBoostTip(sword(163, 200), 'agility')).toBe(
+    expect(realmBoostTip(sword(211, 200), 'agility')).toBe(
       'Bonus from your realm: Immortal Ascension (200 + 63 = 263)',
     );
   });
@@ -649,12 +649,12 @@ describe('realm boost on the Stats tab', () => {
     expect(current(1)).toEqual([0]);
     expect(current(10)).toEqual([0]);
     expect(current(11)).toEqual([1]);
-    expect(current(22)).toEqual([1]);
-    expect(current(23)).toEqual([2]);
-    expect(current(90)).toEqual([5]);
-    expect(current(91)).toEqual([6]);
-    expect(current(162)).toEqual([8]);
-    expect(current(163)).toEqual([9]);
+    expect(current(20)).toEqual([1]);
+    expect(current(21)).toEqual([2]);
+    expect(current(80)).toEqual([4]);
+    expect(current(81)).toEqual([5]);
+    expect(current(210)).toEqual([8]);
+    expect(current(211)).toEqual([9]);
     expect(current(3000)).toEqual([9]);
   });
 });
@@ -746,7 +746,7 @@ describe('tribulationCall', () => {
       name: 'Probation Review',
       next: 'Foundation Establishment',
     });
-    expect(tribulationCall(dueAt(162))).toEqual({
+    expect(tribulationCall(dueAt(210))).toEqual({
       name: 'Heavenly Audit',
       next: 'Immortal Ascension',
     });

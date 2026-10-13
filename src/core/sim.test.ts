@@ -410,7 +410,7 @@ describe('treasure tier realm gate', () => {
     ['spirit', 1, null],
     ['earth', 10, 11],
     ['heaven', 10, 11],
-    ['immortal', 22, 23],
+    ['immortal', 20, 21],
   ] as const)('gates a %s weapon: blocked at %s, allowed from %s', (grade, below, from) => {
     if (from === null) {
       expect(equip(at(below, grade), 0).cultivator.equipment.weapon?.grade).toBe(grade);
@@ -596,8 +596,12 @@ describe('faceTribulation', () => {
     expect(() => faceTribulation(fighting)).toThrow(RangeError);
   });
 
+  /** The first Tribulation (level 10) queued, the enemy it will interrupt still in front. */
+  const firstDue = (x: GameState) =>
+    hasTribulation(x) && x.cultivator.level === 10 && x.enemies[0]?.kind !== 'tribulation';
+
   it('brings the Tribulation to the front at full HP, the interrupted enemy behind it', () => {
-    const s = until(newGame(7, 'sword'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    const s = until(newGame(7, 'sword'), firstDue);
     s.cultivator.hp = 1;
     const interrupted = s.enemies[0]!;
     const next = faceTribulation(s);
@@ -634,10 +638,10 @@ describe('faceTribulation', () => {
     expect(next.enemyNextAttackAt).toBeGreaterThan(paused.time + ENEMY_ARRIVAL);
   });
 
-  it('faces the last realm cap, level 162, with its own Tribulation', () => {
+  it('faces the last realm cap, level 210, with its own Tribulation', () => {
     const s = newGame(7, 'sword');
-    s.cultivator.level = 162;
-    s.cultivator.xp = xpToNext(162);
+    s.cultivator.level = 210;
+    s.cultivator.xp = xpToNext(210);
     expect(canFaceTribulation(s)).toBe(true);
     const next = faceTribulation(s);
     expect(next.enemies[0]).toMatchObject({ kind: 'tribulation', name: TRIBULATIONS[8] });
@@ -667,7 +671,7 @@ describe('faceTribulation', () => {
   });
 
   it('replays the floor on a loss, with the Tribulation due again', () => {
-    let s = until(newGame(7, 'sword'), (x) => hasTribulation(x) && x.enemies.length > 2);
+    let s = until(newGame(7, 'sword'), firstDue);
     const { floor, deaths } = s;
     s = faceTribulation(s);
     s.enemies[0]!.damage = 1e9;

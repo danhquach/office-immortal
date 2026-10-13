@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isRealmCap, LAST_CAP, readyForTribulation, realmOf } from '../core/cultivator.ts';
+import {
+  isRealmCap,
+  LAST_CAP,
+  readyForTribulation,
+  realmOf,
+  xpToNext,
+} from '../core/cultivator.ts';
 import { INVENTORY_SIZE, MAX_BAG_SIZE } from '../core/economy.ts';
 import { GRADES, namesFor, SLOTS, soulCap, type GradeId, type SlotId } from '../core/loot.ts';
 import { canEquip, canFaceTribulation, equip, newGame, tick, type GameState } from '../core/sim.ts';
@@ -99,14 +105,16 @@ describe('debug setups', () => {
       9,
       10,
       11,
-      22,
-      23,
-      36,
-      37,
-      90,
-      91,
-      LAST_CAP,
-      LAST_CAP + 1,
+      20,
+      21,
+      40,
+      41,
+      110,
+      111,
+      170,
+      171,
+      210,
+      211,
       MAX_DEBUG_LEVEL,
     ]) {
       const s = setLevel(game(), level);
@@ -116,13 +124,15 @@ describe('debug setups', () => {
       // It plays on from there.
       loads(tick(s, 120));
     }
+    // Every level a setup reaches keeps its XP price a safe whole number.
+    expect(Number.isSafeInteger(xpToNext(MAX_DEBUG_LEVEL))).toBe(true);
     expect(() => setLevel(game(), 0)).toThrow(RangeError);
     expect(() => setLevel(game(), MAX_DEBUG_LEVEL + 1)).toThrow(RangeError);
     expect(() => setLevel(game(), Number.POSITIVE_INFINITY)).toThrow(RangeError);
   });
 
   it('gated weapons go in the bag at level 1, where they cannot be equipped', () => {
-    const s = SCENARIOS.gatedWeapons(setLevel(game(), 23));
+    const s = SCENARIOS.gatedWeapons(setLevel(game(), 21));
     expect(s.cultivator.level).toBe(1);
     expect(s.inventory.map((i) => i.grade)).toEqual(['earth', 'heaven', 'immortal']);
     for (const item of s.inventory) expect(canEquip(s.cultivator, item)).toBe(false);
@@ -130,11 +140,11 @@ describe('debug setups', () => {
 
   it('refuses a lower level while a weapon it could not equip is worn', () => {
     const name = namesFor('weapon', 'immortal')[0] as string;
-    // Golden Core starts at 23; 22 is the top of Foundation Establishment.
-    const golden = setLevel(game(), 23);
+    // Golden Core starts at 21; 20 is the top of Foundation Establishment.
+    const golden = setLevel(game(), 21);
     const s = equip(addItem(golden, 'weapon', 'immortal', name, 1), 0, 'weapon');
-    expect(() => setLevel(s, 22)).toThrow(/higher realm/);
-    loads(setLevel(s, 23));
+    expect(() => setLevel(s, 20)).toThrow(/higher realm/);
+    loads(setLevel(s, 21));
   });
 
   it('starts a fresh run on the chosen Path', () => {
@@ -220,11 +230,13 @@ describe('debug setups', () => {
     for (const [level, cap] of [
       [1, 10],
       [10, 10],
-      [11, 22],
-      [15, 22],
-      [23, 36],
-      [61, 70],
-      [LAST_CAP, LAST_CAP],
+      [11, 20],
+      [15, 20],
+      [21, 40],
+      [61, 80],
+      [170, 170],
+      [171, 210],
+      [210, 210],
     ]) {
       const s = skipToTribulation(setLevel(game(), level as number));
       expect(isRealmCap(s.cultivator.level)).toBe(true);
@@ -234,7 +246,11 @@ describe('debug setups', () => {
       expect(canFaceTribulation(s)).toBe(true);
       loads(s);
     }
-    expect(() => skipToTribulation(setLevel(game(), LAST_CAP + 1))).toThrow(/no Tribulation/);
+    // Past the last cap there is no Tribulation left to skip to.
+    expect(LAST_CAP).toBeLessThan(MAX_DEBUG_LEVEL);
+    for (const level of [LAST_CAP + 1, MAX_DEBUG_LEVEL]) {
+      expect(() => skipToTribulation(setLevel(game(), level))).toThrow(/no Tribulation/);
+    }
   });
 
   it('forces a drop on a kill that dropped nothing, through pickUp', () => {

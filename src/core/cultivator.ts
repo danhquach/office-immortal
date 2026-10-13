@@ -42,7 +42,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     critMultiplier: 1.5,
     lifesteal: 0,
     burstEvery: 3,
-    burstMultiplier: 4,
+    burstMultiplier: 5,
   },
 };
 
@@ -132,14 +132,8 @@ export const REALMS: readonly Realm[] = [
   { name: 'Immortal Ascension', title: null },
 ];
 
-/** The first realm's length in levels; each realm after it is REALM_GROWTH longer. */
-export const FIRST_REALM_LEVELS = 10;
-export const REALM_GROWTH = 2;
-/** The last level of each realm below Immortal Ascension: 10, 22, 36, … 162. */
-export const REALM_CAPS: readonly number[] = Array.from(
-  { length: REALMS.length - 1 },
-  (_, i) => (i + 1) * FIRST_REALM_LEVELS + (REALM_GROWTH * i * (i + 1)) / 2,
-);
+/** The last level of each realm below Immortal Ascension: 10, 20, 40, 60, 80, 110, 140, 170, 210. */
+export const REALM_CAPS: readonly number[] = [10, 20, 40, 60, 80, 110, 140, 170, 210];
 /** Max HP and damage each realm reached adds, as a share. */
 export const REALM_BONUS = 0.1;
 /**
@@ -155,7 +149,7 @@ const REALM_PRIMARY_STEP_GROWTH =
 /** The last capped level; past it, Immortal Ascension levels without end. */
 export const LAST_CAP = REALM_CAPS[REALM_CAPS.length - 1] as number;
 
-/** Index into REALMS for a level: 1–10 is 0, 11–22 is 1, …, 163+ is Immortal Ascension. */
+/** Index into REALMS for a level: 1–10 is 0, 11–20 is 1, …, 211+ is Immortal Ascension. */
 export function realmOf(level: number): number {
   const i = REALM_CAPS.findIndex((cap) => level <= cap);
   return i < 0 ? REALMS.length - 1 : i;
@@ -166,7 +160,7 @@ export function realmLevels(i: number): { from: number; to: number | null } {
   return { from: (REALM_CAPS[i - 1] ?? 0) + 1, to: REALM_CAPS[i] ?? null };
 }
 
-/** True for 10, 22, … 162: the level can't be passed without a Tribulation win. */
+/** True for 10, 20, … 210: the level can't be passed without a Tribulation win. */
 export function isRealmCap(level: number): boolean {
   return REALM_CAPS.includes(level);
 }
@@ -194,9 +188,12 @@ export function readyForTribulation(c: Pick<Cultivator, 'level' | 'xp'>): boolea
   return isRealmCap(c.level) && c.xp >= xpToNext(c.level);
 }
 
+/** How much dearer each level is than the one before: the same growth as a kill's XP per floor. */
+export const LEVEL_XP_GROWTH = 1.15;
+
 /** XP needed to go from `level` to `level + 1`. */
 export function xpToNext(level: number): number {
-  return Math.round(50 * 1.2 ** (level - 1));
+  return Math.round(50 * LEVEL_XP_GROWTH ** (level - 1));
 }
 
 /** A level 1 cultivator; `bonusPoints` (from Dao Insight passives) go to the primary stat. */

@@ -83,16 +83,17 @@ import { arr, Bad, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 11;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
  * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners;
  * v6 had seven realms, so a due Tribulation may carry another realm's name;
  * v7 came before crafting, so no item has a refine level; v8 had a cap every
- * 10 levels; v9 came before the store and its boosts.
+ * 10 levels; v9 came before the store and its boosts; v10 had caps at 10, 22,
+ * 36 … 162.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -284,9 +285,10 @@ function readState(v: unknown, version: number): GameState {
   // Before v6 there were no Soul Banners, so no souls.
   const before6 = version < 6;
   // Before v8 there was no crafting, so no item carries a refine level.
-  // Before v9 the realm ladder was different (seven realms before v7, then a
-  // cap every 10 levels): a due Tribulation is renamed for its realm.
-  const before9 = version < 9;
+  // Before v11 the realm ladder was different (seven realms before v7, then a
+  // cap every 10 levels, then caps 2 levels further apart each): a due
+  // Tribulation is renamed for its realm.
+  const oldCaps = oldLadder(version);
   // Before v10 there was no store, so no stock and no boosts.
   const before10 = version < 10;
   const items: ItemReader = {
@@ -329,7 +331,7 @@ function readState(v: unknown, version: number): GameState {
     bonusPoints(passives),
     items,
     before4,
-    before9,
+    oldCaps,
   );
   const state: GameState = {
     time,
@@ -341,8 +343,8 @@ function readState(v: unknown, version: number): GameState {
       o.enemies,
       floor,
       cultivator,
-      before9 ? heldAtOldCap(cultivator) : readyForTribulation(cultivator),
-      before9,
+      oldCaps ? heldAtOldCap(cultivator, oldCaps) : readyForTribulation(cultivator),
+      oldCaps !== null,
     ),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
     // Left behind while no Killing Array is equipped, so it may be in the past.
@@ -366,7 +368,7 @@ function readState(v: unknown, version: number): GameState {
     store: before10 ? emptyStore() : readStore(o.store, time),
     boosts: before10 ? noBoosts() : readBoosts(o.boosts, time),
   };
-  if (before9) toLongerRealms(state);
+  if (oldCaps) toNewRealms(state);
   return state;
 }
 
@@ -438,8 +440,10 @@ function readCultivator(
   bonus: number,
   items: ItemReader,
   before4: boolean,
-  before9: boolean,
+  oldCaps: readonly number[] | null,
 ): Cultivator {
+  // An older save was priced on the old XP curve; what it held below a cap still counts.
+  const price = oldCaps ? oldXpToNext : xpToNext;
   const o = obj(v, [
     'path',
     'level',
@@ -478,9 +482,9 @@ function readCultivator(
     level,
     // XP past a realm cap is held until the Tribulation is won. Below one, the
     // limit may be another engine's (see same()), so it is kept within ours.
-    xp: (before9 ? level % OLD_REALM_LEVELS === 0 && level <= OLD_LAST_CAP : isRealmCap(level))
+    xp: (oldCaps ? oldCaps.includes(level) : isRealmCap(level))
       ? int(o.xp, 0, COUNT)
-      : Math.min(int(o.xp, 0, give(xpToNext(level) - 1)), xpToNext(level) - 1),
+      : Math.min(int(o.xp, 0, give(price(level) - 1)), price(level) - 1, COUNT),
     stats,
     unspent,
     equipment,
@@ -488,7 +492,7 @@ function readCultivator(
     nextAttackAt: num(o.nextAttackAt, time, time + MAX_INTERVAL),
     attackCount: int(o.attackCount, 0, Number.MAX_SAFE_INTEGER),
   };
-  if (before9) {
+  if (oldCaps) {
     // The old ladder may have put this level in a higher realm, with a bigger bonus.
     const max = derive(c).maxHp;
     c.hp = Math.min(
@@ -515,19 +519,32 @@ const NAMES: Readonly<Record<Exclude<EnemyKind, 'tribulation'>, readonly string[
 };
 
 /** v8's realm ladder: a cap every 10 levels up to 90. */
-const OLD_REALM_LEVELS = 10;
-const OLD_LAST_CAP = 90;
+const V8_CAPS: readonly number[] = [10, 20, 30, 40, 50, 60, 70, 80, 90];
+/** v9 and v10's: each realm 2 levels longer than the one before. */
+const V10_CAPS: readonly number[] = [10, 22, 36, 52, 70, 90, 112, 136, 162];
 
-/** Whether a v8 cultivator was held at a cap of its ladder with a Tribulation due. */
-function heldAtOldCap(c: Cultivator): boolean {
-  return c.level % OLD_REALM_LEVELS === 0 && c.level <= OLD_LAST_CAP && c.xp >= xpToNext(c.level);
+/** XP to the next level before v11, when each level was 1.2× the one before. */
+function oldXpToNext(level: number): number {
+  return Math.round(50 * 1.2 ** (level - 1));
+}
+
+/** The caps a save of `version` was played on, or null when they are the current ones. */
+function oldLadder(version: number): readonly number[] | null {
+  if (version < 9) return V8_CAPS;
+  return version < 11 ? V10_CAPS : null;
+}
+
+/** Whether a cultivator from an old ladder was held at one of its caps with a Tribulation due. */
+function heldAtOldCap(c: Cultivator, caps: readonly number[]): boolean {
+  return caps.includes(c.level) && c.xp >= oldXpToNext(c.level);
 }
 
 /**
- * Moves a v8 run onto the longer realms: XP held at a cap that is no longer
- * one buys its levels, and a Tribulation is due only at a cap of the new ladder.
+ * Moves an older run onto the current realms and XP curve: XP held (at a cap
+ * that is no longer one, or now worth more levels) buys its levels, and a
+ * Tribulation is due only at a cap of the current ladder.
  */
-function toLongerRealms(s: GameState): void {
+function toNewRealms(s: GameState): void {
   const c = s.cultivator;
   gainXp(c, 0);
   const ready = readyForTribulation(c);
