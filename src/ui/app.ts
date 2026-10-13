@@ -2314,10 +2314,19 @@ function play(
     card.append(icon, text, buy);
     return { card, icon, name, desc, why, buy, drawn: '' };
   });
-  const storeList = el('ul', 'offers');
-  storeList.append(...storeCards.map((c) => c.card));
+  // Chests and boosts each get a headed section; drawStore moves a card into
+  // its section when the stock changes.
+  const storeGroup = (title: MessageKey) => {
+    const list = el('ul', 'offers');
+    const box = el('section', 'offer-group');
+    box.append(elt('h3', '', title), list);
+    box.hidden = true;
+    return { box, list };
+  };
+  const chestGroup = storeGroup('store.chests');
+  const boostGroup = storeGroup('store.boosts');
   const storeBody = el('div', 'store');
-  storeBody.append(storeHead, storeList);
+  storeBody.append(storeHead, chestGroup.box, boostGroup.box);
 
   const bagTabs = tabs([
     { id: 'bag', label: 'tab.bag', body: bagBody },
@@ -3670,7 +3679,8 @@ function play(
     setButton(refreshBtn, refresh.text, refresh.off);
     setText(refreshWhy, refresh.why);
     // Only the step syncs the stock; until it has, the old cards stay as they are.
-    if (!storeStale(state))
+    if (!storeStale(state)) {
+      let restocked = false;
       storeCards.forEach((c, at) => {
         const card = offerCard(state, at);
         setButton(c.buy, card.buy, card.off);
@@ -3684,8 +3694,21 @@ function play(
           c.drawn = card.id;
           setStoreIcon(c.icon, storeIcon(card.id));
           c.name.className = card.grade ? `title grade-${card.grade}` : 'title';
+          restocked = true;
         }
       });
+      if (restocked) {
+        // Moving a card drops focus, so a focused Buy gets it back.
+        const focused = document.activeElement;
+        const of = (kind: string) =>
+          storeCards.filter((c) => c.drawn.startsWith(kind)).map((c) => c.card);
+        chestGroup.list.replaceChildren(...of('chest-'));
+        boostGroup.list.replaceChildren(...of('boost-'));
+        if (focused instanceof HTMLElement && focused !== document.activeElement) focused.focus();
+        chestGroup.box.hidden = chestGroup.list.children.length === 0;
+        boostGroup.box.hidden = boostGroup.list.children.length === 0;
+      }
+    }
     const lines = boostLines(state);
     const key = lines.join('\n');
     if (boostList.dataset.lines !== key) {
