@@ -15,14 +15,16 @@ import { describeError, type Cloud, type CloudMessage } from '../storage/cloud.t
 import { LINK_PROTOCOL, readLinkDone } from '../storage/frame-protocol.ts';
 import { allowedParent, storageWorks } from '../storage/frame-host.ts';
 import type { SaveStorage } from '../storage/save.ts';
-import { cloudText } from './cloud-view.ts';
+import { cloudText, linkCodeLine, type CodeLine } from './cloud-view.ts';
 import { readLang, setLang, t } from './i18n.ts';
 
-/** What the frame shows: its one button and the line under it. */
+/** What the frame shows: its one button and the line under it (a code, or a message). */
 export interface CodeView {
   label: string;
   busy: boolean;
+  /** The message under the button, when there is no code to show. */
   line: string;
+  code: CodeLine | null;
 }
 
 export interface CodeFrameDeps {
@@ -63,13 +65,9 @@ export function createCodeFrame(deps: CodeFrameDeps): CodeFrame | null {
 
   function redraw(): void {
     setLang(readLang(storage, deps.languages));
-    let line = '';
-    if (shown && 'code' in shown) {
-      line = t('cloud.code', { code: shown.code, minutes: Math.round(shown.ttl / 60) });
-    } else if (shown) {
-      line = cloudText(shown.message);
-    }
-    deps.show({ label: t('cloud.getCode'), busy, line });
+    const code = shown && 'code' in shown ? linkCodeLine(shown.code, shown.ttl) : null;
+    const line = shown && 'message' in shown ? cloudText(shown.message) : '';
+    deps.show({ label: t('cloud.getCode'), busy, line, code });
   }
 
   async function press(trusted: boolean): Promise<void> {

@@ -119,7 +119,15 @@ import {
   type Unseen,
 } from './hud.ts';
 import { artUrl } from './art.ts';
-import { cloudStatusLine, cloudText, frameStep, needsChoice, saveSummary } from './cloud-view.ts';
+import {
+  cloudStatusLine,
+  cloudText,
+  frameStep,
+  linkCodeLine,
+  needsChoice,
+  saveSummary,
+} from './cloud-view.ts';
+import { showCodeLine } from './code-line.ts';
 import {
   enemyNameParts,
   lang,
@@ -1290,19 +1298,14 @@ function cloudPanels(
   const codeLine = el('p', 'muted');
   /** The link code on show, kept so a language switch can word it again. */
   let shownCode: { code: string; ttl: number } | null = null;
-  say(() => {
-    codeLine.textContent = shownCode
-      ? t('cloud.code', { code: shownCode.code, minutes: Math.round(shownCode.ttl / 60) })
-      : '';
-  });
+  const showCode = (): void =>
+    showCodeLine(codeLine, shownCode && linkCodeLine(shownCode.code, shownCode.ttl));
+  say(showCode);
   const getCode = buttonT('cloud.getCode', '', () => {
     void cloud.linkCode().then((made) => {
       if (!made) return;
       shownCode = made;
-      codeLine.textContent = t('cloud.code', {
-        code: made.code,
-        minutes: Math.round(made.ttl / 60),
-      });
+      showCode();
     });
   });
   /** On itch.io, the code is made and shown, or typed, in frames on GitHub Pages instead (ui/code-frame.ts). */
@@ -1310,7 +1313,7 @@ function cloudPanels(
   const linkSlot = el('div');
   const turnOff = buttonT('cloud.turnOff', '', () => {
     shownCode = null;
-    codeLine.textContent = '';
+    showCode();
     cloud.turnOff();
   });
   const linkBox = el('label', 'field');

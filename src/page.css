@@ -1911,6 +1911,21 @@ button:is(.sell, .salvage):not([aria-disabled='true']):hover {
   align-items: end;
   margin-top: 0.4rem;
 }
+/* A link code to copy by hand: monospace with a slashed zero (never read as D
+   or O), its two groups kept on one line. Menu and code frame alike. */
+.link-code {
+  font-family: ui-monospace, Menlo, Consolas, 'DejaVu Sans Mono', monospace;
+  font-variant-numeric: slashed-zero;
+  font-weight: 700;
+  font-size: 1.1em;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  color: var(--ink);
+}
+/* The code spelled out for a screen reader stays out of a copied line. */
+.link-code + .sr-only {
+  user-select: none;
+}
 .settings .cloud-row[hidden] {
   display: none;
 }
