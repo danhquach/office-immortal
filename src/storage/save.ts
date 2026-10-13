@@ -121,6 +121,27 @@ export function decodeSave(raw: unknown): Save | null {
   }
 }
 
+/** The highest save version taken as a real later release's; anything above is damaged. */
+const MAX_FUTURE_VERSION = 1000;
+
+/**
+ * Whether `raw` is a save from a later release of the game than this one: the
+ * save's outer shape with a version above SAVE_VERSION. Its state is not read
+ * (this build doesn't know its fields); only the newer build loads it. Anything
+ * else that decodeSave refuses is damaged, not newer.
+ */
+export function isNewerSave(raw: unknown): boolean {
+  if (typeof raw !== 'string' || raw.length > MAX_SAVE_CHARS) return false;
+  try {
+    const o = obj(JSON.parse(raw), ['v', 'savedAt', 'state']);
+    int(o.savedAt, 0, Number.MAX_SAFE_INTEGER);
+    obj(o.state, Object.keys(o.state as object));
+    return int(o.v, SAVE_VERSION + 1, MAX_FUTURE_VERSION) > SAVE_VERSION;
+  } catch {
+    return false;
+  }
+}
+
 /** Writes the save; returns false when storage refuses (full, blocked). */
 export function writeSave(storage: SaveStorage, state: GameState, savedAt: number): boolean {
   return writeRaw(storage, encodeSave(state, savedAt));

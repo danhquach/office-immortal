@@ -23,7 +23,7 @@ import {
   writeMeta,
   type CloudMeta,
 } from './cloud-meta.ts';
-import { decodeSave, SAVE_KEY, type Save, type SaveStorage } from './save.ts';
+import { decodeSave, isNewerSave, SAVE_KEY, type Save, type SaveStorage } from './save.ts';
 
 /** The most often an automatic upload is sent. */
 export const UPLOAD_EVERY_MS = 60_000;
@@ -43,7 +43,12 @@ export type SyncStatus =
   /** Both saves moved on: the player chooses. */
   | { kind: 'conflict'; local: Save; server: Save }
   /** The cloud's save fails the allow-list; the local save is kept until the player overwrites it. */
-  | { kind: 'unreadable' };
+  | { kind: 'unreadable' }
+  /**
+   * The cloud's or the local save is from a later release than this build:
+   * nothing uploads or loads until the page runs that release (the UI reloads).
+   */
+  | { kind: 'update' };
 
 export interface SyncDeps {
   cloud: Cloud;
@@ -118,6 +123,11 @@ export function createSync(deps: SyncDeps): Sync {
   function setStatus(s: SyncStatus): void {
     status = s;
     for (const fn of listeners) fn(s);
+  }
+
+  /** Waiting on the player's choice or a newer release: nothing uploads. */
+  function paused(): boolean {
+    return status.kind === 'conflict' || status.kind === 'unreadable' || status.kind === 'update';
   }
 
   function store(meta: CloudMeta): boolean {
@@ -209,8 +219,14 @@ export function createSync(deps: SyncDeps): Sync {
       }
       return;
     }
-    choice = server;
     const decoded = decodeSave(server.data);
+    if (!decoded && isNewerSave(server.data)) {
+      // Not damaged, just newer than this build: the release that reads it settles it.
+      choice = null;
+      setStatus({ kind: 'update' });
+      return;
+    }
+    choice = server;
     if (!decoded) {
       if (meta.rejectedRev !== server.rev) {
         if (!store({ ...meta, saveId: server.saveId, rejectedRev: server.rev })) return;
@@ -295,12 +311,11 @@ export function createSync(deps: SyncDeps): Sync {
   function dropped(sending: { raw: string }): void {
     if (!readMeta(storage)) setStatus({ kind: 'off' });
     // A choice the player is looking at stays as it is.
-    else if (status.kind !== 'conflict' && status.kind !== 'unreadable') recheck(sending);
+    else if (!paused()) recheck(sending);
   }
 
   async function upload(reason: 'timer' | 'manual' | 'hidden' | 'pagehide'): Promise<void> {
-    if (broken || !latest || !checked) return;
-    if (status.kind === 'conflict' || status.kind === 'unreadable') return;
+    if (broken || !latest || !checked || paused()) return;
     // A put is already out. A second at the same revision would race it, and one built on the
     // next revision could overwrite another device's save. So a page-leave waits: the last
     // seconds reach the cloud next session, and may then show as a both-moved choice (README).
@@ -382,8 +397,7 @@ export function createSync(deps: SyncDeps): Sync {
   }
 
   function maybeUpload(): void {
-    if (broken || status.kind === 'off' || status.kind === 'relink') return;
-    if (status.kind === 'conflict' || status.kind === 'unreadable') return;
+    if (broken || status.kind === 'off' || status.kind === 'relink' || paused()) return;
     if (!deps.visible() || deps.now() < nextAt) return;
     if (!checked) {
       if (!checking) void check(generation);
@@ -425,6 +439,12 @@ export function createSync(deps: SyncDeps): Sync {
       }
       // Read now, before the new run's first save replaces the local one.
       const raw = localRaw();
+      if (isNewerSave(raw)) {
+        // This build can't tell what the newer local save holds, so it never settles against it.
+        startup = null;
+        setStatus({ kind: 'update' });
+        return;
+      }
       const local = decodeSave(raw);
       startup = { raw, local, clean: !local || local.savedAt <= meta.syncedSavedAt };
       setStatus({ kind: 'checking' });
@@ -435,7 +455,7 @@ export function createSync(deps: SyncDeps): Sync {
       maybeUpload();
     },
     flush(reason) {
-      if (status.kind === 'conflict' || status.kind === 'unreadable') return;
+      if (paused()) return;
       void upload(reason);
     },
     retry() {
@@ -443,8 +463,7 @@ export function createSync(deps: SyncDeps): Sync {
       maybeUpload();
     },
     async syncNow() {
-      if (broken || status.kind === 'off' || status.kind === 'relink') return;
-      if (status.kind === 'conflict' || status.kind === 'unreadable') return;
+      if (broken || status.kind === 'off' || status.kind === 'relink' || paused()) return;
       nextAt = 0;
       if (!checked) {
         if (!startup) return;
@@ -495,7 +514,7 @@ export function createSync(deps: SyncDeps): Sync {
         if (!meta) return;
         mine = meta.session?.access ?? null;
         const server = await cloud.redeemLinkCode(code);
-        if (!raw && !decodeSave(server.data)) {
+        if (!raw && !decodeSave(server.data) && !isNewerSave(server.data)) {
           // Nothing local to keep and nothing readable to load: leave cloud off here.
           undo();
           setStatus(prev);
@@ -503,6 +522,7 @@ export function createSync(deps: SyncDeps): Sync {
           return;
         }
         // Remembered before asking the player, so closing the page mid-choice asks again next time.
+        // A save newer than this build is settled the same way by the release that reads it.
         if (
           !store({
             ...meta,

@@ -12,7 +12,14 @@
 
 import type { CloudMessage } from './cloud.ts';
 import { ADOPT_KEY } from './cloud-meta.ts';
-import { decodeSave, encodeSave, MAX_SAVE_CHARS, REJECTED_KEY, SAVE_KEY } from './save.ts';
+import {
+  decodeSave,
+  encodeSave,
+  isNewerSave,
+  MAX_SAVE_CHARS,
+  REJECTED_KEY,
+  SAVE_KEY,
+} from './save.ts';
 import type { SyncStatus } from './sync.ts';
 import { fail, int, obj, oneOf, type Obj } from './validate.ts';
 
@@ -161,7 +168,7 @@ void allMessages;
 
 /** A SyncStatus as it travels: a conflict's two saves go as save text. */
 export type WireStatus =
-  | { kind: 'off' | 'checking' | 'syncing' | 'relink' | 'unreadable' }
+  | { kind: 'off' | 'checking' | 'syncing' | 'relink' | 'unreadable' | 'update' }
   | { kind: 'synced'; at: number }
   | { kind: 'offline'; message: CloudMessage }
   | { kind: 'conflict'; local: string; server: string };
@@ -183,9 +190,13 @@ export function toWire(s: SyncStatus): WireStatus {
   }
 }
 
-const PLAIN_KINDS = ['off', 'checking', 'syncing', 'relink', 'unreadable'] as const;
+const PLAIN_KINDS = ['off', 'checking', 'syncing', 'relink', 'unreadable', 'update'] as const;
 
-/** The status in `v`; a conflict's saves go through the load allow-list again. */
+/**
+ * The status in `v`; a conflict's saves go through the load allow-list again.
+ * A conflict over a save newer than this build (the frame runs a later
+ * release) is 'update': only that release can show or settle it.
+ */
 function readStatus(v: unknown): SyncStatus {
   const kind = obj(v, ['kind'], ['at', 'message', 'local', 'server']).kind;
   if ((PLAIN_KINDS as readonly unknown[]).includes(kind)) {
@@ -201,7 +212,12 @@ function readStatus(v: unknown): SyncStatus {
       const o = obj(v, ['kind', 'local', 'server']);
       const local = decodeSave(o.local);
       const server = decodeSave(o.server);
-      if (!local || !server) fail('conflict save');
+      if (!local || !server) {
+        if ((local || isNewerSave(o.local)) && (server || isNewerSave(o.server))) {
+          return { kind: 'update' };
+        }
+        fail('conflict save');
+      }
       return { kind, local, server };
     }
     default:

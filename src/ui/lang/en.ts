@@ -305,6 +305,7 @@ const messages = {
   'menu.importEmpty': 'Paste a save code first.',
   'menu.importTooBig': 'That code is too long to be a save. Nothing changed.',
   'menu.importBad': 'That is not a save code from this game. Nothing changed.',
+  'menu.importNewer': 'That save is from a new version of the game. Reload the page to import it.',
   'menu.importText':
     'Replace your current run with this save ({summary})? Your current run is lost unless you exported it.',
   'menu.importYes': 'Replace my run',
@@ -341,6 +342,7 @@ const messages = {
     'This browser was signed out of the cloud. Your game here is safe. Link this device again, or start a new cloud save.',
   'cloud.status.conflict': 'Needs your choice: this device and the cloud both changed.',
   'cloud.status.unreadable': "The cloud save can't be read. This device's save is kept.",
+  'cloud.status.update': 'Paused until the page runs the new version of the game.',
   'cloud.ago.now': 'just now',
   'cloud.ago.min': '{n} min ago',
   'cloud.ago.hour': '{n} h ago',
@@ -379,6 +381,9 @@ const messages = {
   'cloud.msg.refused-settings':
     'The browser refused to change its storage. Cloud save is still on.',
   'cloud.msg.relink-first': 'Link this device or turn cloud save off here first.',
+  'update.reloading': 'Moving to the new version of the game…',
+  'update.sync': 'A new version is out. Reload the page to keep syncing.',
+  'update.play': 'A new version is out. Reload the page to keep playing.',
   'help.1':
     'Your cultivator fights on their own, floor after floor. A floor is waves of demons, an elite and a boss.',
   'help.2': 'Losing a fight sends you back one floor to grow stronger.',

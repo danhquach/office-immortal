@@ -4,7 +4,7 @@
 // before any work, must be plain base64 and valid UTF-8, and the save inside
 // goes through decodeSave's allow-list like any other.
 
-import { decodeSave, MAX_SAVE_CHARS, type Save } from './save.ts';
+import { decodeSave, isNewerSave, MAX_SAVE_CHARS, type Save } from './save.ts';
 
 /** Marks a save code, and its format version. */
 export const CODE_TAG = 'OI1:';
@@ -14,7 +14,9 @@ export const MAX_CODE_CHARS = CODE_TAG.length + Math.ceil(MAX_SAVE_CHARS / 3) * 
 export const MAX_PASTE_CHARS = MAX_CODE_CHARS * 2;
 
 export type ImportResult =
-  { ok: true; save: Save; raw: string } | { ok: false; why: 'empty' | 'tooBig' | 'bad' };
+  | { ok: true; save: Save; raw: string }
+  /** 'newer': a save from a later release than this build, which only that release loads. */
+  | { ok: false; why: 'empty' | 'tooBig' | 'bad' | 'newer' };
 
 /** The save text `raw` (from encodeSave) as a save code. */
 export function exportCode(raw: string): string {
@@ -49,5 +51,6 @@ export function importCode(pasted: unknown): ImportResult {
     return { ok: false, why: 'bad' };
   }
   const save = decodeSave(raw);
-  return save ? { ok: true, save, raw } : { ok: false, why: 'bad' };
+  if (save) return { ok: true, save, raw };
+  return { ok: false, why: isNewerSave(raw) ? 'newer' : 'bad' };
 }

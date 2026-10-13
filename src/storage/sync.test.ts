@@ -12,7 +12,7 @@ import {
 } from './cloud-fakes.ts';
 import { ADOPT_KEY, CLOUD_KEY, newMeta, readMeta, writeMeta } from './cloud-meta.ts';
 import { createCloud } from './cloud.ts';
-import { encodeSave, loadSave, MAX_SAVE_CHARS, SAVE_KEY } from './save.ts';
+import { encodeSave, loadSave, MAX_SAVE_CHARS, SAVE_KEY, SAVE_VERSION } from './save.ts';
 import { createSync, UPLOAD_EVERY_MS, type SyncStatus } from './sync.ts';
 
 const T = 1_800_000_000_000;
@@ -581,7 +581,9 @@ describe('a cloud save that cannot be read', () => {
       'zero-width space in a name',
       edit((o) => ((o.state.enemies[0] as { name: unknown }).name = 'Dem​on')),
     ],
-    ['wrong version', edit((o) => (o.v = 99))],
+    ['an unknown older version', edit((o) => (o.v = 0))],
+    ['a version past any release', edit((o) => (o.v = 1001))],
+    ['a newer version that is not a whole number', edit((o) => (o.v = SAVE_VERSION + 0.5))],
     ['savedAt as text', edit((o) => (o.savedAt = '1'))],
     ['oversized', good + ' '.repeat(MAX_SAVE_CHARS)],
     ['not JSON', 'definitely not json'],
@@ -1198,5 +1200,121 @@ describe('link robustness', () => {
     release();
     await linking;
     expect(readMeta(d.storage)).toEqual(other);
+  });
+});
+
+/** A save from a later release: its state holds fields this build doesn't know. */
+const newer = (savedAt: number): string =>
+  JSON.stringify({ v: SAVE_VERSION + 1, savedAt, state: { fromTheFuture: true } });
+
+describe('a cloud save from a newer release', () => {
+  it('pauses for an update at startup: no note, no rejection, nothing uploaded or loaded', async () => {
+    const w = world();
+    const { d, text } = await enabled(w);
+    const id = [...w.server.saves.keys()][0] as string;
+    const theirs = newer(T + MINUTE);
+    w.server.saves.set(id, { data: theirs, rev: 2 });
+    const again = w.device(d.storage);
+    again.sync.begin();
+    await until(() => expect(kind(again)).toBe('update'));
+    expect(again.notes).toEqual([]);
+    expect(readMeta(again.storage)?.rejectedRev).toBeNull();
+    expect(again.storage.getItem(SAVE_KEY)).toBe(text);
+    expect(again.adopted).not.toHaveBeenCalled();
+    w.time.t += 10 * MINUTE;
+    play(again, w.time.t, 2);
+    again.sync.flush('hidden');
+    again.sync.flush('pagehide');
+    again.sync.retry();
+    await again.sync.syncNow();
+    await again.sync.keepLocal();
+    again.sync.useCloud();
+    await settle();
+    expect(puts(w)).toHaveLength(0);
+    expect(w.server.saves.get(id)?.data).toBe(theirs);
+    expect(kind(again)).toBe('update');
+  });
+
+  it('pauses when an upload is refused over a newer save, and writes nothing over it', async () => {
+    const w = world();
+    const { a, b } = await pair(w);
+    const theirs = newer(w.time.t + MINUTE);
+    const id = [...w.server.saves.keys()][0] as string;
+    w.server.saves.set(id, { data: theirs, rev: (w.server.saves.get(id)?.rev ?? 0) + 1 });
+    w.time.t += 2 * MINUTE;
+    play(a, w.time.t, 4);
+    await until(() => expect(kind(a)).toBe('update'));
+    w.time.t += 2 * MINUTE;
+    play(a, w.time.t, 5);
+    await a.sync.syncNow();
+    await settle();
+    expect(w.server.saves.get(id)?.data).toBe(theirs);
+    expect(kind(b)).not.toBe('update');
+  });
+
+  it('never settles against a newer local save, even with an older cloud save to load', async () => {
+    const w = world();
+    const { a, b } = await pair(w);
+    // The cloud moved on (so a restart would normally load it) and the local save is newer.
+    w.time.t += MINUTE;
+    play(a, w.time.t, 3);
+    await until(() => expect(serverData(w)).toHaveLength(1));
+    await a.sync.syncNow();
+    const mine = newer(w.time.t + MINUTE);
+    b.storage.setItem(SAVE_KEY, mine);
+    const reopened = w.device(b.storage);
+    const before = w.server.calls.length;
+    reopened.sync.begin();
+    await settle();
+    expect(kind(reopened)).toBe('update');
+    expect(reopened.adopted).not.toHaveBeenCalled();
+    expect(reopened.storage.getItem(SAVE_KEY)).toBe(mine);
+    expect(w.server.calls.length).toBe(before);
+  });
+
+  it('linking from the Path choice keeps the link, so the newer release completes it without a new code', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const id = [...w.server.saves.keys()][0] as string;
+    w.server.saves.set(id, { data: newer(T + MINUTE), rev: 2 });
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    await d.sync.link(code);
+    expect(kind(d)).toBe('update');
+    expect(d.notes).toEqual([]);
+    expect(d.storage.getItem(SAVE_KEY)).toBeNull();
+    const meta = readMeta(d.storage);
+    expect(meta?.saveId).toBe(id);
+    expect(meta?.pendingLink).toBe(true);
+    // The reload: the newer release reads the save (stood in for here by a readable one).
+    const readable = raw(T + MINUTE, 7);
+    w.server.saves.set(id, { data: readable, rev: 2 });
+    const updated = w.device(d.storage);
+    updated.sync.begin();
+    await until(() => expect(updated.adopted).toHaveBeenCalledOnce());
+    expect(updated.storage.getItem(SAVE_KEY)).toBe(readable);
+    expect(readMeta(updated.storage)?.pendingLink).toBe(false);
+    expect(w.server.calls.filter((c) => c.url.endsWith('/redeem_link_code'))).toHaveLength(1);
+  });
+
+  it('linking with a run keeps the run and asks which to keep after the update', async () => {
+    const w = world();
+    const { d: host } = await enabled(w);
+    const id = [...w.server.saves.keys()][0] as string;
+    w.server.saves.set(id, { data: newer(T + MINUTE), rev: 2 });
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    const mine = play(d, T + 2, 2);
+    await d.sync.link(code);
+    expect(kind(d)).toBe('update');
+    expect(d.storage.getItem(SAVE_KEY)).toBe(mine);
+    expect(puts(w)).toHaveLength(0);
+    w.server.saves.set(id, { data: raw(T + MINUTE, 7), rev: 2 });
+    const updated = w.device(d.storage);
+    updated.sync.begin();
+    await until(() => expect(kind(updated)).toBe('conflict'));
+    expect(updated.storage.getItem(SAVE_KEY)).toBe(mine);
   });
 });
