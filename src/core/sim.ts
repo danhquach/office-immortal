@@ -248,6 +248,17 @@ export function unequip(state: GameState, from: EquipSlotId): GameState {
   return s;
 }
 
+/**
+ * Starts the current floor again from its first enemy, at full HP, with the
+ * realm's Tribulation queued if one is due. Returns the new state; `state` is
+ * left untouched.
+ */
+export function restartFloor(state: GameState): GameState {
+  const s = structuredClone(state);
+  startFloor(s, rngFrom(s.rng), ENEMY_ARRIVAL);
+  return s;
+}
+
 /** True while a Tribulation is due and not yet being fought, so the player can start it now. */
 export function canFaceTribulation(state: GameState): boolean {
   return readyForTribulation(state.cultivator) && state.enemies[0]?.kind !== 'tribulation';

@@ -102,9 +102,12 @@ import {
   isNewerSave,
   loadSave,
   SAVE_KEY,
+  writeRaw,
   type Save,
   type SaveStorage,
 } from '../storage/save.ts';
+import type { DebugTick } from '../dev/panel.ts';
+import { clearDebugged, DEBUG_KEY, debugged, markDebugged } from './debug-flag.ts';
 import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
 import { exportCode, importCode } from '../storage/transfer.ts';
 import {
@@ -529,7 +532,8 @@ let showCloudNote: ((note: CloudMessage) => void) | null = null;
 let current: { root: HTMLElement; storage: SaveStorage } | null = null;
 
 function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null {
-  if (!storage) return null;
+  // Dev builds only: a save the Debug panel changed never reaches the cloud.
+  if (!storage || (import.meta.env.DEV && debugged(storage))) return null;
   // In the storage frame (itch.io), the frame's sync is set before the first start.
   if (sync) {
     current = { root, storage };
@@ -2254,7 +2258,7 @@ function play(
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
-  const cloud = sync;
+  const cloud = import.meta.env.DEV && debugged(storage) ? null : sync;
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   game.append(updateNote);
@@ -3477,6 +3481,8 @@ function play(
       start(root, storage, 'local');
     // Something else cleared browser storage: put this run's save straight back.
     else if (key === null) save();
+    // Dev builds only: the Debug panel in another tab kept a setup; this run would write over it.
+    else if (import.meta.env.DEV && key === DEBUG_KEY) start(root, storage, 'local');
   }, signal);
 
   // Looking at the tab again clears the count and the favicon's dot.
@@ -3548,10 +3554,15 @@ function play(
   // Time-based: each step plays the real time since the last one, so a
   // throttled background tab still makes the same progress.
   let last = performance.now();
+  /** Dev builds only: the Debug panel's speed and forced drop; null until it loads, and in production. */
+  let debugTick: DebugTick | null = null;
+  /** Dev builds only: the panel changed this run, even if storage refused the mark. */
+  let cheated = false;
   function step(): void {
     const now = performance.now();
     const prev = state;
-    state = tick(state, (now - last) / 1000);
+    const dt = (now - last) / 1000;
+    state = debugTick ? debugTick.step(state, dt) : tick(state, dt);
     last = now;
     const fresh = freshDrops(prev, state);
     logDrops(fresh);
@@ -3569,7 +3580,10 @@ function play(
     const savedAt = Date.now();
     const raw = encodeSave(state, savedAt);
     const written = writeBoth(storage, backup(), raw);
-    if (written) cloud?.offer(raw, savedAt);
+    // Dev builds only: the Debug panel's speed or forced drop may have marked this run since it began.
+    if (written && !(import.meta.env.DEV && (cheated || debugged(storage)))) {
+      cloud?.offer(raw, savedAt);
+    }
     return written;
   }
 
@@ -3599,6 +3613,38 @@ function play(
     importBtn.click();
   }
   tryUpdate();
+  if (import.meta.env.DEV && storage) {
+    const debugStore = storage;
+    void import('../dev/panel.ts').then(({ mountDebug }) => {
+      if (signal.aborted) return;
+      debugTick = mountDebug(
+        root,
+        {
+          state: () => state,
+          async keep(next, { awaySeconds = 0, clean = false } = {}) {
+            // No autosave may write over it before the reload.
+            run.stop();
+            const raw = encodeSave(next, Date.now() - awaySeconds * 1000);
+            // Awaited: a reload before the backup lands would load the older backup.
+            await backup().put(raw);
+            if (!writeRaw(debugStore, raw)) {
+              throw new Error('browser storage refused the save; reload the page');
+            }
+            // Also tells other open tabs to load it (watchStorage).
+            if (clean) clearDebugged(debugStore);
+            else markDebugged(debugStore, Date.now());
+            location.reload();
+          },
+          cheat() {
+            cheated = true;
+            if (!debugged(debugStore)) markDebugged(debugStore, Date.now());
+          },
+          newSeed,
+        },
+        debugged(debugStore),
+      );
+    });
+  }
   if (cloud) {
     // After autosave's own listeners, so the upload sends the save they just wrote.
     document.addEventListener('visibilitychange', () => document.hidden && cloud.flush('hidden'), {

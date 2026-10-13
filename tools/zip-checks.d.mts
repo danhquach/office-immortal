@@ -3,3 +3,4 @@ export function cloudProblems(build: {
   paths: string[];
   read: (path: string) => string;
 }): string[];
+export function debugProblems(build: { paths: string[]; read: (path: string) => string }): string[];

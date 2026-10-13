@@ -37,3 +37,30 @@ export function cloudProblems({ html, paths, read }) {
   }
   return problems;
 }
+
+/** Text only the dev-only Debug panel carries (src/dev/, src/ui/debug-flag.ts): its code, words and storage key. */
+const DEBUG_MARKERS = [
+  'officeDebug',
+  'office-immortal.debug',
+  'Next kill drops',
+  'Fill to full',
+  'debug-status',
+  'the save checker refuses',
+];
+
+/**
+ * Where the build carries the Debug panel, which must never ship; empty when it doesn't.
+ * Checked by npm run check:no-debug and before every itch.io zip.
+ * @param {{ paths: string[], read: (path: string) => string }} build
+ *   `paths` every file under dist/ (relative), `read` a file's text.
+ * @returns {string[]}
+ */
+export function debugProblems({ paths, read }) {
+  return paths.flatMap((path) => {
+    const text = read(path);
+    return DEBUG_MARKERS.filter((m) => text.includes(m)).map(
+      (m) =>
+        `${path} has the Debug panel in it (${m}): build with npm run build, not the dev server`,
+    );
+  });
+}

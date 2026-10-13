@@ -36,6 +36,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           # The itch.io page the storage frame (store.html) answers; empty means it answers no one.
           VITE_ITCH_PAGE_ORIGIN: ${{ vars.VITE_ITCH_PAGE_ORIGIN }}
+      - name: Debug panel left out of the build
+        # Dev builds only (src/dev/): none of its code or text may ship.
+        run: npm run check:no-debug
       - name: Build and zip for itch.io (cloud save through the storage frame)
         # itch.io serves every uploaded game from one shared origin, so another
         # game could read the cloud sign-in token from localStorage. The itch.io

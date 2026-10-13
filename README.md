@@ -95,6 +95,26 @@ npm run preview  # serve the production build from dist/
 
 Unit tests sit next to the code they cover, as `src/**/*.test.ts`.
 
+`npm run dev` adds a **Debug** panel (bottom left) that sets up test states in
+one click: items of any type and grade, a full or two-page bag, a level, floor
+or due Tribulation, resources, Soul Banner souls, game speed, a forced drop,
+time away and a fresh run. Every setup must pass the save checker, then the
+game saves it and reloads (other open tabs load it too). Browser checks can
+load a named setup (names in `src/dev/scenarios.ts`):
+
+```js
+await page.waitForFunction(() => window.officeDebug);
+await Promise.all([
+  page.waitForEvent('load'),
+  page.evaluate(() => window.officeDebug.scenario('fullBag')),
+]);
+```
+
+Once a setup, a speed above ×1 or a forced drop changes the run, the cloud
+save stays off until the panel starts a fresh run. The panel lives in
+`src/dev/` and is left out of `npm run build`; `npm run check:no-debug` (run
+by CI) fails a build that contains it.
+
 ## Release on itch.io
 
 The game is also published on itch.io as an HTML5 project. Pushing a version
