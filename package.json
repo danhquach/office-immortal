@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "zip": "node tools/zip-build.mjs",
+    "check:no-debug": "node tools/no-debug.mjs",
     "marketing:saves": "node --experimental-strip-types tools/marketing/saves.ts",
     "marketing:screenshots": "node --experimental-strip-types tools/marketing/screenshots.ts",
     "marketing:trailer": "node --experimental-strip-types tools/marketing/trailer.ts",

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloudProblems } from '../tools/zip-checks.mjs';
+import { cloudProblems, debugProblems } from '../tools/zip-checks.mjs';
 import { buildCsp } from '../vite.config.ts';
 
 const FRAME = 'https://ourname.github.io';
@@ -56,5 +56,31 @@ describe('npm run zip: the itch.io build', () => {
     expect(
       check(html, { 'assets/a.js': '/^https:\\/\\/[a-z0-9]{8,40}\\.supabase\\.co$/' }),
     ).toEqual([]);
+  });
+});
+
+describe('the Debug panel never ships (npm run zip, npm run check:no-debug)', () => {
+  const check = (files: Record<string, string>): string[] =>
+    debugProblems({ paths: Object.keys(files), read: (p) => files[p] ?? '' });
+
+  it('passes a build without it', () => {
+    expect(check({ 'index.html': '<html>', 'assets/index.js': 'Tribulation due' })).toEqual([]);
+  });
+
+  it('refuses its hook, storage key, words or class in any file', () => {
+    for (const leak of [
+      'window.officeDebug={}',
+      'getItem("office-immortal.debug")',
+      'office-immortal.debug.speed',
+      'Next kill drops',
+      'Fill to full − 1',
+      '.debug-status{}',
+      'the save checker refuses it',
+    ]) {
+      expect(check({ 'index.html': '<html>', 'assets/a.js': leak })).toHaveLength(1);
+    }
+    expect(check({ 'assets/a.css': '.debug-status{}' })[0]).toMatch(
+      /^assets\/a.css has the Debug panel/,
+    );
   });
 });

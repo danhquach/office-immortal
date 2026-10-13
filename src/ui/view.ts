@@ -559,14 +559,71 @@ function compareArrays(now: Item | undefined, next: Item): { text: string; bette
 }
 
 /** Where the cultivator is on the floor: "Wave 2 / 3", "Elite", "Boss" or "Tribulation". */
-export function waveLabel(state: GameState): string {
-  if (state.enemies[0]?.kind === 'tribulation') return t('strip.tribulation');
+export function waveLabel(state: GameState, discreet = false): string {
+  const keys = discreet ? DISCREET_WAVE : STRIP_WAVE;
+  if (state.enemies[0]?.kind === 'tribulation') return t(keys.tribulation);
   const waves = WAVES_PER_FLOOR * DEMONS_PER_WAVE;
   const left = state.enemies.filter((e) => e.kind !== 'tribulation').length;
   const defeated = waves + 2 - left;
   if (defeated < waves)
-    return t('strip.wave', { n: Math.floor(defeated / DEMONS_PER_WAVE) + 1, of: WAVES_PER_FLOOR });
-  return t(defeated === waves ? 'strip.elite' : 'strip.boss');
+    return t(keys.wave, { n: Math.floor(defeated / DEMONS_PER_WAVE) + 1, of: WAVES_PER_FLOOR });
+  return t(defeated === waves ? keys.elite : keys.boss);
+}
+
+const STRIP_WAVE = {
+  tribulation: 'strip.tribulation',
+  wave: 'strip.wave',
+  elite: 'strip.elite',
+  boss: 'strip.boss',
+} as const satisfies Record<string, MessageKey>;
+/** Grades in office words, for the Discreet pop-out: never a game grade's name. */
+const DISCREET_GRADE = {
+  mortal: 'discreet.grade.mortal',
+  spirit: 'discreet.grade.spirit',
+  earth: 'discreet.grade.earth',
+  heaven: 'discreet.grade.heaven',
+  immortal: 'discreet.grade.immortal',
+} as const satisfies Record<GradeId, MessageKey>;
+/** The same stages in office words, for the Discreet pop-out. */
+const DISCREET_WAVE = {
+  tribulation: 'discreet.tribulation',
+  wave: 'discreet.wave',
+  elite: 'discreet.elite',
+  boss: 'discreet.boss',
+} as const satisfies Record<string, MessageKey>;
+
+/**
+ * The Discreet pop-out's cells (docs/design.md §14): a label and a value per
+ * row, in office words, with no realm, Path, tier colour or game name. `latest`
+ * is the newest drop (null for none) and `due` a Tribulation waiting.
+ */
+export function discreetRows(
+  state: GameState,
+  latest: Item | null,
+  due: boolean,
+): [label: string, value: string][] {
+  const c = state.cultivator;
+  const enemy = state.enemies[0];
+  const percent = (hp: number, max: number): string =>
+    `${Math.max(0, Math.min(100, Math.ceil((hp / max) * 100)))}%`;
+  const xp = readyForTribulation(c) ? '' : ` · ${xpBar(c).text}`;
+  return [
+    [t('discreet.floor'), `${state.floor} · ${waveLabel(state, true)}`],
+    [t('discreet.level'), `${c.level}${xp}`],
+    [t('discreet.health'), percent(c.hp, derive(c).maxHp)],
+    [t('discreet.target'), enemy ? percent(enemy.hp, enemy.maxHp) : '–'],
+    [t('discreet.closed'), String(state.kills)],
+    [
+      t('discreet.latest'),
+      latest
+        ? t('discreet.drop', {
+            grade: t(DISCREET_GRADE[latest.grade]),
+            name: tn('item', latest.name),
+          })
+        : '–',
+    ],
+    [t('discreet.status'), t(due ? 'discreet.due' : 'discreet.ok')],
+  ];
 }
 
 /**

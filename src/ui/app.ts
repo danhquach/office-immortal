@@ -111,9 +111,12 @@ import {
   isNewerSave,
   loadSave,
   SAVE_KEY,
+  writeRaw,
   type Save,
   type SaveStorage,
 } from '../storage/save.ts';
+import type { DebugTick } from '../dev/panel.ts';
+import { clearDebugged, DEBUG_KEY, debugged, markDebugged } from './debug-flag.ts';
 import { createSync, type Sync, type SyncStatus } from '../storage/sync.ts';
 import { exportCode, importCode } from '../storage/transfer.ts';
 import {
@@ -154,6 +157,13 @@ import {
 } from './i18n.ts';
 import { autosave, runs, type RunScope } from './run.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
+import {
+  pickPopStyle,
+  POP_STYLES,
+  readPopStyle,
+  type PopStyle,
+  writePopStyle,
+} from './pop-style.ts';
 import {
   BAG_SORT_DIRS,
   BAG_SORT_NAMES,
@@ -241,6 +251,7 @@ import {
   tribulationBanner,
   tribulationCall,
   tribulationFellDue,
+  discreetRows,
   waveLabel,
   xpBar,
 } from './view.ts';
@@ -545,7 +556,8 @@ let showCloudNote: ((note: CloudMessage) => void) | null = null;
 let current: { root: HTMLElement; storage: SaveStorage } | null = null;
 
 function cloudSync(root: HTMLElement, storage: SaveStorage | null): Sync | null {
-  if (!storage) return null;
+  // Dev builds only: a save the Debug panel changed never reaches the cloud.
+  if (!storage || (import.meta.env.DEV && debugged(storage))) return null;
   // In the storage frame (itch.io), the frame's sync is set before the first start.
   if (sync) {
     current = { root, storage };
@@ -778,48 +790,49 @@ function globe(): SVGSVGElement {
 }
 
 /**
- * The language switch beside Menu: a globe and the language's code, opening a
- * short list of the packs. Mouse, touch and keyboard (arrows, Home / End,
- * Enter / Space, Escape) all work. Picking one saves it and calls `relabel`.
+ * A short list opening under `open`, in the top layer (a popover). Mouse,
+ * touch and keyboard (arrows, Home / End, Enter / Space, Escape) all work.
+ * `checked` is the entry ticked as it opens; `pick` gets the chosen entry's
+ * index once the list has closed. While `enabled` is false the arrow keys
+ * leave the list shut. Returns the list, to go beside `open`, and `toggle`.
  */
-function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLElement {
-  const box = el('div', 'lang');
-  const code = el('span');
-  const open = el('button');
-  open.type = 'button';
+function pickList(
+  open: HTMLButtonElement,
+  id: string,
+  label: MessageKey,
+  entries: readonly { text: () => string; lang?: string }[],
+  checked: () => number,
+  pick: (index: number) => void,
+  enabled: () => boolean = () => true,
+): { list: HTMLUListElement; show: () => void; toggle: () => void } {
   open.setAttribute('aria-haspopup', 'menu');
   open.setAttribute('aria-expanded', 'false');
-  open.setAttribute('aria-controls', 'lang-list');
-  open.append(globe(), code);
-  say(() => {
-    code.textContent = lang().short;
-    open.setAttribute('aria-label', t('lang.button'));
-  });
-  const list = el('ul', 'lang-list');
-  list.id = 'lang-list';
+  open.setAttribute('aria-controls', id);
+  const list = el('ul', 'pick-list');
+  list.id = id;
   list.setAttribute('role', 'menu');
-  say(() => list.setAttribute('aria-label', t('lang.button')));
+  say(() => list.setAttribute('aria-label', t(label)));
   // The title bar clips what spills past it (its edge-to-edge shadow), so the
   // list opens in the top layer as a popover, placed under the button.
   list.popover = 'manual';
   let isOpen = false;
-  const items = PACKS.map((pack) => {
-    const item = el('li', '', pack.label);
+  const items = entries.map((entry, i) => {
+    const item = el('li');
+    say(() => (item.textContent = entry.text()));
     item.setAttribute('role', 'menuitemradio');
-    // Each name in its own language, so a screen reader says it right.
-    item.lang = pack.code;
+    if (entry.lang) item.lang = entry.lang;
     item.tabIndex = -1;
-    item.addEventListener('click', () => pick(pack.code));
+    item.addEventListener('click', () => choose(i));
     list.append(item);
     return item;
   });
   const outside = (e: PointerEvent): void => {
-    if (!box.contains(e.target as Node)) close(false);
+    if (!open.contains(e.target as Node) && !list.contains(e.target as Node)) close(false);
   };
   // The list is placed once, where it opened: a resize or scroll closes it.
   const moved = (): void => close(false);
   function show(): void {
-    const at = Math.max(0, PACKS.indexOf(lang()));
+    const at = Math.max(0, checked());
     items.forEach((item, i) => item.setAttribute('aria-checked', String(i === at)));
     isOpen = true;
     list.showPopover();
@@ -842,19 +855,12 @@ function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLEleme
     window.removeEventListener('scroll', moved);
     if (refocus) open.focus();
   }
-  function pick(next: string): void {
+  function choose(i: number): void {
     close(true);
-    if (next === lang().code) return;
-    pickedLang = next;
-    setLang(next);
-    // Blocked storage still changes it for this visit.
-    writeLang(storage, next);
-    document.documentElement.lang = lang().code;
-    relabel();
+    pick(i);
   }
-  open.addEventListener('click', () => (isOpen ? close(true) : show()));
   open.addEventListener('keydown', (e) => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || !enabled()) return;
     e.preventDefault();
     show();
   });
@@ -871,8 +877,7 @@ function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLEleme
       close(true);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
-      const pack = PACKS[at];
-      if (pack) pick(pack.code);
+      if (at >= 0) choose(at);
       // Back on the button first, so Tab moves on from there in every browser.
     } else if (e.key === 'Tab') close(true);
     else if (to[e.key] !== undefined) {
@@ -880,6 +885,42 @@ function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLEleme
       items[to[e.key] as number]?.focus({ preventScroll: true });
     }
   });
+  return { list, show, toggle: () => (isOpen ? close(true) : show()) };
+}
+
+/**
+ * The language switch beside Menu: a globe and the language's code, opening a
+ * short list of the packs. Picking one saves it and calls `relabel`.
+ */
+function langSwitch(storage: SaveStorage | null, relabel: () => void): HTMLElement {
+  const box = el('div', 'lang');
+  const code = el('span');
+  const open = el('button');
+  open.type = 'button';
+  open.append(globe(), code);
+  say(() => {
+    code.textContent = lang().short;
+    open.setAttribute('aria-label', t('lang.button'));
+  });
+  const { list, toggle } = pickList(
+    open,
+    'lang-list',
+    'lang.button',
+    // Each name in its own language, so a screen reader says it right.
+    PACKS.map((pack) => ({ text: () => pack.label, lang: pack.code })),
+    () => PACKS.indexOf(lang()),
+    (i) => {
+      const next = PACKS[i]?.code;
+      if (next === undefined || next === lang().code) return;
+      pickedLang = next;
+      setLang(next);
+      // Blocked storage still changes it for this visit.
+      writeLang(storage, next);
+      document.documentElement.lang = lang().code;
+      relabel();
+    },
+  );
+  open.addEventListener('click', toggle);
   box.append(open, list);
   return box;
 }
@@ -1296,6 +1337,8 @@ let pickedSort: BagSort | null = null;
 let pickedReverse: boolean | null = null;
 /** The language picked this visit: kept across runs even where storage is blocked. */
 let pickedLang: string | null = null;
+/** The pop-out style picked this visit: kept across runs even where storage is blocked. */
+let pickedPopStyle: PopStyle | null = null;
 /** The Crafting panel's last mode, kept for the visit. */
 let pickedCraftMode: CraftMode = 'refine';
 
@@ -2328,7 +2371,7 @@ function play(
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
-  const cloud = sync;
+  const cloud = import.meta.env.DEV && debugged(storage) ? null : sync;
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   game.append(updateNote);
@@ -2344,9 +2387,29 @@ function play(
   const noticeBtn = button('', '', () => {
     void notices.toggle().then(() => drawTools());
   });
-  const popBtn = button('', '', () => void togglePopOut());
+  // Pop out offers Mini or Discreet (docs/design.md §14); while one is open it closes it.
+  const popBtn = button('', '', () => (pip ? pip.close() : popList.toggle()));
+  const popList = pickList(
+    popBtn,
+    'pop-list',
+    'discreet.menu',
+    POP_STYLES.map((style) => ({ text: () => t(`discreet.${style}`) })),
+    () => POP_STYLES.indexOf(pickedPopStyle ?? readPopStyle(storage)),
+    (i) => {
+      // A pick while the last request still waits on the browser opens nothing, so it is not kept.
+      if (opening) return;
+      const style = pickPopStyle(POP_STYLES[i]);
+      pickedPopStyle = style;
+      // Blocked storage still keeps it for this visit.
+      writePopStyle(storage, style);
+      void togglePopOut(style);
+    },
+    () => !pip,
+  );
+  const popBox = el('div', 'lang');
+  popBox.append(popBtn, popList.list);
   // Each control is left out where the browser lacks its feature.
-  if (canPopOut(window)) tools.append(popBtn);
+  if (canPopOut(window)) tools.append(popBox);
   const menuBtn = buttonT('tools.menu', '', () => {
     resetBox.hidden = true;
     menu.showModal();
@@ -2599,7 +2662,25 @@ function play(
   miniToast.setAttribute('aria-live', 'polite');
   // A click on the pop-out brings the game's tab forward (docs/design.md §14).
   mini.addEventListener('click', () => window.focus());
+  // Discreet view, the other pop-out: a plain sheet of the same numbers, in office words.
+  const discreet = el('div', 'discreet');
+  const sheet = el('table');
+  const head = el('tr');
+  for (const col of ['', 'A', 'B']) head.append(el('th', '', col));
+  sheet.append(head);
+  const cells = discreetRows(state, null, false).map((_, i) => {
+    const row = el('tr');
+    const label = el('td');
+    const value = el('td');
+    row.append(el('th', '', String(i + 1)), label, value);
+    sheet.append(row);
+    return { label, value };
+  });
+  discreet.append(sheet);
+  discreet.addEventListener('click', () => window.focus());
   let pip: Window | null = null;
+  /** Which view the open pop-out shows. */
+  let popped: PopStyle = 'mini';
   /** A pop-out request is waiting on the browser; further clicks wait for it. */
   let opening = false;
   /** Drops kept while the tab was hidden: the title counts them, the favicon marks the best. */
@@ -3472,6 +3553,14 @@ function play(
     if (n === 'blocked') noticeBtn.title = t('menu.blockedHint');
     else noticeBtn.removeAttribute('title');
     setButton(popBtn, t(pip ? 'tools.closePopOut' : 'tools.popOut'), false);
+    // While a pop-out is open the button closes it, with no list to open.
+    if (pip) {
+      popBtn.removeAttribute('aria-haspopup');
+      popBtn.removeAttribute('aria-expanded');
+    } else if (!popBtn.hasAttribute('aria-haspopup')) {
+      popBtn.setAttribute('aria-haspopup', 'menu');
+      popBtn.setAttribute('aria-expanded', 'false');
+    }
   }
 
   /** The store tab and the Stats tab's boosts: prices, time left and what can be paid change every tick. */
@@ -3522,7 +3611,18 @@ function play(
     }
     const dot = blinkOn || reducedMotion.matches ? unseen.mark : null;
     setFavicon(document, faviconHref(c.hp / derive(c).maxHp, dot));
-    if (pip) {
+    if (pip && popped === 'discreet') {
+      const rows = discreetRows(state, recent[0] ?? null, due);
+      rows.forEach(([label, value], i) => {
+        const cell = cells[i];
+        if (!cell) return;
+        setText(cell.label, label);
+        setText(cell.value, value);
+      });
+      // A dull file name, never the game's floor or name.
+      const file = t('discreet.file');
+      if (pip.document.title !== file) pip.document.title = file;
+    } else if (pip) {
       miniLine.textContent = miniStatus(state.floor, realmLabel(c.level), unseen.count, due);
       miniLine.classList.toggle('due', due);
       if (pip.document.title !== title) pip.document.title = title;
@@ -3551,7 +3651,8 @@ function play(
     if (!signal.aborted && !game.contains(strip)) beside.before(strip);
   }
 
-  async function togglePopOut(): Promise<void> {
+  /** Opens the pop-out in `style`, or closes the open one. */
+  async function togglePopOut(style: PopStyle): Promise<void> {
     if (opening) return;
     if (pip) {
       pip.close();
@@ -3561,6 +3662,7 @@ function play(
     const opened = await popOut(
       window,
       () => {
+        if (style === 'discreet') return discreet;
         mini.replaceChildren(miniFile, strip, miniLine, miniToast);
         return mini;
       },
@@ -3580,6 +3682,7 @@ function play(
       return;
     }
     pip = opened;
+    popped = style;
     drawTools();
     drawHud();
   }
@@ -3605,6 +3708,8 @@ function play(
       start(root, storage, 'local');
     // Something else cleared browser storage: put this run's save straight back.
     else if (key === null) save();
+    // Dev builds only: the Debug panel in another tab kept a setup; this run would write over it.
+    else if (import.meta.env.DEV && key === DEBUG_KEY) start(root, storage, 'local');
   }, signal);
 
   // Looking at the tab again clears the count and the favicon's dot.
@@ -3678,11 +3783,16 @@ function play(
   // Time-based: each step plays the real time since the last one, so a
   // throttled background tab still makes the same progress.
   let last = performance.now();
+  /** Dev builds only: the Debug panel's speed and forced drop; null until it loads, and in production. */
+  let debugTick: DebugTick | null = null;
+  /** Dev builds only: the panel changed this run, even if storage refused the mark. */
+  let cheated = false;
   function step(): void {
     const now = performance.now();
     const prev = state;
+    const dt = (now - last) / 1000;
     // The store rolls its new stock outside tick(), so the fight draws the same numbers.
-    state = syncStore(tick(state, (now - last) / 1000));
+    state = syncStore(debugTick ? debugTick.step(state, dt) : tick(state, dt));
     last = now;
     const fresh = freshDrops(prev, state);
     logDrops(fresh);
@@ -3700,7 +3810,10 @@ function play(
     const savedAt = Date.now();
     const raw = encodeSave(state, savedAt);
     const written = writeBoth(storage, backup(), raw);
-    if (written) cloud?.offer(raw, savedAt);
+    // Dev builds only: the Debug panel's speed or forced drop may have marked this run since it began.
+    if (written && !(import.meta.env.DEV && (cheated || debugged(storage)))) {
+      cloud?.offer(raw, savedAt);
+    }
     return written;
   }
 
@@ -3730,6 +3843,38 @@ function play(
     importBtn.click();
   }
   tryUpdate();
+  if (import.meta.env.DEV && storage) {
+    const debugStore = storage;
+    void import('../dev/panel.ts').then(({ mountDebug }) => {
+      if (signal.aborted) return;
+      debugTick = mountDebug(
+        root,
+        {
+          state: () => state,
+          async keep(next, { awaySeconds = 0, clean = false } = {}) {
+            // No autosave may write over it before the reload.
+            run.stop();
+            const raw = encodeSave(next, Date.now() - awaySeconds * 1000);
+            // Awaited: a reload before the backup lands would load the older backup.
+            await backup().put(raw);
+            if (!writeRaw(debugStore, raw)) {
+              throw new Error('browser storage refused the save; reload the page');
+            }
+            // Also tells other open tabs to load it (watchStorage).
+            if (clean) clearDebugged(debugStore);
+            else markDebugged(debugStore, Date.now());
+            location.reload();
+          },
+          cheat() {
+            cheated = true;
+            if (!debugged(debugStore)) markDebugged(debugStore, Date.now());
+          },
+          newSeed,
+        },
+        debugged(debugStore),
+      );
+    });
+  }
   if (cloud) {
     // After autosave's own listeners, so the upload sends the save they just wrote.
     document.addEventListener('visibilitychange', () => document.hidden && cloud.flush('hidden'), {

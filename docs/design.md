@@ -537,8 +537,11 @@ treasure find, a higher offline cap, more starting stat points.
 - **Tab as HUD:** the tab title shows status (e.g. `F12 · 3 drops`); the
   favicon can show an HP ring or flash on a Heaven-grade drop or better.
 - **Pop-out window:** where supported (Document Picture-in-Picture), the Mini
-  view (§14) pops out into a small always-on-top window. Not offered when the
-  page is embedded in a frame (the itch.io build): the API refuses there.
+  or Discreet view (§14) pops out into a small always-on-top window. Pop out
+  opens a short list of the two; the last pick is ticked next time, and kept
+  as a display preference (Reset progress keeps it). While one is open the
+  button closes it. Not offered when the page is embedded in a frame (the
+  itch.io build): the API refuses there.
 - **Notification:** optional browser notification on an Immortal-grade drop
   and when a Tribulation falls due (§4).
 
@@ -991,6 +994,7 @@ Grade is also written as text, never shown by colour alone.
 | **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
+| **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, or Review due while a Tribulation is due). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |
 
 - The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
@@ -1005,7 +1009,9 @@ Grade is also written as text, never shown by colour alone.
 - The Mini view has no inventory or menus. In the pop-out, a click on it
   focuses the main tab; in a short main window, making the window taller
   brings the other views back. Its aspect is about 3:1 (e.g. 480×160).
-- All three views render the same state; switching never pauses the sim.
+- The Discreet view behaves like the Mini pop-out: same size, a click
+  focuses the main tab, and a language switch rewords it in place.
+- All the views render the same state; switching never pauses the sim.
 
 ### Assets
 

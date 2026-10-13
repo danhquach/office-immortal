@@ -76,6 +76,7 @@ import {
   tribulationBanner,
   tribulationCall,
   tribulationFellDue,
+  discreetRows,
   waveLabel,
   xpBar,
 } from './view.ts';
@@ -437,6 +438,95 @@ describe('waveLabel', () => {
     }
     expect(seen.slice(0, 3)).toEqual(Array<string>(3).fill('Wave 1 / 3'));
     expect(seen.slice(-3)).toEqual(['Elite', 'Boss', 'Tribulation']);
+  });
+});
+
+describe('discreetRows', () => {
+  const ring: Item = {
+    slot: 'sideArm',
+    name: 'Jade Hundred Ghosts Banner',
+    level: 10,
+    grade: 'spirit',
+    baseRoll: 0.5,
+    affixes: [],
+  };
+
+  it('writes the run as plain cells in office words', () => {
+    const s = newGame(1, 'sword');
+    s.kills = 340;
+    s.cultivator.hp = derive(s.cultivator).maxHp / 2;
+    const enemy = s.enemies[0] as GameState['enemies'][number];
+    enemy.hp = enemy.maxHp * 0.25;
+    expect(discreetRows(s, ring, false)).toEqual([
+      ['Floor', '1 · Step 1 / 3'],
+      ['Level', `1 · 0 / ${xpToNext(1)}`],
+      ['Health', '50%'],
+      ['Target', '25%'],
+      ['Closed', '340'],
+      ['Latest', 'Plus · Jade Hundred Ghosts Banner'],
+      ['Status', 'On track'],
+    ]);
+  });
+
+  it('dulls the elite, the boss and a Tribulation, and shows no drop or foe as a dash', () => {
+    const s = newGame(1, 'sword');
+    const seen: string[] = [];
+    s.enemies.push(makeTribulation(1, 0));
+    while (s.enemies.length > 0) {
+      seen.push(discreetRows(s, null, false)[0]?.[1] ?? '');
+      s.enemies.shift();
+    }
+    expect(seen.slice(-3)).toEqual(['1 · Escalation', '1 · Final review', '1 · Audit']);
+    const rows = discreetRows(s, null, false);
+    expect(rows[3]).toEqual(['Target', '–']);
+    expect(rows[5]).toEqual(['Latest', '–']);
+  });
+
+  it('says a due review without the XP, and never a realm, Path or the game', () => {
+    const s = dueAt(10);
+    const rows = discreetRows(s, ring, true);
+    expect(rows[1]).toEqual(['Level', '10']);
+    expect(rows[6]).toEqual(['Status', 'Review due']);
+    const text = rows.flat().join(' ');
+    expect(text).not.toMatch(
+      /Tribulation|Immortal|Qi Condensation|Foundation|Sword|Wave|Boss|Elite/,
+    );
+  });
+
+  it('names every grade in office words, never the game grade', () => {
+    const s = newGame(1, 'sword');
+    const seen = (['mortal', 'spirit', 'earth', 'heaven', 'immortal'] as const).map(
+      (grade) => discreetRows(s, { ...ring, grade }, false)[5]?.[1] ?? '',
+    );
+    expect(seen.map((v) => v.split(' · ')[0])).toEqual([
+      'Standard',
+      'Plus',
+      'Pro',
+      'Premium',
+      'Enterprise',
+    ]);
+    for (const v of seen) expect(v).not.toMatch(/Mortal|Spirit|Earth|Heaven|Immortal/);
+  });
+
+  it('keeps HP inside 0-100%', () => {
+    const s = newGame(1, 'sword');
+    s.cultivator.hp = -5;
+    const enemy = s.enemies[0] as GameState['enemies'][number];
+    enemy.hp = enemy.maxHp * 3;
+    const rows = discreetRows(s, null, false);
+    expect(rows[2]?.[1]).toBe('0%');
+    expect(rows[3]?.[1]).toBe('100%');
+  });
+
+  it('has a Vietnamese word for every cell', () => {
+    setLang('vi');
+    const rows = discreetRows(dueAt(10), ring, true);
+    setLang(DEFAULT_LANG);
+    for (const [label, value] of rows) {
+      expect(label).not.toMatch(/^discreet\./);
+      expect(value).not.toMatch(/discreet\./);
+    }
+    expect(rows[6]?.[1]).toBe('Đến hạn duyệt');
   });
 });
 

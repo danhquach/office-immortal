@@ -6,11 +6,12 @@
 // sign-in token. The cloud save reaches itch.io only through the storage frame
 // on GitHub Pages (docs/design.md §11), so the one thing allowed is a frame-src
 // naming a github.io origin, and no frame page of its own. Run `npm run build`
-// first; writes office-immortal-web.zip.
+// first; writes office-immortal-web.zip. Refuses a build with the dev-only
+// Debug panel in it too (src/dev/).
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { cloudProblems } from './zip-checks.mjs';
+import { cloudProblems, debugProblems } from './zip-checks.mjs';
 
 const DIST = 'dist';
 const OUT = 'office-immortal-web.zip';
@@ -33,6 +34,11 @@ const refused = cloudProblems({
   read: (path) => readFileSync(join(DIST, path), 'utf8'),
 });
 if (refused.length) throw new Error(refused.join('\n'));
+const debug = debugProblems({
+  paths: all.map((f) => relative(DIST, f)),
+  read: (path) => readFileSync(join(DIST, path), 'latin1'),
+});
+if (debug.length) throw new Error(debug.join('\n'));
 
 const problems = [];
 let total = 0;
