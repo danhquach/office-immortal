@@ -448,6 +448,18 @@ describe('Full view layout', () => {
     expect(rule(fit, 'main')).not.toMatch(/(?:^|[^-])height:\s*100dvh/);
     expect(columns).toMatch(/min-height:\s*16rem/);
     expect(rule(fit, '.inventory .pager.single')).toMatch(/display:\s*none/);
+    // Each bag tab scrolls inside itself, so the tall store never puts a
+    // scrollbar on the bag.
+    expect(rule(fit, '.columns > .inventory')).toMatch(
+      /grid-template-rows:\s*auto auto minmax\(0,\s*1fr\)/,
+    );
+    expect(rule(fit, '.inventory > .tabpanel')).toMatch(/overflow-y:\s*auto/);
+    // Room for the edge cells' focus rings inside the scroller.
+    expect(rule(fit, '.inventory > .tabpanel')).toMatch(/padding:\s*5px/);
+    expect(rule(fit, '.inventory > .tabpanel')).toMatch(/margin:\s*-5px/);
+    expect(rule(media(SHORT), '.inventory')).toMatch(
+      /grid-template-rows:\s*auto minmax\(0,\s*1fr\)/,
+    );
   });
 
   it('compacts a short window without moving the name off its own row', () => {
@@ -465,8 +477,16 @@ describe('Full view layout', () => {
     // Damage numbers rise over the names.
     expect(rule(shorter, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
     expect(shorter).not.toMatch(/zoom/);
-    // Only the itch.io frame's height shrinks the stage to 0.55.
-    expect(rule(media(SHORTEST), '.game .strip > .stage')).toMatch(/zoom:\s*0\.55/);
+    // Only the itch.io frame's height shrinks the stage to 0.5, with a slimmer
+    // header bar and fewer drop lines.
+    const shortest = media(SHORTEST);
+    expect(rule(shortest, '.game .strip > .stage')).toMatch(/zoom:\s*0\.5;/);
+    expect(rule(shortest, '.beside > .log')).toMatch(/min-height:\s*2\.5rem/);
+    // The header bar's compact padding must outrank its base rule, which comes
+    // later in the file with `.game .strip .where`.
+    expect(rule(code, '.game .strip .where')).toMatch(/padding:/);
+    expect(rule(shorter, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0\.1rem/);
+    expect(rule(shortest, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0;/);
   });
 
   it('keeps the details panel’s action row still while the item scrolls under it', () => {
