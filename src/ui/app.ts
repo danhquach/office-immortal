@@ -1735,6 +1735,8 @@ function play(
   // Combat strip
   const strip = el('section', 'strip');
   attr(strip, 'aria-label', 'strip.label');
+  // The rank icons' atlas, for the compact strip's tier badges (page.css).
+  strip.style.setProperty('--rank-art', cssUrl(artUrl('ranks')));
   const where = el('div', 'where');
   const floorText = el('span');
   const killText = el('span');
