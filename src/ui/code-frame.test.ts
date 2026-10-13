@@ -99,7 +99,7 @@ describe('making a code', () => {
         before: 'Link code: ',
         code: 'ABCDE FGH12',
         spoken: 'A B C D E, F G H 1 2',
-        after: '. Enter it on your other device within 15 minutes. It works once.',
+        after: '. Enter it on your other device within 15 minutes. It links one device.',
       },
     });
   });

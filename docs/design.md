@@ -592,8 +592,11 @@ waits on the network.
 - **Identity.** No account, no email. Turning it on makes this browser an
   anonymous user on the backend (Supabase anonymous sign-in). To use the save
   elsewhere, the first device shows a one-time **link code** (10 characters,
-  valid 15 minutes, used once); the other device enters it and joins the same
-  save. Letter case, spaces, dashes and look-alikes (O/0, I/L/1) don't matter.
+  valid 15 minutes, links one device); the other device enters it and joins the
+  same save. Letter case, spaces, dashes and look-alikes (O/0, I/L/1) don't matter.
+  If the link fails on that device (the reply was lost, or it can't read the
+  save), the same device can retry the same code until it expires; no other
+  device can use it.
 - **Server is storage only.** One text save per player with a revision number,
   and size and shape checks (at most 200,000 characters, a JSON object). Each
   player reads and writes only their own save, through a handful of database

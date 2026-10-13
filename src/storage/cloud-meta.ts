@@ -115,6 +115,50 @@ export function clearMeta(storage: SaveStorage): boolean {
   }
 }
 
+/**
+ * A sign-in made for a link attempt that failed, kept for a link code's
+ * lifetime: the server may have taken the code already, and lets only the same
+ * player redeem it again (issue #103). Same storage and threat model as CLOUD_KEY.
+ */
+export const LINK_SPARE_KEY = 'office-immortal.cloud.linkSpare';
+/** A link code's lifetime (create_link_code's ttl). */
+export const LINK_SPARE_MS = 15 * 60_000;
+
+/** The kept sign-in, or null when there is none, it is past its time, or it fails any check. */
+export function readSpare(storage: SaveStorage, now: number): Session | null {
+  try {
+    const raw = storage.getItem(LINK_SPARE_KEY);
+    if (raw === null) return null;
+    if (raw.length <= 10_000) {
+      const o = obj(JSON.parse(raw), ['session', 'until']);
+      const until = int(o.until, 0, Number.MAX_SAFE_INTEGER);
+      // A clock set back must not stretch its life.
+      if (now < until && until <= now + LINK_SPARE_MS) return readSession(o.session);
+    }
+  } catch {
+    // Falls through to forget it.
+  }
+  clearSpare(storage);
+  return null;
+}
+
+/** Keeps `session` for a retry; storage refusing just means a retry signs up anew. */
+export function writeSpare(storage: SaveStorage, session: Session, now: number): void {
+  try {
+    storage.setItem(LINK_SPARE_KEY, JSON.stringify({ session, until: now + LINK_SPARE_MS }));
+  } catch {
+    // Nothing kept.
+  }
+}
+
+export function clearSpare(storage: SaveStorage): void {
+  try {
+    storage.removeItem(LINK_SPARE_KEY);
+  } catch {
+    // Expires on its own.
+  }
+}
+
 export function newMeta(session: Session): CloudMeta {
   return {
     session,

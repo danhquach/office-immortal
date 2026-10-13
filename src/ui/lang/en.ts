@@ -327,7 +327,7 @@ const messages = {
   'cloud.getCode': 'Get link code',
   'cloud.codeFrame': 'Link code',
   'cloud.code':
-    'Link code: {code}. Enter it on your other device within {minutes} minutes. It works once.',
+    'Link code: {code}. Enter it on your other device within {minutes} minutes. It links one device.',
   'cloud.turnOff': 'Turn off on this device',
   'cloud.linkField': 'Link code from your other device',
   'cloud.link': 'Link this device',

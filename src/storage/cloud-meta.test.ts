@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { memory, SAVE_ID } from './cloud-fakes.ts';
-import { CLOUD_KEY, clearMeta, newMeta, readMeta, writeMeta } from './cloud-meta.ts';
+import {
+  CLOUD_KEY,
+  clearMeta,
+  clearSpare,
+  LINK_SPARE_KEY,
+  LINK_SPARE_MS,
+  newMeta,
+  readMeta,
+  readSpare,
+  writeMeta,
+  writeSpare,
+} from './cloud-meta.ts';
 import { readCloudConfig } from './cloud-config.ts';
 
 const SESSION = {
@@ -59,6 +70,62 @@ describe('cloud meta', () => {
     };
     expect(readMeta(broken)).toBeNull();
     expect(clearMeta(broken)).toBe(false);
+  });
+});
+
+describe('the sign-in kept from a failed link', () => {
+  const NOW = 1_800_000_000_000;
+
+  it('round-trips until a link code would have expired, then is forgotten', () => {
+    const s = memory();
+    writeSpare(s, SESSION, NOW);
+    expect(readSpare(s, NOW + LINK_SPARE_MS - 1)).toEqual(SESSION);
+    expect(readSpare(s, NOW + LINK_SPARE_MS)).toBeNull();
+    expect(s.data.has(LINK_SPARE_KEY)).toBe(false);
+    writeSpare(s, SESSION, NOW);
+    clearSpare(s);
+    expect(readSpare(s, NOW)).toBeNull();
+  });
+
+  it('is forgotten when tampered with', () => {
+    const good = { session: SESSION, until: NOW + LINK_SPARE_MS };
+    const tampered: string[] = [
+      '{"__proto__":{"until":1}}',
+      JSON.stringify({ ...good, extra: 1 }),
+      JSON.stringify({ ...good, until: String(good.until) }),
+      JSON.stringify({ ...good, until: 1.5 }),
+      // Set by a clock that later went back: never lives past one code lifetime from now.
+      JSON.stringify({ ...good, until: NOW + LINK_SPARE_MS + 1 }),
+      JSON.stringify({ ...good, session: { ...SESSION, access: 'a\u202eb' } }),
+      JSON.stringify({ ...good, session: { ...SESSION, refresh: 'x'.repeat(5000) } }),
+      JSON.stringify({ ...good, session: null }),
+      JSON.stringify(good) + ' '.repeat(10_000),
+      'null',
+      'not json',
+    ];
+    for (const raw of tampered) {
+      const s = memory();
+      s.data.set(LINK_SPARE_KEY, raw);
+      expect(readSpare(s, NOW), raw.slice(0, 80)).toBeNull();
+      expect(s.data.has(LINK_SPARE_KEY)).toBe(false);
+    }
+  });
+
+  it('survives storage that throws', () => {
+    const s = memory();
+    s.failWrites = true;
+    expect(() => writeSpare(s, SESSION, NOW)).not.toThrow();
+    const broken = {
+      ...s,
+      getItem: () => {
+        throw new Error('blocked');
+      },
+      removeItem: () => {
+        throw new Error('blocked');
+      },
+    };
+    expect(readSpare(broken, NOW)).toBeNull();
+    expect(() => clearSpare(broken)).not.toThrow();
   });
 });
 

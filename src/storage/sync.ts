@@ -18,9 +18,12 @@ import {
 import {
   ADOPT_KEY,
   clearMeta,
+  clearSpare,
   newMeta,
   readMeta,
+  readSpare,
   writeMeta,
+  writeSpare,
   type CloudMeta,
 } from './cloud-meta.ts';
 import { decodeSave, isNewerSave, SAVE_KEY, type Save, type SaveStorage } from './save.ts';
@@ -119,6 +122,8 @@ export function createSync(deps: SyncDeps): Sync {
   let lost: { raw: string; savedAt: number } | null = null;
   /** The cloud save the player is choosing about. */
   let choice: Server | null = null;
+  // Reading forgets a sign-in kept from a failed link once its code has expired.
+  readSpare(storage, deps.now());
 
   function setStatus(s: SyncStatus): void {
     status = s;
@@ -412,6 +417,14 @@ export function createSync(deps: SyncDeps): Sync {
     return store(meta) ? meta : null;
   }
 
+  /** A sign-in for a link: the one kept from a failed attempt, so the server sees the same player retry. */
+  async function linkSignIn(): Promise<CloudMeta | null> {
+    const spare = readSpare(storage, deps.now());
+    if (!spare) return signUpFresh();
+    const meta = newMeta(spare);
+    return store(meta) ? meta : null;
+  }
+
   return {
     get status() {
       return status;
@@ -480,6 +493,7 @@ export function createSync(deps: SyncDeps): Sync {
       try {
         // A brand-new user has no cloud save, so there is nothing to check first.
         if (!(await signUpFresh())) return;
+        clearSpare(storage);
         checked = true;
         await upload('manual');
       } catch (e) {
@@ -504,19 +518,36 @@ export function createSync(deps: SyncDeps): Sync {
       setStatus({ kind: 'syncing' });
       /** The session this attempt works under; only meta still holding it is ours to undo. */
       let mine: string | null = null;
-      const undo = (): void => {
-        if (!mine || readMeta(storage)?.session?.access !== mine) return;
+      const made = !before || before.relink;
+      /** Still this attempt's sign-in, or what this tab's renewal of one made for it became (never another tab's). */
+      const ours = (now: CloudMeta | null): boolean => {
+        if (!mine || !now) return false;
+        if (now.session?.access === mine) return true;
+        // A device's own sign-in renewed meanwhile stays: putting back the old one would undo the renewal.
+        if (!made) return false;
+        const to = cloud.renewedTo(mine);
+        if (to === undefined) return false;
+        return to === null ? now.relink && !now.session : now.session?.access === to;
+      };
+      /** `keep` false: the sign-in itself was refused, so it is no use to a retry. */
+      const undo = (keep: boolean): void => {
+        const now = readMeta(storage);
+        if (!keep) clearSpare(storage);
+        if (!ours(now)) return;
+        // The server may have taken the code already: keep a sign-in made for
+        // this attempt, so a retry with the same code is the same player.
+        if (made && keep && now?.session) writeSpare(storage, now.session, deps.now());
         if (before) store(before);
         else clearMeta(storage);
       };
       try {
-        const meta = before && !before.relink ? before : await signUpFresh();
+        const meta = made ? await linkSignIn() : before;
         if (!meta) return;
         mine = meta.session?.access ?? null;
         const server = await cloud.redeemLinkCode(code);
         if (!raw && !decodeSave(server.data) && !isNewerSave(server.data)) {
           // Nothing local to keep and nothing readable to load: leave cloud off here.
-          undo();
+          undo(true);
           setStatus(prev);
           deps.onNote('cant-read');
           return;
@@ -534,11 +565,12 @@ export function createSync(deps: SyncDeps): Sync {
         ) {
           return;
         }
+        clearSpare(storage);
         checked = false;
         settle(server, raw, raw ? decodeSave(raw) : null, false);
       } catch (e) {
-        // A failed attempt leaves things as they were (a sign-in made just for it is dropped).
-        undo();
+        // A failed attempt leaves things as they were (a sign-in made just for it is kept aside).
+        undo(!(e instanceof CloudError && e.kind === 'auth'));
         setStatus(prev);
         deps.onNote(describeError(e));
       } finally {
@@ -600,6 +632,7 @@ export function createSync(deps: SyncDeps): Sync {
         deps.onNote('refused-settings');
         return;
       }
+      clearSpare(storage);
       checked = false;
       choice = null;
       setStatus({ kind: 'off' });
@@ -614,6 +647,7 @@ export function createSync(deps: SyncDeps): Sync {
       try {
         if (meta.saveId !== null) await cloud.deleteSave();
         clearMeta(storage);
+        clearSpare(storage);
         checked = false;
         setStatus({ kind: 'off' });
         return { ok: true };

@@ -3,7 +3,7 @@
 -- Everything happens in one transaction that is rolled back at the end.
 
 begin;
-select plan(41);
+select plan(46);
 
 -- Two players, A and B, and a stranger C with no save.
 insert into auth.users (id, is_anonymous) values
@@ -88,10 +88,33 @@ reset role;
 select pg_temp.become('00000000-0000-0000-0000-0000000000b2');
 select is((public.redeem_link_code(lower(current_setting('t.code'))) ->> 'data'), pg_temp.save_text(3),
   'a lower-case code redeems and returns the target save');
-select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t.code')),
-  'link_code_invalid', 'a used code is invalid');
 reset role;
 select is((select count(*)::int from public.saves), 1, 'the old sole-member save is deleted, A''s stays');
+
+-- A failed link can be retried with the same code by the same player only (issue #103).
+select pg_temp.become('00000000-0000-0000-0000-0000000000b2');
+select is((public.redeem_link_code(current_setting('t.code')) ->> 'data'), pg_temp.save_text(3),
+  'the player who redeemed a code can redeem it again');
+reset role;
+select is((select count(*)::int from public.save_members
+    where user_id = '00000000-0000-0000-0000-0000000000b2'), 1,
+  'redeeming again leaves the player a member once');
+select pg_temp.become('00000000-0000-0000-0000-0000000000c3');
+select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t.code')),
+  'link_code_invalid', 'a code used by another player is invalid');
+reset role;
+update public.link_codes set expires_at = now() - interval '1 minute'
+  where code = current_setting('t.code');
+select pg_temp.become('00000000-0000-0000-0000-0000000000c3');
+select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t.code')),
+  'link_code_invalid', 'a code used by another player is invalid after it expires too');
+select pg_temp.become('00000000-0000-0000-0000-0000000000b2');
+select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t.code')),
+  'link_code_expired', 'its own redeemer cannot redeem it after it expires');
+reset role;
+delete from auth.users where id = '00000000-0000-0000-0000-0000000000b2';
+select is((select count(*)::int from public.link_codes where code = current_setting('t.code')), 0,
+  'deleting the redeemer deletes the codes they redeemed');
 
 -- An expired code is refused.
 select pg_temp.become('00000000-0000-0000-0000-0000000000a1');

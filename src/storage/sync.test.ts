@@ -10,7 +10,16 @@ import {
   memory,
   type FakeStorage,
 } from './cloud-fakes.ts';
-import { ADOPT_KEY, CLOUD_KEY, newMeta, readMeta, writeMeta } from './cloud-meta.ts';
+import {
+  ADOPT_KEY,
+  CLOUD_KEY,
+  LINK_SPARE_KEY,
+  LINK_SPARE_MS,
+  newMeta,
+  readMeta,
+  writeMeta,
+  writeSpare,
+} from './cloud-meta.ts';
 import { createCloud } from './cloud.ts';
 import { encodeSave, loadSave, MAX_SAVE_CHARS, SAVE_KEY, SAVE_VERSION } from './save.ts';
 import { createSync, UPLOAD_EVERY_MS, type SyncStatus } from './sync.ts';
@@ -1316,5 +1325,233 @@ describe('a cloud save from a newer release', () => {
     updated.sync.begin();
     await until(() => expect(kind(updated)).toBe('conflict'));
     expect(updated.storage.getItem(SAVE_KEY)).toBe(mine);
+  });
+});
+
+describe('retrying a failed link with the same code (issue #103)', () => {
+  const signUps = (w: World) => w.server.calls.filter((c) => c.url.endsWith('/signup'));
+
+  /** A host with cloud save on, its code, and a new device on the Path choice. */
+  async function attempt(w: World) {
+    const { d: host, text } = await enabled(w);
+    const code = (await host.sync.linkCode())?.code as string;
+    const d = w.device();
+    d.sync.begin();
+    return { host, text, code, d };
+  }
+
+  it('the reply was lost: the same code works on a retry', async () => {
+    const w = world();
+    const { text, code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(d.notes).toEqual(['offline']);
+    expect(kind(d)).toBe('off');
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    const before = signUps(w).length;
+    await d.sync.link(code);
+    expect(signUps(w)).toHaveLength(before);
+    expect(d.notes.at(-1)).toBe('loaded');
+    expect(d.storage.getItem(SAVE_KEY)).toBe(text);
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+  });
+
+  it('the save could not be read: the same code works once it can be', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    const id = [...w.server.saves.keys()][0] as string;
+    const readable = w.server.saves.get(id)?.data as string;
+    w.server.saves.set(id, { data: '{"v":999}', rev: 2 });
+    await d.sync.link(code);
+    expect(d.notes).toEqual(['cant-read']);
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    // An updated build can read it; the page reloads, so a new sync starts.
+    w.server.saves.set(id, { data: readable, rev: 3 });
+    const again = w.device(d.storage);
+    again.sync.begin();
+    await again.sync.link(code);
+    expect(again.notes).toEqual(['loaded']);
+    expect(again.storage.getItem(SAVE_KEY)).toBe(readable);
+  });
+
+  it('a device already on its own cloud save retries under its own sign-in', async () => {
+    const w = world();
+    const { text, code } = await attempt(w);
+    const { d: b } = await enabled(w, 2);
+    w.server.loseNextRedeem = true;
+    await b.sync.link(code);
+    expect(b.notes.at(-1)).toBe('offline');
+    expect(b.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+    await b.sync.link(code);
+    expect(kind(b)).toBe('conflict');
+    b.sync.useCloud();
+    expect(b.storage.getItem(SAVE_KEY)).toBe(text);
+  });
+
+  it('a failed attempt does not open the code to a second device', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    const c = w.device();
+    c.sync.begin();
+    await c.sync.link(code);
+    expect(c.notes).toEqual(['link_code_invalid']);
+    await d.sync.link(code);
+    expect(d.notes.at(-1)).toBe('loaded');
+  });
+
+  it('the kept sign-in is dropped after a code lifetime, or when the server refuses it', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    w.time.t += LINK_SPARE_MS;
+    let before = signUps(w).length;
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(signUps(w)).toHaveLength(before + 1);
+
+    const spare = JSON.parse(d.storage.getItem(LINK_SPARE_KEY) as string) as {
+      session: Record<string, unknown>;
+    };
+    spare.session.access = 'access-token-revoked';
+    w.server.revokeRefresh = true;
+    d.storage.setItem(LINK_SPARE_KEY, JSON.stringify(spare));
+    await d.sync.link(code);
+    expect(d.notes.at(-1)).toBe('auth');
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    expect(kind(d)).toBe('off');
+    w.server.revokeRefresh = false;
+    before = signUps(w).length;
+    await d.sync.link('ZZZZZZZZZZ');
+    expect(signUps(w)).toHaveLength(before + 1);
+  });
+  it('another tab turning on during a failing link keeps its own sign-in', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    let release = (): void => undefined;
+    w.server.hold.redeem_link_code = new Promise<void>((r) => (release = r));
+    w.server.loseNextRedeem = true;
+    const linking = d.sync.link(code);
+    await until(() =>
+      expect(w.server.calls.some((c) => c.url.endsWith('/redeem_link_code'))).toBe(true),
+    );
+    const other = newMeta({
+      access: 'access-token-other1',
+      refresh: 'refresh-token-other1',
+      expiresAt: T,
+    });
+    writeMeta(d.storage, other);
+    release();
+    await linking;
+    expect(readMeta(d.storage)).toEqual(other);
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+  });
+
+  it('a device on its own cloud save keeps a sign-in renewed during a failed link', async () => {
+    const w = world();
+    const { code } = await attempt(w);
+    const { d: b } = await enabled(w, 2);
+    const meta = readMeta(b.storage) as NonNullable<ReturnType<typeof readMeta>>;
+    const old = meta.session as NonNullable<typeof meta.session>;
+    writeMeta(b.storage, { ...meta, session: { ...old, expiresAt: w.time.t } });
+    w.server.loseNextRedeem = true;
+    await b.sync.link(code);
+    const now = readMeta(b.storage)?.session;
+    expect(now?.refresh).not.toBe(old.refresh);
+    expect(b.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+    await b.sync.link(code);
+    expect(kind(b)).toBe('conflict');
+  });
+
+  it('a kept sign-in renewed twice during the retry is still kept, renewed', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    const spare = JSON.parse(d.storage.getItem(LINK_SPARE_KEY) as string) as {
+      session: { access: string; expiresAt: number };
+    };
+    const first = spare.session.access;
+    // Renewed before the call (about to expire), then again when the server refuses the new token.
+    spare.session.expiresAt = w.time.t;
+    d.storage.setItem(LINK_SPARE_KEY, JSON.stringify(spare));
+    w.server.refuseNextToken = true;
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    const renewed = JSON.parse(d.storage.getItem(LINK_SPARE_KEY) as string) as {
+      session: { access: string };
+    };
+    expect(renewed.session.access).not.toBe(first);
+    await d.sync.link(code);
+    expect(d.notes.at(-1)).toBe('loaded');
+  });
+
+  it('a kept sign-in renewed during the retry is still kept, renewed', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    const spare = JSON.parse(d.storage.getItem(LINK_SPARE_KEY) as string) as {
+      session: { access: string; expiresAt: number };
+    };
+    const first = spare.session.access;
+    spare.session.expiresAt = w.time.t;
+    d.storage.setItem(LINK_SPARE_KEY, JSON.stringify(spare));
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(d.storage.getItem(CLOUD_KEY)).toBeNull();
+    const renewed = JSON.parse(d.storage.getItem(LINK_SPARE_KEY) as string) as {
+      session: { access: string };
+    };
+    expect(renewed.session.access).not.toBe(first);
+    await d.sync.link(code);
+    expect(d.notes.at(-1)).toBe('loaded');
+  });
+
+  it('a device that must link again retries with the same code', async () => {
+    const w = world();
+    const { text, code, d } = await attempt(w);
+    const relink = { ...newMeta({ access: 'access-x1', refresh: 'refresh-x1', expiresAt: T }) };
+    writeMeta(d.storage, { ...relink, session: null, saveId: SAVE_ID, relink: true });
+    const before = d.storage.getItem(CLOUD_KEY);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(d.storage.getItem(CLOUD_KEY)).toBe(before);
+    const ups = signUps(w).length;
+    await d.sync.link(code);
+    expect(signUps(w)).toHaveLength(ups);
+    expect(d.notes.at(-1)).toBe('loaded');
+    expect(d.storage.getItem(SAVE_KEY)).toBe(text);
+  });
+
+  it('the kept sign-in is forgotten at startup once expired, and by turning on or off', async () => {
+    const w = world();
+    const { code, d } = await attempt(w);
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    expect(d.storage.getItem(LINK_SPARE_KEY)).not.toBeNull();
+    w.device(d.storage);
+    expect(d.storage.getItem(LINK_SPARE_KEY)).not.toBeNull();
+    w.time.t += LINK_SPARE_MS;
+    w.device(d.storage);
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+
+    w.server.loseNextRedeem = true;
+    await d.sync.link(code);
+    play(d, w.time.t, 2);
+    await d.sync.turnOn();
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+    const kept = (): void =>
+      writeSpare(d.storage, { access: 'access-k1', refresh: 'refresh-k1', expiresAt: T }, w.time.t);
+    kept();
+    expect(await d.sync.deleteCloud()).toEqual({ ok: true });
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
+    kept();
+    d.sync.turnOff();
+    expect(d.storage.getItem(LINK_SPARE_KEY)).toBeNull();
   });
 });

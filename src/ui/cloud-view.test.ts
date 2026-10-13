@@ -124,7 +124,7 @@ describe('linkCodeLine', () => {
       before: 'Link code: ',
       code: '0D6G5 S2Z8B',
       spoken: '0 D 6 G 5, S 2 Z 8 B',
-      after: '. Enter it on your other device within 15 minutes. It works once.',
+      after: '. Enter it on your other device within 15 minutes. It links one device.',
     });
   });
 
