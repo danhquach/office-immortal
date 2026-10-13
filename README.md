@@ -130,6 +130,11 @@ Pages.
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
+The tag must name the version on that commit (`package.json`, shown in the
+status bar); CI refuses any other. Every PR to `main` raises that version
+(`npm version patch --no-git-tag-version`), and CI fails a PR that doesn't
+(Dependabot's PRs excepted).
+
 One-time setup:
 
 - **itch.io project:** Kind of project **HTML**; upload channel `html5` (butler

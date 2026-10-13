@@ -241,6 +241,15 @@ select {
   border-top: 1px solid var(--line);
   font-size: 0.8rem;
 }
+/* The game's version, at the bar's right end; its build details open on hover or focus. */
+.statusbar .version {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.version-tip span {
+  display: block;
+  white-space: nowrap;
+}
 .statusbar .sheet-tab {
   padding: 0 0.75rem;
   border: 1px solid var(--line);

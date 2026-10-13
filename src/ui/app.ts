@@ -266,6 +266,8 @@ import {
   discreetRows,
   waveLabel,
   xpBar,
+  versionDetails,
+  versionLabel,
 } from './view.ts';
 
 const TICK_MS = 200;
@@ -1040,12 +1042,30 @@ function formulaBar(): HTMLElement {
 /**
  * The status bar under the sheet: what the cultivator is doing now
  * (`character`, drawn every frame by the game page) at the left, then the
- * ready state and the one sheet tab.
+ * ready state and the one sheet tab, and the game's version at the right.
  */
 function statusBar(): { bar: HTMLElement; character: HTMLElement } {
   const bar = el('footer', 'statusbar');
   const character = el('span', 'muted');
-  bar.append(character, elt('span', '', 'status.ready'), elt('span', 'sheet-tab', 'status.sheet'));
+  // Seen as "v0.6.2", read as "Version 0.6.2"; the build and its time on hover or focus.
+  const version = el('span', 'version muted', versionLabel(__APP_VERSION__).text);
+  version.tabIndex = 0;
+  // A named group, so focus reads the whole name, not the bare "v0.6.2".
+  version.setAttribute('role', 'group');
+  say(() => version.setAttribute('aria-label', versionLabel(__APP_VERSION__).spoken));
+  bar.append(
+    character,
+    elt('span', '', 'status.ready'),
+    elt('span', 'sheet-tab', 'status.sheet'),
+    version,
+  );
+  const tip = el('p', 'boost-tip version-tip');
+  tip.id = 'version-tip';
+  hoverTip(version, tip, () =>
+    tip.replaceChildren(
+      ...versionDetails(__BUILD_ID__, __BUILD_TIME__).map((line) => el('span', '', line)),
+    ),
+  );
   return { bar, character };
 }
 
@@ -1176,8 +1196,9 @@ function kpi(
 }
 
 /**
- * Opens `tip` (a popover, placed under `anchor`) on hover or keyboard focus,
- * and on a tap through the focus it leaves; it closes when the pointer has
+ * Opens `tip` (a popover, placed under `anchor`, or over it near the window's
+ * bottom) on hover or keyboard focus, and on a tap through the focus it
+ * leaves; it closes when the pointer has
  * left and the anchor has no keyboard focus, on blur after a tap, on Escape,
  * or on a resize or scroll. `fill` draws it just before it opens.
  */
@@ -1198,7 +1219,9 @@ function hoverTip(
     fill();
     tip.showPopover();
     const r = anchor.getBoundingClientRect();
-    tip.style.top = `${r.bottom}px`;
+    // Under the anchor, or over it when the window has no room below (the status bar).
+    const below = r.bottom + tip.offsetHeight + 8 <= window.innerHeight;
+    tip.style.top = `${below ? r.bottom : Math.max(0, r.top - tip.offsetHeight - 8)}px`;
     tip.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - tip.offsetWidth - 4))}px`;
     // Placed once, where it opened: a resize or scroll closes it. The scroll
     // a focus may cause to bring the anchor into view is let through first.
