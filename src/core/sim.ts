@@ -8,6 +8,7 @@
 import {
   breakThrough,
   derive,
+  effectiveStats,
   gainXp,
   newCultivator,
   PATHS,
@@ -313,7 +314,7 @@ function cultivatorAttacks(s: GameState, rng: Rng, offline: boolean): void {
   if (path.burstEvery > 0 && c.attackCount % path.burstEvery === 0) damage *= path.burstMultiplier;
   if (chance(rng, d.critChance)) damage *= d.critMultiplier;
   // A Soul Banner's souls: after crit and burst, so they never crit or burst.
-  damage += soulDamage(s.souls, c.stats.spirit);
+  damage += soulDamage(s.souls, effectiveStats(c).spirit);
   const dealt = Math.min(enemy.hp, mitigate(damage, enemy.defence));
   enemy.hp -= dealt;
   c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
@@ -390,7 +391,7 @@ function queueTribulation(s: GameState): void {
 }
 
 /** Fresh enemies and full HP, then the first fight. */
-function startFloor(s: GameState, rng: Rng, delay: number): void {
+export function startFloor(s: GameState, rng: Rng, delay: number): void {
   const c = s.cultivator;
   s.enemies = makeFloor(rng, s.floor);
   queueTribulation(s);

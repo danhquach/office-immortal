@@ -7,10 +7,13 @@
 import {
   BASE_STAT,
   derive,
+  gainXp,
   isRealmCap,
   PATHS,
   readyForTribulation,
+  REALM_BONUS,
   realmOf,
+  REALMS,
   STARTING_PRIMARY_BONUS,
   STAT_POINTS_PER_LEVEL,
   xpToNext,
@@ -60,22 +63,24 @@ import {
   type SlotId,
   type UniqueId,
 } from '../core/loot.ts';
+import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
-import { ARRAY_TICK, ENEMY_ARRIVAL, type GameState } from '../core/sim.ts';
+import { ARRAY_TICK, ENEMY_ARRIVAL, startFloor, type GameState } from '../core/sim.ts';
 import { arr, fail, int, num, obj, oneOf } from './validate.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
  * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners;
  * v6 had seven realms, so a due Tribulation may carry another realm's name;
- * v7 came before crafting, so no item has a refine level.
+ * v7 came before crafting, so no item has a refine level; v8 had a cap every
+ * 10 levels.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -251,9 +256,10 @@ function readState(v: unknown, version: number): GameState {
   const before5 = version < 5;
   // Before v6 there were no Soul Banners, so no souls.
   const before6 = version < 6;
-  // Before v7 the realm ladder was shorter: a due Tribulation is renamed for its realm.
-  const before7 = version < 7;
   // Before v8 there was no crafting, so no item carries a refine level.
+  // Before v9 the realm ladder was different (seven realms before v7, then a
+  // cap every 10 levels): a due Tribulation is renamed for its realm.
+  const before9 = version < 9;
   const items: ItemReader = {
     slot: before4 ? fromPants : (id) => id,
     refines: version >= 8,
@@ -293,6 +299,7 @@ function readState(v: unknown, version: number): GameState {
     bonusPoints(passives),
     items,
     before4,
+    before9,
   );
   const state: GameState = {
     time,
@@ -300,7 +307,13 @@ function readState(v: unknown, version: number): GameState {
     cultivator,
     floor,
     highestFloor,
-    enemies: readEnemies(o.enemies, floor, cultivator, before7),
+    enemies: readEnemies(
+      o.enemies,
+      floor,
+      cultivator,
+      before9 ? heldAtOldCap(cultivator) : readyForTribulation(cultivator),
+      before9,
+    ),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
     // Left behind while no Killing Array is equipped, so it may be in the past.
     arrayNextAt: before5
@@ -321,6 +334,7 @@ function readState(v: unknown, version: number): GameState {
     passives,
     retirements: before3 ? 0 : int(o.retirements, 0, COUNT),
   };
+  if (before9) toLongerRealms(state);
   return state;
 }
 
@@ -372,6 +386,7 @@ function readCultivator(
   bonus: number,
   items: ItemReader,
   before4: boolean,
+  before9: boolean,
 ): Cultivator {
   const o = obj(v, [
     'path',
@@ -411,7 +426,7 @@ function readCultivator(
     level,
     // XP past a realm cap is held until the Tribulation is won. Below one, the
     // limit may be another engine's (see same()), so it is kept within ours.
-    xp: isRealmCap(level)
+    xp: (before9 ? level % OLD_REALM_LEVELS === 0 && level <= OLD_LAST_CAP : isRealmCap(level))
       ? int(o.xp, 0, COUNT)
       : Math.min(int(o.xp, 0, give(xpToNext(level) - 1)), xpToNext(level) - 1),
     stats,
@@ -421,6 +436,15 @@ function readCultivator(
     nextAttackAt: num(o.nextAttackAt, time, time + MAX_INTERVAL),
     attackCount: int(o.attackCount, 0, Number.MAX_SAFE_INTEGER),
   };
+  if (before9) {
+    // The old ladder may have put this level in a higher realm, with a bigger bonus.
+    const max = derive(c).maxHp;
+    c.hp = Math.min(
+      num(o.hp, Number.MIN_VALUE, give(max * (1 + REALM_BONUS * REALMS.length))),
+      max,
+    );
+    return c;
+  }
   // Above 0 (a fight in progress) and never above the max the gear allows.
   c.hp = num(o.hp, Number.MIN_VALUE, derive(c).maxHp);
   return c;
@@ -438,10 +462,41 @@ const NAMES: Readonly<Record<Exclude<EnemyKind, 'tribulation'>, readonly string[
   boss: BOSSES,
 };
 
-function readEnemies(v: unknown, floor: number, c: Cultivator, oldLadder: boolean): Enemy[] {
+/** v8's realm ladder: a cap every 10 levels up to 90. */
+const OLD_REALM_LEVELS = 10;
+const OLD_LAST_CAP = 90;
+
+/** Whether a v8 cultivator was held at a cap of its ladder with a Tribulation due. */
+function heldAtOldCap(c: Cultivator): boolean {
+  return c.level % OLD_REALM_LEVELS === 0 && c.level <= OLD_LAST_CAP && c.xp >= xpToNext(c.level);
+}
+
+/**
+ * Moves a v8 run onto the longer realms: XP held at a cap that is no longer
+ * one buys its levels, and a Tribulation is due only at a cap of the new ladder.
+ */
+function toLongerRealms(s: GameState): void {
+  const c = s.cultivator;
+  gainXp(c, 0);
+  const ready = readyForTribulation(c);
+  const has = s.enemies.some((e) => e.kind === 'tribulation');
+  if (has && !ready) {
+    s.enemies = s.enemies.filter((e) => e.kind !== 'tribulation');
+    // The Tribulation was all that was left: the floor it ended is cleared, so start it afresh.
+    if (s.enemies.length === 0) startFloor(s, rngFrom(s.rng), ENEMY_ARRIVAL);
+  }
+  if (ready && !has) s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
+}
+
+function readEnemies(
+  v: unknown,
+  floor: number,
+  c: Cultivator,
+  ready: boolean,
+  oldLadder: boolean,
+): Enemy[] {
   // A cultivator held at a cap has the realm's Tribulation at the end of the
   // floor (or at its front, once faced), and only then.
-  const ready = readyForTribulation(c);
   const order: readonly EnemyKind[] = ready ? [...FLOOR_KINDS, 'tribulation'] : FLOOR_KINDS;
   const list = arr(v, order.length);
   // A floor always has an enemy until it is cleared, and clearing starts the next one.

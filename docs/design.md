@@ -48,25 +48,27 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 
 ## 4. Realms and levels
 
-Level-ups give stat points. Every 10 levels is a realm stage; each realm ends
+Level-ups give stat points. Realms get longer and longer: the first is 10
+levels, and each one after it is 2 levels longer than the last. Each realm ends
 in a Tribulation boss that must be beaten to advance.
 
 | Realm | Job title | Levels |
 |---|---|---|
 | Qi Condensation | Intern | 1–10 |
-| Foundation Establishment | Associate | 11–20 |
-| Golden Core | Team Lead | 21–30 |
-| Nascent Soul | Manager | 31–40 |
-| Spirit Transformation | Senior Manager | 41–50 |
-| Void Refinement | Director | 51–60 |
-| Body Integration | VP | 61–70 |
-| Mahayana | CEO | 71–80 |
-| Tribulation Transcendence | Chairman | 81–90 |
-| Immortal Ascension | — | 91+ (endless) |
+| Foundation Establishment | Associate | 11–22 |
+| Golden Core | Team Lead | 23–36 |
+| Nascent Soul | Manager | 37–52 |
+| Spirit Transformation | Senior Manager | 53–70 |
+| Void Refinement | Director | 71–90 |
+| Body Integration | VP | 91–112 |
+| Mahayana | CEO | 113–136 |
+| Tribulation Transcendence | Chairman | 137–162 |
+| Immortal Ascension | — | 163+ (endless) |
 
 The realm name is primary; the job title is shown beside it.
 
-- **The cap:** at level 10, 20, … 90 the level stops; XP keeps coming and is
+- **The cap:** at level 10, 22, 36 … 162 (the last level of each realm) the
+  level stops; XP keeps coming and is
   held. Once the next level's XP is held, the realm's Tribulation falls due and
   joins the end of the current floor, so that floor can't be passed until it is
   won.
@@ -80,6 +82,17 @@ The realm name is primary; the job title is shown beside it.
 - **Winning** breaks through: the level moves on (spending the held XP) and the
   new realm adds +10% max HP and damage, once (added to gear's % bonuses,
   not multiplied).
+- **Main-stat bonus:** each breakthrough also raises the Path's primary stat,
+  by a bigger share every realm: +1% into Foundation Establishment, rising
+  evenly to +6% into Immortal Ascension (+1%, +1.625%, +2.25% … +6%),
+  cumulative, so Golden Core has +2.625% in all, Nascent Soul +4.875% and
+  Immortal Ascension +31.5%. It is derived from the level, not stored: the
+  stat points a cultivator holds and spends are unchanged, and the boosted
+  stat (not rounded, so a small step still counts) is what combat and Soul
+  Banner souls read. The Realm chip's list names each realm's total, to one
+  decimal ("+2.6% main stat"). The Stats tab shows it in green beside the base
+  value ("146 +7.1"); hovering, focusing or tapping it explains it and gives
+  the sum ("Bonus from your realm: Nascent Soul (146 + 7.1 = 153.1)").
 - **Losing** to a Tribulation costs nothing: the floor is played again, with
   the Tribulation at its end. Gear is what beats it; a cultivator who stays
   stuck can start over through Reincarnation.
@@ -89,7 +102,11 @@ The realm name is primary; the job title is shown beside it.
   is fought on.
 - **Older saves:** a save from the seven-realm ladder keeps its level; its realm
   is read from the table above. A Tribulation it had due is renamed for that
-  realm.
+  realm. A version 8 save (a cap every 10 levels) moves onto the longer realms
+  on load: XP it held at a cap that is no longer one buys its levels up to the
+  next cap, a Tribulation that is no longer due is dropped (a fresh floor
+  starts if it was the last enemy), one that is now due is queued, and HP above
+  the new max is clamped.
 
 ## 5. Floors and combat
 
@@ -266,7 +283,7 @@ Every drop is generated from a seeded roll.
   an **Immortal Treasure**.
 - **Tier gate:** a tier needs a minimum realm to equip. A Magic Tool needs
   none, a Spirit Treasure needs Foundation Establishment (level 11) and an
-  Immortal Treasure needs Golden Core (level 21). The gates sit low so a rare
+  Immortal Treasure needs Golden Core (level 23). The gates sit low so a rare
   drop is usable early in a run. Below the realm, Details names it ("Requires
   Golden Core to equip.") and the Equip action is disabled; a double-click or
   drag does nothing. The gate applies only when equipping, so a weapon already
@@ -489,6 +506,10 @@ on every autosave, and is always the copy the game plays from.
   the field in an older save. Saves from v1 to v7 load with no refine
   levels; an older build refuses a v8 save rather than drop the field, and
   moves onto the newer release instead (Updates, below).
+
+- **Version 9** has the longer realms (§4): a cap at 10, 22, 36 … 162 instead
+  of every 10 levels up to 90, so XP is held only at those levels. Version 8
+  saves are moved onto them on load (§4, older saves).
 
 ### Updates
 
@@ -789,14 +810,14 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   its job title, Spirit Stones and Spirit Essence. Realm, Spirit Stones and
   Spirit Essence open with a small icon (decorative, hidden from screen
   readers); the Realm icon changes at each breakthrough. Hovering or focusing
-  the Realm chip lists every realm in order with its job title and levels
-  ("Lv 11–20"; Immortal Ascension "Lv 91+"), the current one highlighted; it
-  closes when the pointer and focus leave, or on Escape. A tap opens it on a
-  touch screen; tapping elsewhere closes it. Level and XP to the next
-  level are a yellow progress bar along the foot of the combat strip ("Lv 14"
-  at its left end, "37 / 60" inside; full with "Tribulation due" when one is
-  due). The strip header shows floor, best floor, wave and kills
-  ("Floor 12 (best 15) · Wave 2 / 3 · Kills 340").
+  the Realm chip lists every realm in order with its job title and levels ("Lv
+  11–22 · +1% main stat"; Immortal Ascension "Lv 163+ · +31.5% main stat"),
+  the current one highlighted; it closes when the pointer and focus leave, or
+  on Escape. A tap opens it on a touch screen; tapping elsewhere closes it.
+  Level and XP to the next level are a yellow progress bar along the foot of
+  the combat strip ("Lv 14" at its left end, "37 / 60" inside; full with
+  "Tribulation due" when one is due). The strip header shows floor, best
+  floor, wave and kills ("Floor 12 (best 15) · Wave 2 / 3 · Kills 340").
 - **Inventory is a grid**, as loot games do it: a fixed grid of bag cells
   (empty ones shown), each item cell marked by grade colour and grade initial.
   A page holds the starting 40 cells; bought cells go on page 2, reached with

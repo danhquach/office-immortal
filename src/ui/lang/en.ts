@@ -85,6 +85,7 @@ const messages = {
   'realm.current': '(current)',
   'realm.levels': 'Lv {from}–{to}',
   'realm.levelsFrom': 'Lv {from}+',
+  'realm.withBonus': '{levels} · +{pct}% main stat',
 
   'character.title': 'Character',
   'character.equipped': 'Equipped',
@@ -100,6 +101,7 @@ const messages = {
   'stat.agility': 'Agility',
   'stat.spirit': 'Spirit',
   'stats.base': 'Base stats',
+  'stats.realmTip': 'Bonus from your realm: {realm} ({base} + {boost} = {total})',
   'stats.plusOne': '+1 {stat}',
   'stats.all': 'All',
   'stats.allTo': 'All to {stat}',

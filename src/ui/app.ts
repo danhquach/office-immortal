@@ -207,6 +207,8 @@ import {
   ICON_ROWS,
   iconCell,
   realmLabel,
+  realmBoost,
+  realmBoostTip,
   realmRows,
   retireLabel,
   SUMMARY_ICONS,
@@ -1005,24 +1007,79 @@ function kpi(
 }
 
 /**
- * The Realm chip's hover list: every realm, the current one highlighted. It
- * opens on hover or keyboard focus and closes when the pointer has left and
- * the chip has no keyboard focus (or on Escape). It reads the level from
- * `level` when it opens; `refresh` redraws an open list after a breakthrough.
+ * Opens `tip` (a popover, placed under `anchor`) on hover or keyboard focus,
+ * and on a tap through the focus it leaves; it closes when the pointer has
+ * left and the anchor has no keyboard focus, on blur after a tap, on Escape,
+ * or on a resize or scroll. `fill` draws it just before it opens.
+ */
+function hoverTip(
+  anchor: HTMLElement,
+  tip: HTMLElement,
+  fill: () => void,
+): { isOpen: () => boolean } {
+  tip.setAttribute('role', 'tooltip');
+  // A panel can clip what spills out, so the tip opens in the top layer.
+  tip.popover = 'manual';
+  anchor.setAttribute('aria-describedby', tip.id);
+  anchor.after(tip);
+  let hovered = false;
+  const isOpen = (): boolean => tip.matches(':popover-open');
+  function show(): void {
+    if (isOpen()) return;
+    fill();
+    tip.showPopover();
+    const r = anchor.getBoundingClientRect();
+    tip.style.top = `${r.bottom}px`;
+    tip.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - tip.offsetWidth - 4))}px`;
+    // Placed once, where it opened: a resize or scroll closes it. The scroll
+    // a focus may cause to bring the anchor into view is let through first.
+    window.addEventListener('resize', hide);
+    requestAnimationFrame(() => {
+      if (isOpen()) window.addEventListener('scroll', hide, true);
+    });
+  }
+  function hide(): void {
+    window.removeEventListener('resize', hide);
+    window.removeEventListener('scroll', hide, true);
+    if (isOpen()) tip.hidePopover();
+  }
+  const over = (e: PointerEvent): void => {
+    hovered = true;
+    if (e.pointerType !== 'touch') show();
+  };
+  // Moving from the anchor onto the tip (or back) keeps it open; so does
+  // keyboard focus, but not the focus a mouse click leaves behind.
+  const out = (e: PointerEvent): void => {
+    const to = e.relatedTarget as Node | null;
+    if (to && (anchor.contains(to) || tip.contains(to))) return;
+    hovered = false;
+    // A tap's finger lifts at once: the focus it left keeps the tip open until blur.
+    if (e.pointerType !== 'touch' && !anchor.matches(':focus-visible')) hide();
+  };
+  for (const node of [anchor, tip]) {
+    node.addEventListener('pointerenter', over);
+    node.addEventListener('pointerleave', out);
+  }
+  anchor.addEventListener('focus', show);
+  anchor.addEventListener('blur', () => {
+    if (!hovered) hide();
+  });
+  anchor.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') hide();
+  });
+  return { isOpen };
+}
+
+/**
+ * The Realm chip's hover list: every realm, the current one highlighted (see
+ * hoverTip for when it opens). It reads the level from `level` when it opens;
+ * `refresh` redraws an open list after a breakthrough.
  */
 function realmList(chip: HTMLElement, level: () => number): { refresh: () => void } {
   const list = el('ul', 'realm-list');
   list.id = 'realm-list';
-  list.setAttribute('role', 'tooltip');
-  // The summary band can clip what spills out, so the list opens in the top
-  // layer, placed under the chip.
-  list.popover = 'manual';
   chip.tabIndex = 0;
-  chip.setAttribute('aria-describedby', list.id);
-  chip.after(list);
   let shown = -1;
-  let hovered = false;
-  const isOpen = (): boolean => list.matches(':popover-open');
   function fill(): void {
     shown = realmOf(level());
     list.replaceChildren(
@@ -1043,49 +1100,7 @@ function realmList(chip: HTMLElement, level: () => number): { refresh: () => voi
       }),
     );
   }
-  function show(): void {
-    if (isOpen()) return;
-    fill();
-    list.showPopover();
-    const r = chip.getBoundingClientRect();
-    list.style.top = `${r.bottom}px`;
-    list.style.left = `${Math.max(4, Math.min(r.left, window.innerWidth - list.offsetWidth - 4))}px`;
-    // Placed once, where it opened: a resize or scroll closes it. The scroll
-    // a focus may cause to bring the chip into view is let through first.
-    window.addEventListener('resize', hide);
-    requestAnimationFrame(() => {
-      if (isOpen()) window.addEventListener('scroll', hide, true);
-    });
-  }
-  function hide(): void {
-    window.removeEventListener('resize', hide);
-    window.removeEventListener('scroll', hide, true);
-    if (isOpen()) list.hidePopover();
-  }
-  const over = (e: PointerEvent): void => {
-    hovered = true;
-    if (e.pointerType !== 'touch') show();
-  };
-  // Moving from the chip onto the list (or back) keeps it open; so does
-  // keyboard focus, but not the focus a mouse click leaves behind.
-  const out = (e: PointerEvent): void => {
-    const to = e.relatedTarget as Node | null;
-    if (to && (chip.contains(to) || list.contains(to))) return;
-    hovered = false;
-    // A tap's finger lifts at once: the focus it left keeps the list open until blur.
-    if (e.pointerType !== 'touch' && !chip.matches(':focus-visible')) hide();
-  };
-  for (const node of [chip, list]) {
-    node.addEventListener('pointerenter', over);
-    node.addEventListener('pointerleave', out);
-  }
-  chip.addEventListener('focus', show);
-  chip.addEventListener('blur', () => {
-    if (!hovered) hide();
-  });
-  chip.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') hide();
-  });
+  const { isOpen } = hoverTip(chip, list, fill);
   return {
     refresh: () => {
       if (isOpen() && realmOf(level()) !== shown) fill();
@@ -1629,10 +1644,25 @@ function play(
   const baseList = el('ul', 'base-list');
   baseList.setAttribute('aria-labelledby', 'base-stats');
   const baseValues = {} as Record<StatId, HTMLElement>;
+  const boostValues = {} as Record<StatId, HTMLElement>;
+  /** Redraws the boost tips that are open, so a breakthrough under one shows at once. */
+  const boostTips: (() => void)[] = [];
   for (const id of STAT_IDS) {
     const row = el('li');
     const value = el('b', 'value');
     baseValues[id] = value;
+    // What the realms add, kept apart from the points the player spends; a
+    // hover, focus or tap says where it comes from.
+    const boost = el('span', 'boost');
+    boost.tabIndex = 0;
+    boostValues[id] = boost;
+    const tip = el('p', 'boost-tip');
+    tip.id = `boost-tip-${id}`;
+    const fillTip = (): void => setText(tip, realmBoostTip(state.cultivator, id));
+    const { isOpen } = hoverTip(boost, tip, fillTip);
+    boostTips.push(() => {
+      if (isOpen()) fillTip();
+    });
     // Hidden (not off) with no points to spend; the words name the stat.
     const one = button('+1', 'spend', () => spend(id, 1));
     const all = buttonT('stats.all', 'spend', () => spend(id, state.cultivator.unspent));
@@ -1641,7 +1671,7 @@ function play(
       one.setAttribute('aria-label', t('stats.plusOne', { stat }));
       all.setAttribute('aria-label', t('stats.allTo', { stat }));
     });
-    row.append(elt('span', 'name', `stat.${id}`), value, one, all);
+    row.append(elt('span', 'name', `stat.${id}`), value, boost, tip, one, all);
     baseList.append(row);
   }
   base.append(baseHead, baseList);
@@ -2690,7 +2720,14 @@ function play(
     for (const n of [xpText, xpFillText]) setText(n, bar.text);
     xp.setAttribute('aria-valuenow', String(Math.round(bar.percent)));
     xp.setAttribute('aria-valuetext', bar.spoken);
-    for (const id of STAT_IDS) setText(baseValues[id], String(c.stats[id]));
+    for (const id of STAT_IDS) {
+      setText(baseValues[id], String(c.stats[id]));
+      const boost = realmBoost(c, id);
+      setText(boostValues[id], boost);
+      // Only a boost there is takes focus and opens its tip.
+      boostValues[id].hidden = boost === '';
+    }
+    for (const refresh of boostTips) refresh();
     const rows = statRows(c, state.passives);
     // Built once, then only the values change, so selecting text doesn't flicker.
     if (derivedValues.length === 0) {

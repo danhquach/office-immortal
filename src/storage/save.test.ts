@@ -13,7 +13,15 @@ import {
 import { makeEnemy, makeFloor, makeTribulation, type Enemy } from '../core/floors.ts';
 import { charmLine, itemPath, type EquipSlotId, type Item } from '../core/loot.ts';
 import { createRng, int } from '../core/rng.ts';
-import { derive, xpToNext } from '../core/cultivator.ts';
+import {
+  derive,
+  LAST_CAP,
+  PATHS,
+  readyForTribulation,
+  realmOf,
+  REALM_BONUS,
+  xpToNext,
+} from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import {
   ARRAY_TICK,
@@ -1742,8 +1750,8 @@ describe('realm caps and the Tribulation', () => {
 
   it('rejects a Tribulation past the last cap', () => {
     const s = newGame(7, 'sword');
-    s.cultivator.level = 91;
-    s.cultivator.stats.agility += 3 * 90;
+    s.cultivator.level = LAST_CAP + 1;
+    s.cultivator.stats.agility += 3 * LAST_CAP;
     expect(decodeSave(encodeSave(s, 0))).not.toBeNull();
     s.enemies.push(makeTribulation(1, 8));
     expect(decodeSave(encodeSave(s, 0))).toBeNull();
@@ -1905,10 +1913,6 @@ describe('refine level (v8)', () => {
         expect(decodeSave(encodeSave(s, SAVED_AT))?.state, `seed ${seed} step ${step}`).toEqual(s);
       }
     }
-  });
-
-  it('is version 8', () => {
-    expect(SAVE_VERSION).toBe(8);
   });
 
   it('really rerolled an affix in the crafted run', () => {
@@ -2148,5 +2152,176 @@ describe('a save from another browser engine', () => {
     const last = (x: ReturnType<typeof raw>) => enemiesOf(x).at(-1) as J;
     expect(load(s, (x) => void (last(x).maxHp = boss.maxHp * 1.001))).toBeNull();
     expect(load(s, (x) => void (last(x).damage = 1e308))).toBeNull();
+  });
+});
+
+describe('longer realms (v9)', () => {
+  /**
+   * A run as v8 wrote it: a cap every 10 levels, so XP is held at 10, 20, …
+   * 90 with the Tribulation queued at the end of the floor (or in front of it
+   * once faced, or alone once the floor is cleared).
+   */
+  function v8Raw(
+    level: number,
+    o: { xp?: number; tribulation?: 'end' | 'front' | 'alone'; hp?: number } = {},
+  ): ReturnType<typeof raw> {
+    const s = newGame(7, 'sword');
+    const c = s.cultivator;
+    c.level = level;
+    c.stats[PATHS[c.path].primary] += 3 * (level - 1);
+    c.xp = o.xp ?? 0;
+    c.hp = o.hp ?? derive(c).maxHp;
+    if (o.tribulation) {
+      const trib = makeTribulation(s.floor, realmOf(level));
+      if (o.tribulation === 'end') s.enemies.push(trib);
+      else if (o.tribulation === 'front') s.enemies.unshift(trib);
+      else s.enemies = [trib];
+    }
+    const save = JSON.parse(encodeSave(s, SAVED_AT)) as ReturnType<typeof raw>;
+    save.v = 8;
+    return save;
+  }
+  const load8 = (save: ReturnType<typeof raw>) => decodeSave(JSON.stringify(save));
+  const kinds = (s: GameState) => s.enemies.map((e) => e.kind);
+
+  it('is version 9, and still reads version 8', () => {
+    expect(SAVE_VERSION).toBe(9);
+    expect(load8(v8Raw(5))).not.toBeNull();
+  });
+
+  it('round-trips a version 9 save, held at a new cap with its Tribulation', () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.level = 22;
+    s.cultivator.stats.agility += 3 * 21;
+    s.cultivator.xp = xpToNext(22) + 5;
+    s.enemies.push(makeTribulation(s.floor, 1));
+    const save = JSON.parse(encodeSave(s, SAVED_AT));
+    expect(save.v).toBe(9);
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+    // Held at a level that is no longer a cap, a v9 save is as invalid as ever.
+    s.cultivator.level = 20;
+    s.cultivator.stats.agility -= 6;
+    expect(decodeSave(encodeSave(s, SAVED_AT))).toBeNull();
+  });
+
+  it('moves a v8 run held at old cap 20 on to the level its XP now buys, Tribulation dropped', () => {
+    const xp = xpToNext(20) + xpToNext(21) - 1; // Pays for level 21, not the cap at 22.
+    const loaded = load8(v8Raw(20, { xp, tribulation: 'end' }));
+    expect(loaded).not.toBeNull();
+    const st = loaded?.state as GameState;
+    expect(st.cultivator.level).toBe(21);
+    expect(st.cultivator.xp).toBe(xpToNext(21) - 1);
+    expect(kinds(st)).not.toContain('tribulation');
+    expect(st.enemies).toHaveLength(11);
+    // Stat points: the first level's, plus 3 for each of the 20 levels gained.
+    const start = newGame(7, 'sword').cultivator;
+    const total = (x: typeof c) => x.stats.body + x.stats.agility + x.stats.spirit + x.unspent;
+    const c = st.cultivator;
+    expect(total(c)).toBe(total(start) + 3 * 20);
+    expect(st.enemies.every((e) => e.hp > 0)).toBe(true);
+  });
+
+  it('keeps the Tribulation of a v8 run whose old cap 20 XP now reaches the new cap 22', () => {
+    const xp = xpToNext(20) + xpToNext(21) + xpToNext(22);
+    const st = load8(v8Raw(20, { xp, tribulation: 'end' }))?.state as GameState;
+    expect(st.cultivator.level).toBe(22);
+    expect(st.cultivator.xp).toBe(xpToNext(22));
+    expect(kinds(st).at(-1)).toBe('tribulation');
+    expect(st.enemies.filter((e) => e.kind === 'tribulation')).toHaveLength(1);
+    expect(st.enemies.at(-1)?.name).toBe(makeTribulation(1, 1).name);
+  });
+
+  it('moves a v8 run that faced the Tribulation at old cap 20 on, the floor still waiting', () => {
+    const faced = load8(v8Raw(20, { xp: xpToNext(20), tribulation: 'front' }))?.state as GameState;
+    expect(faced.cultivator.level).toBe(21);
+    expect(kinds(faced)).toEqual(kinds(newGame(7, 'sword')));
+    // With the XP to reach the new cap, the faced Tribulation stays in front.
+    const xp = xpToNext(20) + xpToNext(21) + xpToNext(22);
+    const kept = load8(v8Raw(20, { xp, tribulation: 'front' }))?.state as GameState;
+    expect(kept.cultivator.level).toBe(22);
+    expect(kept.enemies[0]?.kind).toBe('tribulation');
+    expect(kept.enemies).toHaveLength(12);
+  });
+
+  it('never leaves a floor empty when the only enemy was a Tribulation no longer due', () => {
+    const st = load8(v8Raw(20, { xp: xpToNext(20), tribulation: 'alone' }))?.state as GameState;
+    expect(st).toBeDefined();
+    expect(st.cultivator.level).toBe(21);
+    expect(st.enemies.length).toBeGreaterThan(0);
+    expect(kinds(st)).not.toContain('tribulation');
+    // A fresh floor starts as any other does: full HP, the first fight after the pause.
+    expect(st.cultivator.hp).toBe(derive(st.cultivator).maxHp);
+    expect(st.cultivator.attackCount).toBe(0);
+    expect(st.enemyNextAttackAt).toBeGreaterThan(st.time);
+    expect(decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+  });
+
+  it('adds the Tribulation a v8 run is now due at a cap the old ladder never had', () => {
+    // Level 22 was mid-realm in v8, so the XP below it was capped; it is a cap now.
+    const st = load8(v8Raw(22, { xp: xpToNext(22) - 1 }))?.state as GameState;
+    expect(st.cultivator.level).toBe(22);
+    expect(kinds(st)).not.toContain('tribulation');
+    // A v8 run at old cap 30 with the XP for 31 and on through 36.
+    let xp = 0;
+    for (let l = 30; l <= 36; l++) xp += xpToNext(l);
+    const held = load8(v8Raw(30, { xp, tribulation: 'end' }))?.state as GameState;
+    expect(held.cultivator.level).toBe(36);
+    expect(kinds(held).at(-1)).toBe('tribulation');
+  });
+
+  it('clamps the HP of a v8 run whose level sat in a higher realm on the old ladder', () => {
+    // Level 36 was realm 3 in v8 (+30%), and is realm 2 now (+20%).
+    const c = newGame(7, 'sword').cultivator;
+    c.level = 36;
+    c.stats[PATHS[c.path].primary] += 3 * 35;
+    const newMax = derive(c).maxHp;
+    const oldMax = Math.round(newMax * ((1 + 4 * REALM_BONUS) / (1 + 3 * REALM_BONUS)));
+    expect(oldMax).toBeGreaterThan(newMax);
+    const st = load8(v8Raw(36, { hp: oldMax }))?.state as GameState;
+    expect(st.cultivator.level).toBe(36);
+    expect(st.cultivator.hp).toBe(newMax);
+    expect(st.cultivator.hp).toBeLessThanOrEqual(derive(st.cultivator).maxHp);
+  });
+
+  it('still rejects v8 HP that no old ladder could have given', () => {
+    expect(load8(v8Raw(36, { hp: 1e9 }))).toBeNull();
+    expect(load8(v8Raw(36, { hp: 0 }))).toBeNull();
+    expect(load8(v8Raw(36, { hp: -5 }))).toBeNull();
+  });
+
+  it('still rejects XP past the next level at a level that was never an old cap', () => {
+    expect(load8(v8Raw(15, { xp: xpToNext(15) }))).toBeNull();
+    expect(load8(v8Raw(15, { xp: xpToNext(15) - 1 }))).not.toBeNull();
+    // 22 is a new cap but was not an old one, so a v8 save cannot hold XP there.
+    expect(load8(v8Raw(22, { xp: xpToNext(22) }))).toBeNull();
+    // Past the old ladder too: a level that was never a cap holds no XP.
+    expect(load8(v8Raw(95, { xp: 2 * xpToNext(95) }))).toBeNull();
+  });
+
+  it('keeps a v8 run held at old cap 90 with the most XP a save can hold finite and sane', () => {
+    const save = v8Raw(90, { xp: Number.MAX_SAFE_INTEGER, tribulation: 'end' });
+    const st = load8(save)?.state as GameState;
+    expect(st).toBeDefined();
+    const c = st.cultivator;
+    expect(c.level).toBeGreaterThanOrEqual(90);
+    expect(c.level).toBeLessThanOrEqual(LAST_CAP);
+    expect(Number.isSafeInteger(c.xp)).toBe(true);
+    expect(c.hp).toBeLessThanOrEqual(derive(c).maxHp);
+    expect(Number.isFinite(derive(c).damage)).toBe(true);
+    // Whatever level it lands on, a Tribulation is queued exactly when due.
+    expect(kinds(st).includes('tribulation')).toBe(readyForTribulation(c));
+    // And the result is a v9 save that loads again unchanged.
+    expect(decodeSave(encodeSave(st, SAVED_AT))?.state).toEqual(st);
+  });
+
+  it('loads every old cap of a v8 run, with and without a Tribulation, into a loadable v9 save', () => {
+    for (const level of [10, 20, 30, 40, 50, 60, 70, 80, 90]) {
+      for (const tribulation of ['end', 'front', 'alone'] as const) {
+        const xp = xpToNext(level) + 3;
+        const st = load8(v8Raw(level, { xp, tribulation }))?.state;
+        expect(st, `${level} ${tribulation}`).toBeDefined();
+        expect(decodeSave(encodeSave(st as GameState, SAVED_AT))?.state).toEqual(st);
+      }
+    }
   });
 });

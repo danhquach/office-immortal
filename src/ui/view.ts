@@ -3,15 +3,18 @@
 
 import {
   derive,
-  LEVELS_PER_REALM,
+  effectiveStats,
   readyForTribulation,
+  realmLevels,
   realmOf,
+  realmPrimaryShare,
   REALMS,
   xpToNext,
   type Cultivator,
   type Derived,
   PATHS,
   type PathId,
+  type StatId,
 } from '../core/cultivator.ts';
 import {
   INVENTORY_SIZE,
@@ -237,7 +240,7 @@ export function favouredBy(item: Item, path: PathId): { text: string; match: boo
 export function soulsLine(item: Item, state: GameState): string | null {
   if (!isBanner(item) || !Object.hasOwn(SOUL_CAPS, item.grade)) return null;
   const souls = state.cultivator.equipment.sideArm === item ? state.souls : 0;
-  const damage = soulDamage(souls, state.cultivator.stats.spirit);
+  const damage = soulDamage(souls, effectiveStats(state.cultivator).spirit);
   return t('item.souls', { souls, cap: SOUL_CAPS[item.grade], damage: num(damage, 1) });
 }
 
@@ -363,6 +366,37 @@ export const STAT_ROWS: readonly StatRow[] = [
     format: (v) => `${num(v * 100, 1)}%`,
   },
 ];
+
+/** What the realms add to `stat`, to one decimal as shown, so the shown sum adds up. */
+function shownBoost(c: Cultivator, stat: StatId): number {
+  return Number((effectiveStats(c)[stat] - c.stats[stat]).toFixed(1));
+}
+
+/**
+ * What the realms add to `stat` on top of its base points, as "+7.1", or ''
+ * for a stat they don't raise (all but the Path's main stat, and every stat in
+ * the first realm).
+ */
+export function realmBoost(c: Cultivator, stat: StatId): string {
+  const boost = shownBoost(c, stat);
+  return boost > 0 ? `+${boost}` : '';
+}
+
+/**
+ * Where a realm boost comes from, and the sum: "Bonus from your realm: Nascent
+ * Soul (146 + 7.1 = 153.1)". The total is the base plus the boost as shown.
+ */
+export function realmBoostTip(c: Cultivator, stat: StatId): string {
+  const realm = REALMS[realmOf(c.level)] as (typeof REALMS)[number];
+  const base = c.stats[stat];
+  const boost = shownBoost(c, stat);
+  return t('stats.realmTip', {
+    realm: tn('realm', realm.name),
+    base,
+    boost,
+    total: num(base + boost, 1),
+  });
+}
 
 /** The cultivator's numbers, with the passives that change them (treasure find). */
 export function statRows(
@@ -609,18 +643,22 @@ export interface RealmRow {
   readonly current: boolean;
 }
 
-/** Every realm in order, for the Realm chip's hover list; the one `level` is in is current. */
+/**
+ * Every realm in order, for the Realm chip's hover list; the one `level` is in
+ * is current. Each realm past the first names the main-stat boost reached there, in all.
+ */
 export function realmRows(level: number): RealmRow[] {
   const at = realmOf(level);
   return REALMS.map((realm, i) => {
-    const from = i * LEVELS_PER_REALM + 1;
+    const { from, to } = realmLevels(i);
+    const levels = to === null ? t('realm.levelsFrom', { from }) : t('realm.levels', { from, to });
     return {
       name: tn('realm', realm.name),
       title: realm.title ? tn('title', realm.title) : '',
       levels:
-        i === REALMS.length - 1
-          ? t('realm.levelsFrom', { from })
-          : t('realm.levels', { from, to: from + LEVELS_PER_REALM - 1 }),
+        i === 0
+          ? levels
+          : t('realm.withBonus', { levels, pct: num(realmPrimaryShare(i) * 100, 1) }),
       current: i === at,
     };
   });
