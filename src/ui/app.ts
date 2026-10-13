@@ -874,13 +874,14 @@ function formulaBar(): HTMLElement {
 }
 
 /**
- * The status bar under the sheet: ready state, the one sheet tab, and what the
- * cultivator is doing now (`character`, drawn every frame by the game page).
+ * The status bar under the sheet: what the cultivator is doing now
+ * (`character`, drawn every frame by the game page) at the left, then the
+ * ready state and the one sheet tab.
  */
 function statusBar(): { bar: HTMLElement; character: HTMLElement } {
   const bar = el('footer', 'statusbar');
   const character = el('span', 'muted');
-  bar.append(elt('span', '', 'status.ready'), elt('span', 'sheet-tab', 'status.sheet'), character);
+  bar.append(character, elt('span', '', 'status.ready'), elt('span', 'sheet-tab', 'status.sheet'));
   return { bar, character };
 }
 
@@ -2199,10 +2200,12 @@ function play(
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   game.append(updateNote);
-  // Beside the strip: the summary chips over Recent drops.
+  // Beside the strip: the summary chips over Recent drops; the two share a row.
   const beside = el('div', 'beside');
   beside.append(kpis, log.box);
-  game.append(strip, beside, columns);
+  const top = el('div', 'top');
+  top.append(strip, beside);
+  game.append(top, columns);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);

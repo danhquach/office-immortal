@@ -323,3 +323,87 @@ describe('title stamp', () => {
     expect(rule).toMatch(/text-transform:\s*uppercase/);
   });
 });
+
+describe('Full view layout', () => {
+  /** page.css without its comments. */
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  /** The body of the `@media` rule whose condition is `query`, nested braces and all. */
+  const media = (query: string): string => {
+    const start = code.indexOf(`@media ${query} {`);
+    if (start < 0) return '';
+    let depth = 0;
+    for (let i = code.indexOf('{', start); i < code.length; i++) {
+      if (code[i] === '{') depth++;
+      else if (code[i] === '}' && --depth === 0) return code.slice(start, i + 1);
+    }
+    return '';
+  };
+  /** The declarations of `selector`'s rule inside `block`. */
+  const rule = (block: string, selector: string): string => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[}\\s])${escaped}\\s*{([^}]*)}`).exec(block)?.[1] ?? '';
+  };
+  const FIT = '(min-width: 940px) and (min-height: 600px)';
+  const SHORT = '(min-width: 940px) and (min-height: 600px) and (max-height: 899px)';
+
+  it('starts at 940 px, so the 960 px itch.io frame gets three columns', () => {
+    expect(code).not.toMatch(/@media \(min-width: 1100px\)|@media \(max-width: 1099px\)/);
+    expect(rule(media('(min-width: 940px)'), '.top')).toMatch(
+      /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
+    );
+    expect(rule(media('(max-width: 939px)'), '.columns')).toMatch(/'char bag'\s*'char side'/);
+  });
+
+  it('fits the character, a bag of 39 px cells and the details into 940 px', () => {
+    const columns = rule(code, '.columns');
+    const [char, side] = [
+      /grid-template-columns:\s*([\d.]+)rem/.exec(columns)?.[1],
+      /minmax\(([\d.]+)rem,\s*1fr\)/.exec(columns)?.[1],
+    ].map(Number) as [number, number];
+    expect(columns).toMatch(/minmax\(0,\s*26\.5rem\)/);
+    expect(rule(media('(min-width: 940px) and (max-width: 1099px)'), 'main')).toMatch(
+      /padding:\s*0 0\.5rem/,
+    );
+    const MARGINS = 2 * 8; // main's 0.5rem each side
+    const COLUMN_GAPS = 2 * 8;
+    const PANEL_CHROME = 2 * 0.6 * 16 + 2; // the panel's padding and border
+    const THIN_SCROLLBAR = 13; // measured in Chromium
+    const CELL_GAPS = 7 * 4;
+    const bag = 940 - MARGINS - COLUMN_GAPS - (char + side) * 16;
+    // 39 px cells at 940 px (41 at 960): the 32 px icon and its 2 px border still fit.
+    expect((bag - PANEL_CHROME - THIN_SCROLLBAR - CELL_GAPS) / 8).toBeGreaterThanOrEqual(38.5);
+  });
+
+  it('makes the page the window’s height, the panels taking the rest', () => {
+    const fit = media(FIT);
+    expect(rule(fit, 'main > .game')).toMatch(/flex:\s*1 1 0/);
+    const columns = rule(fit, '.game > .columns');
+    expect(columns).toMatch(/flex:\s*1 1 0/);
+    expect(rule(fit, '.columns > .inventory')).toMatch(/overflow-y:\s*auto/);
+    // A tall notice makes the page scroll rather than crush the panels.
+    expect(rule(fit, 'main')).toMatch(/min-height:\s*100dvh/);
+    expect(rule(fit, 'main')).not.toMatch(/(?:^|[^-])height:\s*100dvh/);
+    expect(columns).toMatch(/min-height:\s*16rem/);
+    expect(rule(fit, '.inventory .pager.single')).toMatch(/display:\s*none/);
+  });
+
+  it('compacts a short window without moving the name off its own row', () => {
+    const short = media(SHORT);
+    expect(rule(short, '.formula')).toMatch(/display:\s*none/);
+    expect(rule(short, '.game .strip > .stage')).toMatch(/zoom:\s*0\.55/);
+    expect(rule(short, '.game .fighter')).toMatch(/grid-template-areas:\s*'name name'\s*'bar hp'/);
+    expect(rule(short, '.game .foe')).toMatch(/grid-template-areas:\s*'name name'\s*'hp bar'/);
+    // Damage numbers rise over the names.
+    expect(rule(short, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
+  });
+
+  it('gives the chips and drops the whole row while the strip is popped out', () => {
+    expect(rule(media('(min-width: 940px)'), '.top > .beside:only-child')).toMatch(
+      /grid-column:\s*1 \/ -1/,
+    );
+  });
+
+  it('leaves the status bar’s live line at its left', () => {
+    expect(code).not.toMatch(/\.statusbar \.muted\s*{[^}]*margin-left:\s*auto/);
+  });
+});
