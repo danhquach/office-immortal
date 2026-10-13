@@ -498,12 +498,18 @@ chests and timed boosts for Spirit Stones, from a rotating stock.
   | Bonus Envelope | +50% spirit stone find | 20 × level |
 
   Bonuses add to the passives': Focus Tea adds 50% of a kill's base XP
-  beside Seniority's ranks. Each running boost has its own summary chip, after
-  Spirit Essence: its icon, name, effect and time left ("Focus Tea +50% XP ·
-  9 min"), with a `--sell` edge; the chip goes when the boost runs out. The
-  Stats tab also lists the boosts running, with the
-  time each has left, and its Find rows include a running Lucky Charm or Bonus
-  Envelope.
+  beside Seniority's ranks. The boosts' summary chips sit on their own row
+  under Spirit Stones and Spirit Essence: three fixed columns, kept even while
+  no boost runs, so a boost starting never grows the chips or moves the
+  panels. Running boosts fill it from the left in catalog order (Focus Tea,
+  Lucky Charm, Bonus Envelope); the columns after them stay empty. A chip
+  shows its icon, bonus and a short word ("+50% XP", "+50% drops", "+50%
+  stones"; Vietnamese "KN", "vật phẩm", "Linh Thạch"), with a `--sell` edge;
+  on a row under 30rem (a phone) the word goes and only "+50%" shows. A hover,
+  focus or tap opens the whole line with the time left ("Focus Tea (+50% XP):
+  9 min left"), which is also what screen readers hear. The Stats tab also lists
+  the boosts running, with the time each has left, and its Find rows include
+  a running Lucky Charm or Bonus Envelope.
 - **Colours:** Buy and Refresh now wear `--sell`; a chest's name wears its
   grade colour; the price is in the button's words, so colour is never the
   only cue. Without enough stones the button is off and says how many more are
@@ -915,15 +921,17 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   Offence (`--offence`, rose: damage, crit, attack speed, the Killing
   Array), Defence (`--defence`, indigo: HP, defence, lifesteal, the Binding
   and Illusion Arrays) and Utility (`--utility`, lime: qi regen, stone and
-  treasure find).
+  treasure find). Each position's gains and losses are grouped the same
+  way, on the same pills; a gain is green and a loss red.
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or
   with the panel's Equip button (touch and keyboard use the button).
 - In the Full view the character, inventory and side panels keep fixed widths
   and one shared height whatever tab is open; a taller tab or item scrolls
   inside its panel. The details panel's Sell, Salvage and Craft row sits at
-  its top, over the item, and only the item's lines scroll, so the buttons
-  never move under the pointer.
+  its top, over the item, in three equal columns (Craft always the last, even
+  alone on a worn item; a long label wraps inside its button), and only the
+  item's lines scroll, so the buttons never move under the pointer.
 - Dark theme by default; Menu → Settings offers Light and Match system. The
   choice is a display preference, so Reset progress keeps it, and the page
   paints in it from the first frame. Text 4.5:1 or more on its background in
@@ -1020,9 +1028,9 @@ Grade is also written as text, never shown by colour alone.
 - The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
   tab wears a colour on its border (Bag the accent, Auto filter the Salvage
   colour, Store the Spirit Stones colour), tinted while open. The Store groups
-  its cards under **Gear chests** and **Boosts** headings, in stock order
-  within each; a group with nothing in stock is hidden. Store cards stack in
-  one column in every view.
+  its cards under **Gear chests** and **Boosts** headings; chests run best
+  grade first (Heaven, Earth, Spirit), boosts in stock order; a group with
+  nothing in stock is hidden. Store cards stack in one column in every view.
 - The Crafting panel (§7) is a modal over the Full view; in the Narrow view
   it is a full-width sheet along the bottom. Esc, Close or a click outside it
   closes it, and focus goes back to the Craft button.

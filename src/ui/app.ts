@@ -203,6 +203,8 @@ import {
   bagPage,
   cellLabel,
   characterStatusLabel,
+  chestOrder,
+  compareGroups,
   compareToEquipped,
   equipBlock,
   itemFacts,
@@ -256,6 +258,7 @@ import {
   STAT_GROUPS,
   statRows,
   type StatGroup,
+  type StatKind,
   stripEvents,
   tribulationBanner,
   tribulationCall,
@@ -1801,18 +1804,36 @@ function play(
   const kStones = kpi('kpi.stones', summaryIcon('stones'));
   const kEssence = kpi('kpi.essence', summaryIcon('essence'));
   let realmIcon = summaryIcon('realm', state.cultivator.level);
-  // A chip per running store boost (§8): its icon, name, effect and time left; hidden while off.
+  // A chip per store boost (§8) on a row of three fixed columns, kept while off
+  // so a boost starting never grows the chips; running ones fill it from the
+  // left (page.css). Each shows its icon, bonus and a short word (the word
+  // goes on a narrow row); a hover, focus or tap opens the whole line with the
+  // time left, which is also what screen readers hear.
+  const boostRow = el('div', 'kpi-boosts');
   const boostChips = BOOST_IDS.map((id) => {
-    const box = el('div', 'kpi boost');
+    const box = el('div', 'kpi boost off');
+    box.tabIndex = 0;
     const icon = el('span', 'kpi-icon');
     icon.setAttribute('aria-hidden', 'true');
     setStoreIcon(icon, storeIcon(`boost-${id}`));
-    const value = el('span', 'value');
-    box.append(icon, elt('span', 'label', `store.boost.${id}`), value);
-    box.hidden = true;
-    return { id, box, value };
+    const full = el('span', 'sr-only');
+    const bonus = el('span', 'value');
+    const word = el('span', 'word');
+    bonus.append(word);
+    bonus.setAttribute('aria-hidden', 'true');
+    const percent = document.createTextNode('');
+    bonus.prepend(percent);
+    box.append(icon, full, bonus);
+    boostRow.append(box);
+    const tip = el('p', 'boost-tip');
+    tip.id = `boost-chip-tip-${id}`;
+    const fillTip = (): void => setText(tip, boostChip(state, id)?.full ?? '');
+    const { isOpen } = hoverTip(box, tip, fillTip);
+    // The chip's own text already says the whole line; don't say it twice.
+    box.removeAttribute('aria-describedby');
+    return { id, box, full, percent, word, tip, isOpen, fillTip };
   });
-  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box, ...boostChips.map((b) => b.box));
+  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box, boostRow);
   const realms = realmList(kRealm.box, () => state.cultivator.level);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
@@ -3000,8 +3021,16 @@ function play(
     }
     for (const chip of boostChips) {
       const value = boostChip(state, chip.id);
-      chip.box.hidden = value === null;
-      setText(chip.value, value ?? '');
+      chip.box.classList.toggle('off', value === null);
+      setText(chip.full, value?.full ?? '');
+      const bonus = value?.bonus ?? '';
+      if (chip.percent.data !== bonus) chip.percent.data = bonus;
+      setText(chip.word, value?.word ?? '');
+      // An open tip keeps counting down; one whose boost ran out closes.
+      if (chip.isOpen()) {
+        if (value) chip.fillTip();
+        else chip.tip.hidePopover();
+      }
     }
     const bar = xpBar(c);
     xp.style.setProperty('--xp', `${bar.percent}%`);
@@ -3126,19 +3155,27 @@ function play(
       detailBody.replaceChildren(el('p', 'muted', t('details.none')));
       return;
     }
-    // The attributes in one block, grouped by what they do, each kind in its own colour.
-    const attrs = block('details.attributes');
-    for (const group of itemLineGroups(item)) {
-      const kind = t(`stat.kind.${group.kind}`);
+    // One kind's lines on a row behind a pill naming the kind, in its colour.
+    const kindRow = (k: StatKind, items: readonly HTMLElement[]): HTMLElement => {
+      const kind = t(`stat.kind.${k}`);
       const label = el('div', 'kind-label', kind);
       label.setAttribute('aria-hidden', 'true');
       const lines = el('ul', 'lines');
       lines.setAttribute('aria-label', kind);
-      for (const line of group.lines) lines.append(el('li', '', line));
-      const box = el('div', `kind kind-${group.kind}`);
+      lines.append(...items);
+      const box = el('div', `kind kind-${k}`);
       box.append(label, lines);
-      attrs.append(box);
-    }
+      return box;
+    };
+    // The attributes in one block, grouped by what they do, each kind in its own colour.
+    const attrs = block('details.attributes');
+    for (const group of itemLineGroups(item))
+      attrs.append(
+        kindRow(
+          group.kind,
+          group.lines.map((line) => el('li', '', line)),
+        ),
+      );
     const head = el('div', 'item-head');
     const icon = el('span', 'icon');
     icon.setAttribute('aria-hidden', 'true');
@@ -3185,9 +3222,18 @@ function play(
         const name = tn('equipSlot', EQUIP_SLOTS[to].name);
         const current = state.cultivator.equipment[to];
         const diff = compareToEquipped(state.cultivator, item, to);
-        const compare = el('ul', 'compare');
-        for (const d of diff) compare.append(el('li', d.better ? 'up' : 'down', d.text));
-        if (!diff.length) compare.append(el('li', 'muted', t('details.noChange')));
+        // The same kind rows as the Attributes box; each line keeps its up/down colour.
+        const compare = compareGroups(diff).map((group) =>
+          kindRow(
+            group.kind,
+            group.lines.map((d) => el('li', d.better ? 'up' : 'down', d.text)),
+          ),
+        );
+        if (!diff.length) {
+          const none = el('ul', 'lines');
+          none.append(el('li', 'muted', t('details.noChange')));
+          compare.push(none);
+        }
         const equipBtn = button(
           fits.length > 1 ? t('details.equipIn', { slot: name }) : t('details.equip'),
           'primary',
@@ -3204,7 +3250,7 @@ function play(
               ? t('details.vs', { slot: name, item: itemName(current) })
               : t('details.empty', { slot: name }),
           ),
-          compare,
+          ...compare,
         );
         parts.push(vs);
       }
@@ -3720,10 +3766,14 @@ function play(
       if (restocked) {
         // Moving a card drops focus, so a focused Buy gets it back.
         const focused = document.activeElement;
-        const of = (kind: string) =>
-          storeCards.filter((c) => c.drawn.startsWith(kind)).map((c) => c.card);
-        chestGroup.list.replaceChildren(...of('chest-'));
-        boostGroup.list.replaceChildren(...of('boost-'));
+        const drawn = storeCards.map((c) => c.drawn);
+        // Chests best first; each card still buys its own stock position.
+        chestGroup.list.replaceChildren(
+          ...chestOrder(drawn).map((at) => (storeCards[at] as (typeof storeCards)[number]).card),
+        );
+        boostGroup.list.replaceChildren(
+          ...storeCards.filter((c) => c.drawn.startsWith('boost-')).map((c) => c.card),
+        );
         if (focused instanceof HTMLElement && focused !== document.activeElement) focused.focus();
         chestGroup.box.hidden = chestGroup.list.children.length === 0;
         boostGroup.box.hidden = boostGroup.list.children.length === 0;

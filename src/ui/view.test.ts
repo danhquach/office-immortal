@@ -16,6 +16,7 @@ import {
   BAG_PAGE,
   bagPage,
   bagPages,
+  compareGroups,
   compareToEquipped,
   equipBlock,
   cellLabel,
@@ -63,6 +64,7 @@ import {
   STORE_ICONS,
   storeCountdown,
   storeIcon,
+  chestOrder,
   retireLines,
   respecView,
   STAT_GROUPS,
@@ -286,6 +288,45 @@ describe('compareToEquipped', () => {
     const c = newCultivator('sword');
     c.equipment.weapon = stapler;
     expect(compareToEquipped(c, { ...stapler }, 'weapon')).toEqual([]);
+  });
+
+  describe('compareGroups', () => {
+    it('groups the lines by the Attributes box kinds, in its order', () => {
+      const c = newCultivator('sword');
+      expect(compareGroups(compareToEquipped(c, stapler, 'weapon'))).toEqual([
+        {
+          kind: 'offence',
+          lines: [
+            { text: '+14 Damage', better: true },
+            { text: '+0.7% Crit chance', better: true },
+          ],
+        },
+        { kind: 'defence', lines: [{ text: '+50 Max HP', better: true }] },
+      ]);
+    });
+
+    it('files Qi regen under utility, not the Stats tab defence', () => {
+      const line = { text: '+5% Qi regen', better: true };
+      expect(compareGroups([{ ...line, kind: 'utility' }])).toEqual([
+        { kind: 'utility', lines: [line] },
+      ]);
+      const c = newCultivator('sword');
+      const ring: Item = { ...stapler, slot: 'accessory', affixes: [{ id: 'qiRegen', roll: 1 }] };
+      const kinds = compareToEquipped(c, ring, 'accessory1').map((l) => [l.text, l.kind]);
+      expect(kinds).toContainEqual([expect.stringContaining('Qi regen'), 'utility']);
+    });
+
+    it('puts arrays in their own kind and keeps order over input order', () => {
+      const lines = [
+        { text: '+Illusion Array (8%)', better: true, kind: 'defence' as const },
+        { text: '−Killing Array (15%)', better: false, kind: 'offence' as const },
+      ];
+      expect(compareGroups(lines).map((g) => g.kind)).toEqual(['offence', 'defence']);
+    });
+
+    it('is empty when nothing changes', () => {
+      expect(compareGroups([])).toEqual([]);
+    });
   });
 
   it('compares against the chosen one of two positions', () => {
@@ -863,26 +904,26 @@ describe('Formation Discs', () => {
 
     it('shows a stronger or weaker array of the same kind', () => {
       expect(texts(wearing(disc('illusion', 0)), disc('illusion', 1))).toEqual([
-        { text: '+3% Illusion Array', better: true },
+        { text: '+3% Illusion Array', better: true, kind: 'defence' },
       ]);
       expect(texts(wearing(disc('binding', 1)), disc('binding', 0))).toEqual([
-        { text: '−0.5 s Binding Array', better: false },
+        { text: '−0.5 s Binding Array', better: false, kind: 'defence' },
       ]);
       expect(texts(wearing(disc('killing')), disc('killing'))).toEqual([]);
     });
 
     it('shows an array gained and one lost', () => {
       expect(texts(wearing(disc('killing', 0)), disc('illusion', 0))).toEqual([
-        { text: '+Illusion Array (8%)', better: true },
-        { text: '−Killing Array (15%)', better: false },
+        { text: '+Illusion Array (8%)', better: true, kind: 'defence' },
+        { text: '−Killing Array (15%)', better: false, kind: 'offence' },
       ]);
       expect(texts(wearing(), disc('binding', 0))).toEqual([
-        { text: '+Binding Array (1.5 s)', better: true },
+        { text: '+Binding Array (1.5 s)', better: true, kind: 'defence' },
       ]);
       const gourd: Item = { ...disc('binding'), name: 'Jade Elixir Gourd' };
       delete gourd.array;
       expect(texts(wearing(disc('binding', 0)), gourd)).toEqual([
-        { text: '−Binding Array (1.5 s)', better: false },
+        { text: '−Binding Array (1.5 s)', better: false, kind: 'defence' },
       ]);
     });
   });
@@ -1886,6 +1927,18 @@ describe('the store', () => {
     return s;
   }
 
+  it('orders the chests best grade first, whatever order they rolled in', () => {
+    expect(chestOrder(['chest-spirit', 'boost-xp', 'chest-heaven', 'chest-earth'])).toEqual([
+      2, 3, 0,
+    ]);
+    expect(chestOrder(['boost-xp', 'chest-earth', 'boost-stones', 'chest-heaven'])).toEqual([3, 1]);
+    expect(chestOrder(['boost-xp', 'boost-treasure', 'boost-stones', ''])).toEqual([]);
+    // The roll in the ticket: Spirit, Heaven, Earth shows Heaven, Earth, Spirit.
+    expect(chestOrder(['chest-spirit', 'chest-heaven', 'chest-earth'])).toEqual([1, 2, 0]);
+    // Two chests of one grade keep their stock order.
+    expect(chestOrder(['chest-earth', 'chest-earth', 'chest-heaven'])).toEqual([2, 0, 1]);
+  });
+
   it('maps every offer to its own atlas column', () => {
     expect(STORE_ICONS.map(storeIcon)).toEqual([0, 1, 2, 3, 4, 5]);
   });
@@ -1964,8 +2017,22 @@ describe('the store', () => {
     expect(boostChip(s, 'xp')).toBeNull();
     s.boosts.xp = s.time + 545;
     s.boosts.treasure = s.time;
-    expect(boostChip(s, 'xp')).toBe('+50% XP · 9 min');
+    expect(boostChip(s, 'xp')).toEqual({
+      bonus: '+50%',
+      word: 'XP',
+      full: 'Focus Tea (+50% XP): 9 min left',
+    });
     expect(boostChip(s, 'treasure')).toBeNull();
+  });
+
+  it('names each boost short on its chip', () => {
+    const s = shop('boost-xp');
+    for (const id of ['xp', 'treasure', 'stones'] as const) s.boosts[id] = s.time + 60;
+    expect(['xp', 'treasure', 'stones'].map((id) => boostChip(s, id as 'xp')?.word)).toEqual([
+      'XP',
+      'drops',
+      'stones',
+    ]);
   });
 
   it('lists running boosts with their time left', () => {
