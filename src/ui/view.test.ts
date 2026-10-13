@@ -82,6 +82,7 @@ import {
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
 import { DEFAULT_LANG, PACKS, setLang, t, tn } from './i18n.ts';
+import { setDiscreet } from './discreet.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
@@ -148,6 +149,15 @@ describe('items', () => {
   it('tags grade, slot and level in text, and quality on its own labeled line', () => {
     expect(itemTag(stapler)).toBe('Heaven · Weapon · Lv 10');
     expect(qualityLine(stapler)).toBe('Quality 66%');
+  });
+
+  it('names the grade in office words in Discreet mode', () => {
+    setDiscreet(true);
+    try {
+      expect(itemTag(stapler)).toBe('Premium · Weapon · Lv 10');
+    } finally {
+      setDiscreet(false);
+    }
   });
 
   it.each([
@@ -1887,6 +1897,17 @@ describe('the store', () => {
       why: '',
     });
     expect(card.buyName).toBe('Buy · 900: Earth Chest for 900 Spirit Stones');
+  });
+
+  it('names a chest and its grade in office words in Discreet mode', () => {
+    setDiscreet(true);
+    try {
+      const card = offerCard(shop('chest-earth'), 0);
+      expect(card.name).toBe('Pro Bundle');
+      expect(card.desc).toBe('One Lv 20 item, Pro or better');
+    } finally {
+      setDiscreet(false);
+    }
   });
 
   it('says what is short, sold out, a full bag or a boost at its cap', () => {

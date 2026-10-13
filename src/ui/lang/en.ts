@@ -328,6 +328,7 @@ const messages = {
   'tools.popOut': 'Pop out',
   'tools.closePopOut': 'Close pop-out',
   'tools.menu': 'Menu',
+  'tools.discreet': 'Discreet',
   'menu.title': 'Menu',
   'menu.close': 'Close',
   'menu.theme': 'Theme',
@@ -443,6 +444,8 @@ const messages = {
   'help.7':
     'Reincarnation (Character, Reincarnation tab) starts again at floor 1 and pays Dao Insight, spent on passives that last every run.',
   'help.8': 'Progress saves on its own and keeps going while you are away (Overtime Cultivation).',
+  'help.9':
+    'Discreet (in the title bar, or the ` key left of 1) shows the game as a plain sheet; press it again for the normal look. The game keeps running either way.',
 
   'hud.floor': 'F{n}',
   'hud.due': 'Tribulation due',
@@ -467,6 +470,12 @@ const messages = {
   'discreet.grade.earth': 'Pro',
   'discreet.grade.heaven': 'Premium',
   'discreet.grade.immortal': 'Enterprise',
+  'discreet.initial.mortal': 'Std',
+  'discreet.initial.spirit': 'Plus',
+  'discreet.initial.earth': 'Pro',
+  'discreet.initial.heaven': 'Prem',
+  'discreet.initial.immortal': 'Ent',
+  'discreet.chest': '{grade} Bundle',
   'discreet.ok': 'On track',
   'discreet.due': 'Review due',
   'discreet.wave': 'Step {n} / {of}',

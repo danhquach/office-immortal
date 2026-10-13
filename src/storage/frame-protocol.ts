@@ -38,6 +38,7 @@ export const MIRROR_KEYS = [
   'office-immortal.lang',
   'office-immortal.bagSort',
   'office-immortal.bagSortReverse',
+  'office-immortal.discreet',
 ] as const;
 export type MirrorKey = (typeof MIRROR_KEYS)[number];
 

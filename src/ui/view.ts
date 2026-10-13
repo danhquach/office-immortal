@@ -37,7 +37,6 @@ import {
   isBanner,
   itemAffixValue,
   itemPath,
-  GRADES,
   OFFLINE_DROP_MULTIPLIER,
   quality,
   SLOTS,
@@ -53,6 +52,7 @@ import {
   type SlotId,
 } from '../core/loot.ts';
 import type { OvertimeSummary } from '../core/offline.ts';
+import { gradeName, isDiscreet } from './discreet.ts';
 import {
   noPassives,
   passiveCost,
@@ -195,7 +195,7 @@ export function itemLineGroups(item: Item): { kind: StatKind; lines: string[] }[
 /** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12". */
 export function itemTag(item: Item): string {
   return t('item.tag', {
-    grade: tn('grade', GRADES[item.grade].name),
+    grade: gradeName(item.grade),
     slot: tn('slot', SLOTS[item.slot].name),
     level: item.level,
   });
@@ -279,7 +279,7 @@ export function itemFacts(item: Item, state: GameState): ItemFact[] {
     {
       id: 'grade',
       label: t('fact.grade'),
-      value: tn('grade', GRADES[item.grade].name),
+      value: gradeName(item.grade),
       tone: `grade-${item.grade}`,
     },
     { id: 'type', label: t('fact.type'), value: tn('slot', SLOTS[item.slot].name), tone: '' },
@@ -576,14 +576,6 @@ const STRIP_WAVE = {
   elite: 'strip.elite',
   boss: 'strip.boss',
 } as const satisfies Record<string, MessageKey>;
-/** Grades in office words, for the Discreet pop-out: never a game grade's name. */
-const DISCREET_GRADE = {
-  mortal: 'discreet.grade.mortal',
-  spirit: 'discreet.grade.spirit',
-  earth: 'discreet.grade.earth',
-  heaven: 'discreet.grade.heaven',
-  immortal: 'discreet.grade.immortal',
-} as const satisfies Record<GradeId, MessageKey>;
 /** The same stages in office words, for the Discreet pop-out. */
 const DISCREET_WAVE = {
   tribulation: 'discreet.tribulation',
@@ -617,7 +609,7 @@ export function discreetRows(
       t('discreet.latest'),
       latest
         ? t('discreet.drop', {
-            grade: t(DISCREET_GRADE[latest.grade]),
+            grade: gradeName(latest.grade, true),
             name: tn('item', latest.name),
           })
         : '–',
@@ -815,7 +807,7 @@ export function bulkParts(
   const note: TextPart[] = p.kept ? [{ text: ` ${t('bulk.keptRefined')}` }] : [];
   if (p.count === 0 || p.highest === null) return [{ text: t(`${action}.nothing`) }, ...note];
   const grade = p.highest;
-  const name = tn('grade', GRADES[grade].name);
+  const name = gradeName(grade);
   // Every other placeholder is filled first; {grade} is left in to split on.
   // The language's own plural rule picks the form (Vietnamese has one).
   const form = new Intl.PluralRules(lang().code).select(p.count) === 'one' ? 'one' : 'many';
@@ -1225,7 +1217,11 @@ const OFFER_BLOCK_TEXT: Readonly<Record<Exclude<OfferBlock, 'stones'>, MessageKe
 /** The name of offer `id` in the player's language. */
 export function offerName(id: OfferId): string {
   const grade = chestGrade(id);
-  return grade ? t(`store.chest.${grade}`) : t(`store.boost.${boostOf(id) as BoostId}`);
+  if (!grade) return t(`store.boost.${boostOf(id) as BoostId}`);
+  // Discreet mode: the grade in office words, never the game's.
+  return isDiscreet()
+    ? t('discreet.chest', { grade: gradeName(grade) })
+    : t(`store.chest.${grade}`);
 }
 
 /** Offer `at` of the current stock as its card shows it. */
@@ -1237,7 +1233,7 @@ export function offerCard(state: GameState, at: number): OfferCard {
   const grade = chestGrade(id);
   let desc: string;
   if (grade) {
-    desc = t('store.chestDesc', { level: state.floor, grade: tn('grade', GRADES[grade].name) });
+    desc = t('store.chestDesc', { level: state.floor, grade: gradeName(grade) });
   } else {
     const boost = boostOf(id) as BoostId;
     desc = t(`store.boostDesc.${boost}`, {

@@ -543,7 +543,11 @@ treasure find, a higher offline cap, more starting stat points.
   button closes it. Not offered when the page is embedded in a frame (the
   itch.io build): the API refuses there.
 - **Notification:** optional browser notification on an Immortal-grade drop
-  and when a Tribulation falls due (§4).
+  and when a Tribulation falls due (§4). None is sent while Discreet mode
+  (§14) is on, as each names the game.
+- **Discreet mode** (§14): the tab title is a fixed `Q3_Budget_Review` (no
+  floor, drop count or game name) and the favicon a plain sheet icon, with no
+  HP ring and no flash.
 
 ## 11. Save
 
@@ -1011,6 +1015,21 @@ Grade is also written as text, never shown by colour alone.
   brings the other views back. Its aspect is about 3:1 (e.g. 480×160).
 - The Discreet view behaves like the Mini pop-out: same size, a click
   focuses the main tab, and a language switch rewords it in place.
+- **Discreet mode** sits on top of the Full and Narrow views: the title bar's
+  **Discreet** button, or the key left of 1 (`` ` ``) anywhere on the page or
+  in the pop-out while no text field has focus, switches it; again switches
+  back, and the game keeps running. Both work on every screen, the Path
+  choice too (its portraits are hidden). It is a display preference like the theme
+  (Reset progress keeps it). While on, the combat strip gives way to the
+  Discreet view's seven rows (no sprites, background, damage numbers or
+  flashing Tribulation alert: Status says Review due as plain text); the title
+  bar hides the stamp and its file name becomes `Q3_Budget_Review`; the
+  summary chips lose their icons; item icons, store icons and the paper-doll
+  figure are hidden; every grade colour is the plain text colour, and grades are named in
+  office words (Standard to Enterprise; Std, Plus, Pro, Prem, Ent on a cell;
+  a store chest is a Plus, Pro or Premium Bundle).
+  An open Mini pop-out shows the Discreet view until it is switched off. Help
+  lists the key.
 - All the views render the same state; switching never pauses the sim.
 
 ### Assets

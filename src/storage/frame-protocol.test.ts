@@ -3,6 +3,7 @@ import { newGame } from '../core/sim.ts';
 import { THEME_KEY } from '../ui/theme.ts';
 import { LANG_KEY } from '../ui/i18n.ts';
 import { BAG_REVERSE_KEY, BAG_SORT_KEY } from '../ui/sort.ts';
+import { DISCREET_KEY } from '../ui/discreet.ts';
 import { ADOPT_KEY, CLOUD_KEY } from './cloud-meta.ts';
 import { readCloudConfig } from './cloud-config.ts';
 import { readFrameConfig, readItchOrigin } from './frame-config.ts';
@@ -31,6 +32,7 @@ describe('mirrored keys', () => {
         LANG_KEY,
         BAG_SORT_KEY,
         BAG_REVERSE_KEY,
+        DISCREET_KEY,
       ].sort(),
     );
     expect(MIRROR_KEYS).not.toContain(CLOUD_KEY);

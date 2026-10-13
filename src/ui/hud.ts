@@ -4,6 +4,7 @@
 // title, the favicon or a notification, so nothing there can leak or inject.
 
 import { GRADES, quality, type GradeId, type Item } from '../core/loot.ts';
+import { gradeName } from './discreet.ts';
 import { t, tn } from './i18n.ts';
 
 /** The game's name, in the player's language. */
@@ -88,7 +89,7 @@ export function miniStatus(floor: number, realm: string, unseen: number, due = f
 export function dropToast(item: Item): string {
   return t('hud.toast', {
     name: tn('item', item.name),
-    grade: tn('grade', GRADES[item.grade].name),
+    grade: gradeName(item.grade),
     quality: quality(item),
   });
 }
@@ -140,4 +141,22 @@ export function immortalNotice(floor: number): { title: string; body: string; ta
 /** The notification for a Tribulation falling due. Says the floor only. */
 export function tribulationNotice(floor: number): { title: string; body: string; tag: string } {
   return { title: gameTitle(), body: t('notice.tribulation', { n: floor }), tag: 'tribulation' };
+}
+
+/**
+ * Discreet mode's favicon (docs/design.md §14): a plain sheet with ruled rows,
+ * the same every time, with no HP ring, grade colour or flash.
+ */
+export function sheetFaviconSvg(): string {
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">' +
+    `<rect x="5" y="3" width="22" height="26" rx="2" fill="#ffffff" stroke="${TRACK}" stroke-width="2"/>` +
+    `<path d="M9 10h14M9 15h14M9 20h14M9 25h9M14 6v21" stroke="${TRACK}" stroke-width="1.5"/>` +
+    '</svg>'
+  );
+}
+
+/** The Discreet favicon as a `data:` URL for a `<link rel="icon">`. */
+export function sheetFaviconHref(): string {
+  return `data:image/svg+xml,${encodeURIComponent(sheetFaviconSvg())}`;
 }

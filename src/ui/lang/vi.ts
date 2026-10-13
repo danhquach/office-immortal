@@ -332,6 +332,7 @@ const vi: Pack = {
     'tools.popOut': 'Cửa sổ nổi',
     'tools.closePopOut': 'Đóng cửa sổ nổi',
     'tools.menu': 'Menu',
+    'tools.discreet': 'Kín đáo',
     'menu.title': 'Menu',
     'menu.close': 'Đóng',
     'menu.theme': 'Giao diện',
@@ -450,6 +451,8 @@ const vi: Pack = {
     'help.7':
       'Chuyển Sinh (Nhân vật, tab Chuyển sinh) bắt đầu lại từ tầng 1 và thưởng Đạo Ngộ, dùng mua nội tại giữ mãi qua mọi lượt.',
     'help.8': 'Tiến trình tự lưu và vẫn tiếp tục khi bạn vắng mặt (Tu Luyện Tăng Ca).',
+    'help.9':
+      'Kín đáo (trên thanh tiêu đề, hoặc phím ` bên trái phím 1) hiện trò chơi như một bảng tính bình thường; nhấn lại để trở về giao diện cũ. Trò chơi vẫn chạy trong cả hai chế độ.',
 
     'hud.floor': 'T{n}',
     'hud.due': 'Đến lúc Độ Thiên Kiếp',
@@ -474,6 +477,12 @@ const vi: Pack = {
     'discreet.grade.earth': 'Chuyên nghiệp',
     'discreet.grade.heaven': 'Cao cấp',
     'discreet.grade.immortal': 'Doanh nghiệp',
+    'discreet.initial.mortal': 'TC',
+    'discreet.initial.spirit': 'NC',
+    'discreet.initial.earth': 'CN',
+    'discreet.initial.heaven': 'CC',
+    'discreet.initial.immortal': 'DN',
+    'discreet.chest': 'Gói {grade}',
     'discreet.ok': 'Đúng tiến độ',
     'discreet.due': 'Đến hạn duyệt',
     'discreet.wave': 'Bước {n} / {of}',

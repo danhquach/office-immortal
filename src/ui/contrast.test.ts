@@ -69,6 +69,18 @@ describe('contrast', () => {
 describe('page.css colours', () => {
   const t = themes();
 
+  it('turns every grade colour into --ink in Discreet mode, which passes 4.5:1 in both themes', () => {
+    const block = /:root\[data-discreet\]\s*{([^}]*)}/.exec(css)?.[1] ?? '';
+    for (const g of GRADES) expect(block).toMatch(new RegExp(`--grade-${g}:\\s*var\\(--ink\\);`));
+    for (const theme of [t.light, t.dark]) {
+      for (const surface of SURFACES) {
+        expect(
+          contrast(theme.get('--ink') as string, theme.get(surface) as string),
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it('sets the mixed dash colour in both theme blocks', () => {
     const dark = /:root:not\(\[data-theme='light'\]\)\s*{([^}]*)}/.exec(css)?.[1] ?? '';
     const light = /^:root\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
