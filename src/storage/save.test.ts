@@ -10,7 +10,7 @@ import {
   setFilter,
   spendPoints,
 } from '../core/economy.ts';
-import { makeTribulation, type Enemy } from '../core/floors.ts';
+import { makeEnemy, makeFloor, makeTribulation, type Enemy } from '../core/floors.ts';
 import { charmLine, itemPath, type EquipSlotId, type Item } from '../core/loot.ts';
 import { createRng, int } from '../core/rng.ts';
 import { derive, xpToNext } from '../core/cultivator.ts';
@@ -2036,5 +2036,117 @@ describe('refine level (v8)', () => {
     const old = withRefines(3);
     old.v = 7;
     expect(load(old)).toBeNull();
+  });
+});
+
+describe('a save from another browser engine', () => {
+  // `**` may round differently in another engine's last bits, so the enemy
+  // stats it wrote can be a hair off this build's. These are the damages Safari
+  // (JavaScriptCore) wrote for floor 29 in a real save that would not link.
+  const SAFARI_FLOOR_29 = {
+    demon: 494.5339870828535,
+    elite: 741.8009806242803,
+    boss: 989.067974165707,
+  };
+
+  /** A fresh run moved to `floor`, with that floor's enemies. */
+  function onFloor(floor: number): GameState {
+    const s = newGame(7, 'body');
+    s.floor = floor;
+    s.highestFloor = floor;
+    s.enemies = makeFloor(createRng(1), floor);
+    return s;
+  }
+
+  function load(s: GameState, change: (save: ReturnType<typeof raw>) => void): GameState | null {
+    const save = JSON.parse(encodeSave(s, SAVED_AT));
+    change(save);
+    return decodeSave(JSON.stringify(save))?.state ?? null;
+  }
+
+  const enemiesOf = (x: ReturnType<typeof raw>) => x.state.enemies as J[];
+
+  it("loads Safari's floor 29 enemies, with this build's numbers", () => {
+    const s = onFloor(29);
+    const loaded = load(s, (x) => {
+      for (const e of enemiesOf(x)) {
+        e.damage = SAFARI_FLOOR_29[e.kind as keyof typeof SAFARI_FLOOR_29];
+        e.hp = e.maxHp;
+      }
+    });
+    expect(loaded?.enemies).toEqual(s.enemies);
+  });
+
+  it('loads high-floor enemies whose rounded HP and XP are a step apart, kept within ours', () => {
+    const s = onFloor(200);
+    const loaded = load(s, (x) => {
+      for (const e of enemiesOf(x)) {
+        e.maxHp = (e.maxHp as number) + 1;
+        e.hp = e.maxHp;
+        e.xp = (e.xp as number) - 1;
+      }
+    });
+    expect(loaded?.enemies).toEqual(s.enemies);
+    for (const e of loaded?.enemies ?? []) expect(e.hp).toBe(e.maxHp);
+  });
+
+  it("loads XP at the other engine's limit below a cap, kept within ours", () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.level = 150;
+    s.cultivator.stats.agility += 3 * 149;
+    const limit = xpToNext(150) - 1;
+    s.cultivator.xp = limit;
+    expect(load(s, (x) => void (cult(x).xp = limit + 1))?.cultivator.xp).toBe(limit);
+    // Far past the limit, or not a whole number, is still refused.
+    expect(load(s, (x) => void (cult(x).xp = limit + 1e6))).toBeNull();
+    expect(load(s, (x) => void (cult(x).xp = limit + 0.5))).toBeNull();
+  });
+
+  it('still refuses enemy numbers further off than any rounding', () => {
+    const s = onFloor(29);
+    const changes: ((e: J) => void)[] = [
+      (e) => void (e.damage = (e.damage as number) * (1 + 1e-6)),
+      (e) => void (e.damage = (e.damage as number) * (1 - 1e-6)),
+      (e) => void (e.maxHp = (e.maxHp as number) + 1),
+      (e) => void (e.xp = (e.xp as number) + 1),
+      (e) => void (e.defence = (e.defence as number) + 1e-6),
+      (e) => void (e.attackInterval = 1.999),
+      (e) => void (e.damage = String(e.damage)),
+      (e) => void (e.damage = true),
+      (e) => void (e.damage = [e.damage]),
+      (e) => void (e.damage = null),
+      (e) => void (e.damage = {}),
+      (e) => void (e.hp = (e.maxHp as number) * (1 + 1e-6)),
+    ];
+    for (const change of changes) {
+      expect(load(s, (x) => change(enemiesOf(x)[0] as J))).toBeNull();
+    }
+    const high = onFloor(200);
+    expect(
+      load(
+        high,
+        (x) => void ((enemiesOf(x)[0] as J).maxHp = makeEnemy(200, 'demon', 'x').maxHp * 1.001),
+      ),
+    ).toBeNull();
+  });
+
+  it('allows no slack where this build has a zero', () => {
+    // Floor 1 enemies have no defence, so the window around it is empty.
+    const s = onFloor(1);
+    for (const defence of [true, 1e-300, -1e-300]) {
+      expect(load(s, (x) => void ((enemiesOf(x)[0] as J).defence = defence))).toBeNull();
+    }
+    expect(load(s, () => {})).not.toBeNull();
+  });
+
+  it('keeps the slack finite at the highest floor', () => {
+    // A stat that overflowed to Infinity would accept any number; the last floor must not.
+    const s = onFloor(3000);
+    const boss = makeEnemy(3000, 'boss', 'x');
+    expect(Number.isFinite(boss.maxHp) && Number.isFinite(boss.damage)).toBe(true);
+    expect(load(s, () => {})?.enemies).toEqual(s.enemies);
+    const last = (x: ReturnType<typeof raw>) => enemiesOf(x).at(-1) as J;
+    expect(load(s, (x) => void (last(x).maxHp = boss.maxHp * 1.001))).toBeNull();
+    expect(load(s, (x) => void (last(x).damage = 1e308))).toBeNull();
   });
 });
