@@ -877,6 +877,11 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   ("Fighting an elite · floor 12"), else "Cultivating · floor 12". It follows
   the game every frame and the language on a switch, and is not a live
   region, so screen readers do not announce each change.
+  At its right end, the game's version ("v0.6.2", read as "Version 0.6.2");
+  on hover or keyboard focus a tip names the build (its commit, or "Local
+  build") and when it was made, in UTC. Every PR to `main` raises the
+  version (CI refuses one that doesn't; Dependabot's PRs are let through and
+  keep the number), so each live build shows a new number.
 - **Title stamp:** the game's name sits in the title bar as a red rubber
   stamp (like "CONFIDENTIAL"): capitals, double border, tilted, in the
   Immortal grade colour. It is the one loud mark on the dull shell.

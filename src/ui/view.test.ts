@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   derive,
   newCultivator,
@@ -21,6 +22,8 @@ import {
   equipBlock,
   cellLabel,
   characterStatusLabel,
+  versionDetails,
+  versionLabel,
   durationLabel,
   formatBonus,
   freshDrops,
@@ -2082,5 +2085,41 @@ describe('the store', () => {
     expect(retireLines({ ...preview, boosts: 1 }).lost).toContain(
       '1 running boost and the store stock',
     );
+  });
+});
+
+describe('versionLabel', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  it('shows the version with a v and reads it out in full', () => {
+    expect(versionLabel('0.6.2')).toEqual({ text: 'v0.6.2', spoken: 'Version 0.6.2' });
+    setLang('vi');
+    expect(versionLabel('0.6.2')).toEqual({ text: 'v0.6.2', spoken: 'Phiên bản 0.6.2' });
+  });
+
+  it('is built from the game version', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
+    expect(__APP_VERSION__).toBe(pkg.version);
+    expect(versionLabel(__APP_VERSION__).text).toBe(`v${pkg.version}`);
+  });
+});
+
+describe('versionDetails', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  it('names the build and when it was made, in UTC', () => {
+    expect(versionDetails('5efacb1a2b3c', '2026-10-13T14:05:09.123Z')).toEqual([
+      'Build 5efacb1a2b3c',
+      'Built 2026-10-13 14:05 UTC',
+    ]);
+    setLang('vi');
+    expect(versionDetails('5efacb1a2b3c', '2026-10-13T14:05:09.123Z')).toEqual([
+      'Bản dựng 5efacb1a2b3c',
+      'Dựng lúc 2026-10-13 14:05 UTC',
+    ]);
+  });
+
+  it('calls a dev build local and leaves out a time that is not a date', () => {
+    expect(versionDetails('dev', 'not a date')).toEqual(['Local build']);
   });
 });

@@ -8,7 +8,8 @@ export default mergeConfig(
       // Unit tests cover the pure simulation (src/core/**), the save's
       // storage glue (src/storage/**), the UI's pure helpers (src/ui/**) and
       // the build's Content-Security-Policy (src/csp.test.ts) and the lint
-      // rules that ban HTML sinks (src/lint.test.ts).
+      // rules that ban HTML sinks (src/lint.test.ts) and the version checks
+      // (src/version-checks.test.ts).
       // The DOM code itself is kept thin and is not unit-tested here.
       include: [
         'src/core/**/*.test.ts',
@@ -17,6 +18,7 @@ export default mergeConfig(
         'src/dev/**/*.test.ts',
         'src/csp.test.ts',
         'src/zip-checks.test.ts',
+        'src/version-checks.test.ts',
         'src/lint.test.ts',
       ],
       environment: 'node',

@@ -26,6 +26,23 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Version raised over main's
+        # Each PR to main raises the game's version (shown in the status bar),
+        # so every live build shows a new number. Dependabot's PRs never bump it
+        # and are let through: they keep the number; the build id still changes.
+        if: >-
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch --depth=1 --no-tags origin "$BASE_REF"
+          node tools/version-check.mjs bump FETCH_HEAD
+      - name: Release tag names the version it ships
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TAG: ${{ github.ref_name }}
+        run: node tools/version-check.mjs tag "$TAG"
       - run: npm run lint
       - run: npm test
       - run: npm run build

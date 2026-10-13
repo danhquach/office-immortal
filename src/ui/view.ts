@@ -723,6 +723,26 @@ export function characterStatusLabel(state: GameState): string {
   return t(`status.char.${kind}`, { n: floor });
 }
 
+/** The status bar's version label, e.g. { text: "v0.6.2", spoken: "Version 0.6.2" }. */
+export function versionLabel(version: string): { text: string; spoken: string } {
+  return { text: `v${version}`, spoken: t('status.version', { v: version }) };
+}
+
+/**
+ * The version label's details on hover or focus: the build (its commit, or a
+ * local build) and when it was made, e.g. ["Build 5efacb1a2b3c",
+ * "Built 2026-10-13 14:05 UTC"]. A build time that isn't a date is left out.
+ */
+export function versionDetails(build: string, builtAt: string): string[] {
+  const lines = [build === 'dev' ? t('status.buildLocal') : t('status.build', { id: build })];
+  const at = new Date(builtAt);
+  if (!Number.isNaN(at.getTime())) {
+    const date = at.toISOString().slice(0, 16).replace('T', ' ');
+    lines.push(t('status.built', { date }));
+  }
+  return lines;
+}
+
 /**
  * True when a Tribulation falls due between two states: the cultivator has just
  * reached it. A lost one coming round again doesn't count, so it never repeats.

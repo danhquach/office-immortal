@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { readFileSync } from 'node:fs';
 import { readCloudConfig } from './src/storage/cloud-config.ts';
 import { readFrameConfig } from './src/storage/frame-config.ts';
 
@@ -38,6 +39,11 @@ const frame = readFrameConfig(env);
 const CSP = buildCsp(cloud?.url ?? null, frame?.origin ?? null);
 /** The commit CI builds; 'dev' elsewhere, which never checks for a newer release. */
 const BUILD_ID = (process.env.GITHUB_SHA ?? '').slice(0, 12) || 'dev';
+/** The game's version (package.json), shown in the status bar; every PR to main raises it. */
+const APP_VERSION = (JSON.parse(readFileSync('package.json', 'utf8')) as { version: string })
+  .version;
+/** When this build was made (UTC, ISO 8601), shown in the version label's details. */
+const BUILD_TIME = new Date().toISOString();
 
 /** Build only: the dev server's hot reload needs inline script and a websocket. */
 const cspMeta: Plugin = {
@@ -72,7 +78,11 @@ const versionFile: Plugin = {
 
 export default defineConfig({
   plugins: [cspMeta, versionFile],
-  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID),
+    __APP_VERSION__: JSON.stringify(APP_VERSION),
+    __BUILD_TIME__: JSON.stringify(BUILD_TIME),
+  },
   // Relative asset URLs so the same build works at the site root (local preview)
   // and under the repository sub-path on GitHub Pages.
   base: './',
