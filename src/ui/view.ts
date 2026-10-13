@@ -113,20 +113,64 @@ export function arrayLine(id: ArrayId, value: number): string {
   return `${tn('array', ARRAYS[id].name)}: ${t(`array.${id}`, { v })}`;
 }
 
-/** Every line of an item card after its title: base stat (a disc's array), affixes, unique effect. */
-export function itemLines(item: Item): string[] {
-  const lines = [
+/** What a stat does for the cultivator; the details panel groups an item's lines by it. */
+export type StatKind = 'offence' | 'defence' | 'utility';
+export const STAT_KINDS: readonly StatKind[] = ['offence', 'defence', 'utility'];
+const STAT_KIND: Readonly<Record<BonusStat, StatKind>> = {
+  damage: 'offence',
+  damagePct: 'offence',
+  critChance: 'offence',
+  critDamage: 'offence',
+  attackSpeed: 'offence',
+  maxHp: 'defence',
+  maxHpPct: 'defence',
+  defence: 'defence',
+  lifesteal: 'defence',
+  qiRegen: 'utility',
+  stoneFind: 'utility',
+  treasureFind: 'utility',
+};
+/** Binding delays the enemy's first attack and Illusion makes attacks miss; Killing deals damage. */
+const ARRAY_KIND: Readonly<Record<ArrayId, StatKind>> = {
+  binding: 'defence',
+  illusion: 'defence',
+  killing: 'offence',
+};
+
+/** Every line of an item card after its title, with its kind: base stat (a disc's array), affixes, unique effect. */
+function itemEntries(item: Item): { kind: StatKind; text: string }[] {
+  const base = SLOTS[item.slot].base.stat;
+  const entries = [
     item.array
-      ? arrayLine(item.array, arrayValue(item))
-      : formatBonus(SLOTS[item.slot].base.stat, baseValue(item)),
+      ? { kind: ARRAY_KIND[item.array], text: arrayLine(item.array, arrayValue(item)) }
+      : { kind: STAT_KIND[base], text: formatBonus(base, baseValue(item)) },
   ];
-  for (const a of item.affixes)
-    lines.push(formatBonus(AFFIXES[a.id].stat, itemAffixValue(item, a)));
+  for (const a of item.affixes) {
+    const stat = AFFIXES[a.id].stat;
+    entries.push({ kind: STAT_KIND[stat], text: formatBonus(stat, itemAffixValue(item, a)) });
+  }
   if (item.unique) {
     const u = UNIQUES[item.unique];
-    lines.push(`${tn('unique', u.name)}: ${formatBonus(u.stat, u.value)}`);
+    entries.push({
+      kind: STAT_KIND[u.stat],
+      text: `${tn('unique', u.name)}: ${formatBonus(u.stat, u.value)}`,
+    });
   }
-  return lines;
+  return entries;
+}
+
+/** Every line of an item card after its title: base stat (a disc's array), affixes, unique effect. */
+export function itemLines(item: Item): string[] {
+  return itemEntries(item).map((e) => e.text);
+}
+
+/** An item's lines grouped by kind, in STAT_KINDS order, each group in card order; empty kinds left out. */
+export function itemLineGroups(item: Item): { kind: StatKind; lines: string[] }[] {
+  const entries = itemEntries(item);
+  return STAT_KINDS.map((kind) => ({
+    kind,
+    lines: entries.filter((e) => e.kind === kind).map((e) => e.text),
+  })).filter((g) => g.lines.length > 0);
 }
 
 /** The short tag under an item's name, e.g. "Heaven · Weapon · Lv 12". */

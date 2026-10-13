@@ -180,7 +180,7 @@ import {
   equipBlock,
   freshDrops,
   gridMove,
-  itemLines,
+  itemLineGroups,
   itemName,
   itemTag,
   qualityLine,
@@ -716,12 +716,13 @@ function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
     showPaths(root, storage);
     root.querySelector<HTMLButtonElement>('.lang > button')?.focus();
   });
-  root.replaceChildren(
-    bar,
-    updateNote,
+  // One column, as wide as the choice: the link panel under it matches it.
+  const start = el('div', 'path-start');
+  start.append(
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
     ...(cloud ? [pathLink(cloud)] : []),
   );
+  root.replaceChildren(bar, updateNote, start);
   say(() => drawUpdate(false));
 }
 
@@ -1090,6 +1091,14 @@ function realmList(chip: HTMLElement, level: () => number): { refresh: () => voi
       if (isOpen() && realmOf(level()) !== shown) fill();
     },
   };
+}
+
+/** A block of the details panel: a small label over its own lines. */
+function block(label: MessageKey): HTMLElement {
+  const box = el('div', 'detail-block');
+  // Drawn again on a language switch with the rest of the panel, so plain text is enough.
+  box.append(el('div', 'detail-block-label', t(label)));
+  return box;
 }
 
 function panel(className: string, title: MessageKey): { box: HTMLElement; heading: HTMLElement } {
@@ -2055,8 +2064,12 @@ function play(
 
   // Item details
   const details = panel('details', 'details.title');
-  const detailBody = el('div');
+  const detailBody = el('div', 'detail-body');
   details.box.append(detailBody);
+  /** The item's lines under the action row: kept across redraws, so a level-up keeps its scroll. */
+  const detailInfo = el('div', 'detail-info');
+  /** The selection detailInfo shows; another one starts at the top. */
+  let infoFor = '';
 
   // Crafting: a modal over the office shell for the selected item (bag or worn),
   // one tab per mode. It stays open between crafts, so a craft can be repeated.
@@ -2767,8 +2780,19 @@ function play(
       detailBody.replaceChildren(el('p', 'muted', t('details.none')));
       return;
     }
-    const lines = el('ul', 'lines');
-    for (const line of itemLines(item)) lines.append(el('li', '', line));
+    // The attributes in one block, grouped by what they do, each kind in its own colour.
+    const attrs = block('details.attributes');
+    for (const group of itemLineGroups(item)) {
+      const kind = t(`stat.kind.${group.kind}`);
+      const label = el('div', 'kind-label', kind);
+      label.setAttribute('aria-hidden', 'true');
+      const lines = el('ul', 'lines');
+      lines.setAttribute('aria-label', kind);
+      for (const line of group.lines) lines.append(el('li', '', line));
+      const box = el('div', `kind kind-${group.kind}`);
+      box.append(label, lines);
+      attrs.append(box);
+    }
     const head = el('div', 'item-head');
     const icon = el('span', 'icon');
     icon.setAttribute('aria-hidden', 'true');
@@ -2788,22 +2812,24 @@ function play(
     const souls = soulsLine(item, state);
     if (souls !== null) name.append((soulsText = el('div', 'muted', souls)));
     head.append(icon, name);
-    const parts: HTMLElement[] = [head, lines];
+    const about = block('details.item');
+    about.append(head);
+    const parts: HTMLElement[] = [about, attrs];
     // Crafting works on bag and worn items alike.
     const craftBtn = button(t('details.craft'), '', () => openCraft());
     craftBtn.dataset.action = 'craft';
     craftBtn.setAttribute('aria-haspopup', 'dialog');
+    const actions = el('div', 'row actions');
     if ('slot' in selected) {
-      const row = el('div', 'row');
-      row.append(craftBtn);
-      parts.push(el('p', 'muted', t('details.equipped')), row);
+      actions.append(craftBtn);
+      about.append(el('p', 'muted', t('details.equipped')));
     } else {
       const index = selected.bag;
       const blocked = equipBlock(state.cultivator, item);
       if (blocked) {
         const why = el('p', 'down', t('details.blocked', { why: blocked }));
         why.id = 'equip-why';
-        parts.push(why);
+        about.append(why);
       }
       // One comparison and Equip button per position the item fits (two for
       // accessories and charms), the default position first.
@@ -2828,6 +2854,7 @@ function play(
           equipBtn.title = blocked;
         }
         equipBtn.addEventListener('click', () => equipFromBag(index, to));
+        // Each position's comparison in its own block, under its Equip button's line.
         const cmp = el('div', 'cmp');
         cmp.append(
           el(
@@ -2839,9 +2866,10 @@ function play(
           ),
           equipBtn,
         );
-        parts.push(cmp, compare);
+        const vs = el('div', 'detail-block');
+        vs.append(cmp, compare);
+        parts.push(vs);
       }
-      const row = el('div', 'row');
       const sellBtn = button(t('details.sell', { n: sellPrice(item) }), 'sell', () =>
         dispose(index, 'sell'),
       );
@@ -2850,15 +2878,24 @@ function play(
         dispose(index, 'salvage'),
       );
       salvageBtn.dataset.action = 'salvage';
-      row.append(sellBtn, salvageBtn, craftBtn);
-      parts.push(row);
+      actions.append(sellBtn, salvageBtn, craftBtn);
     }
     // A level-up redraws the comparison; a focused Equip button keeps focus.
     const active = document.activeElement;
     const focusAt = detailBody.contains(active)
       ? [...detailBody.querySelectorAll('button')].indexOf(active as HTMLButtonElement)
       : -1;
-    detailBody.replaceChildren(...parts);
+    // Sell, Salvage and Craft first, on a row of their own above the item, so
+    // they stay in one place whatever the item says; the rest scrolls under them.
+    // The group is named for the item, so a screen reader hears whose buttons they are.
+    actions.setAttribute('role', 'group');
+    actions.setAttribute('aria-label', itemName(item));
+    const scroll = detailInfo.scrollTop;
+    detailInfo.replaceChildren(...parts);
+    detailBody.replaceChildren(actions, detailInfo);
+    const key = JSON.stringify(selected);
+    detailInfo.scrollTop = key === infoFor ? scroll : 0;
+    infoFor = key;
     if (focusAt >= 0) {
       const buttons = detailBody.querySelectorAll('button');
       (buttons[focusAt] ?? buttons[0])?.focus();

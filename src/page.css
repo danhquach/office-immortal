@@ -8,8 +8,11 @@
    (the details panel's gain / loss colours) and its mixed dash is --mixed; as
    non-text marks they need 3:1 on --bg. --sell (cyan, the Spirit Stone icon's
    colour) and --salvage (orange, the Spirit Essence drop's) colour the sell and
-   salvage buttons' text and borders, so they are text vars too; their hues
-   stay at least 15° from the grade, badge, accent and strip colours. */
+   salvage buttons' text and borders, and --craft (violet, a hue no grade
+   uses) the Craft button's, so they are text vars too; their hues stay at
+   least 15° from the grade, badge, accent and strip colours. --offence (rose),
+   --defence (indigo) and --utility (lime) colour the details panel's
+   attribute groups, text on --head, under the same rules. */
 :root {
   color-scheme: light;
   --bg: #f3f1ec;
@@ -42,6 +45,10 @@
   --grade-immortal: #b0122d;
   --sell: #006b75;
   --salvage: #a13b00;
+  --craft: #8e24aa;
+  --offence: #b0246e;
+  --defence: #4040c0;
+  --utility: #5c7000;
 }
 /* Dark is the default (before any script runs, too); light shows only when
    Settings resolves to it (data-theme, set by app.ts). */
@@ -70,6 +77,10 @@
   --grade-immortal: #ff7389;
   --sell: #3fd0d6;
   --salvage: #ff9d5c;
+  --craft: #e98aff;
+  --offence: #ff7fbf;
+  --defence: #9b9bff;
+  --utility: #c6e04a;
 }
 
 /* The page is a sheet: faint cell lines behind every panel. */
@@ -303,10 +314,13 @@ select {
   color: var(--muted);
 }
 
-/* First-run Path choice */
-.choose {
-  max-width: 40rem;
-  margin: 2rem auto;
+/* First-run Path choice, and the link code panel under it at the same width. */
+.path-start {
+  display: grid;
+  grid-template-columns: fit-content(40rem);
+  justify-content: center;
+  gap: 0.75rem;
+  margin: 2rem 0;
 }
 .choose p {
   margin: 0.25rem 0 1rem;
@@ -508,7 +522,21 @@ select {
     display: block;
     visibility: hidden;
   }
+  /* The action row stays put over the item; only the item's own lines scroll. */
   .side > .details {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .side > .details > .detail-body {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .side .detail-info {
+    flex: 1 1 0;
+    min-height: 0;
     overflow-y: auto;
   }
 }
@@ -560,15 +588,14 @@ select {
   }
   /* Thin scrollbars, so the paper doll and the tabs keep their width. */
   .columns > :is(.character, .inventory),
-  .side > .details,
+  .side .detail-info,
   .beside > .log {
     scrollbar-width: thin;
   }
 }
-/* Full in a short window (under 900 px tall, such as the 960 x 640 itch.io
-   frame): no formula bar, the stage at 0.55 with names and HP drawn over it
-   and the bag's tabs on its header bar, so the strip, the bag grid and the
-   details fit together. */
+/* Full in a short window (under 900 px tall): no formula bar and the bag's
+   tabs on its header bar, so the strip, the bag grid and the details fit
+   together. The strip shrinks in steps below, only as far as the height needs. */
 @media (min-width: 940px) and (min-height: 600px) and (max-height: 899px) {
   .formula {
     display: none;
@@ -579,65 +606,10 @@ select {
   main > .game {
     gap: 0.4rem;
   }
-  .game .strip .where {
-    padding-block: 0.1rem;
-  }
   /* Drops keep at least a few lines, so the chips over them never make the
      row taller than the strip. */
   .beside > .log {
     min-height: 4rem;
-  }
-  .game .strip {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .game .strip > * {
-    grid-column: 1;
-  }
-  .game .strip > .where {
-    grid-row: 1;
-  }
-  .game .strip > .trial-call {
-    grid-row: 2;
-  }
-  .game .strip > .stage {
-    grid-row: 3;
-    zoom: 0.55;
-  }
-  .game .strip > .fighters {
-    grid-row: 3;
-    align-self: start;
-    z-index: 1;
-    padding: 0.15rem 0.5rem 0.3rem;
-    background: none;
-    /* An outline in the strip's colour keeps the text readable over any
-       stage, and the sprites show through. */
-    text-shadow:
-      0 0 2px var(--strip-bg),
-      0 0 2px var(--strip-bg),
-      0 1px 3px var(--strip-bg);
-    font-size: 0.8rem;
-  }
-  .game .strip > .xp {
-    grid-row: 4;
-  }
-  /* Damage numbers rise over the names and HP. */
-  .game .strip .dmg {
-    z-index: 2;
-  }
-  /* The name keeps its own row (two lines kept); HP sits beside the bar. */
-  .game .fighter {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name name' 'bar hp';
-    align-items: center;
-    column-gap: 0.5rem;
-  }
-  .game .foe {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'name name' 'hp bar';
-  }
-  .game .fighter .hp {
-    white-space: nowrap;
   }
   /* The title and the tabs share the header bar. */
   .inventory {
@@ -676,6 +648,70 @@ select {
   .inventory .tools .row .field {
     grid-template-columns: 7.5rem;
     white-space: nowrap;
+  }
+}
+/* Under 810 px tall: names and HP drawn over the stage, not under it. */
+@media (min-width: 940px) and (min-height: 600px) and (max-height: 809px) {
+  .game .strip .where {
+    padding-block: 0.1rem;
+  }
+  .game .strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .game .strip > * {
+    grid-column: 1;
+  }
+  .game .strip > .where {
+    grid-row: 1;
+  }
+  .game .strip > .trial-call {
+    grid-row: 2;
+  }
+  .game .strip > .stage {
+    grid-row: 3;
+  }
+  .game .strip > .fighters {
+    grid-row: 3;
+    align-self: start;
+    z-index: 1;
+    padding: 0.15rem 0.5rem 0.3rem;
+    background: none;
+    /* An outline in the strip's colour keeps the text readable over any
+       stage, and the sprites show through. */
+    text-shadow:
+      0 0 2px var(--strip-bg),
+      0 0 2px var(--strip-bg),
+      0 1px 3px var(--strip-bg);
+    font-size: 0.8rem;
+  }
+  .game .strip > .xp {
+    grid-row: 4;
+  }
+  /* Damage numbers rise over the names and HP. */
+  .game .strip .dmg {
+    z-index: 2;
+  }
+  /* The name keeps its own row (two lines kept); HP sits beside the bar. */
+  .game .fighter {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'name name' 'bar hp';
+    align-items: center;
+    column-gap: 0.5rem;
+  }
+  .game .foe {
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas: 'name name' 'hp bar';
+  }
+  .game .fighter .hp {
+    white-space: nowrap;
+  }
+}
+/* Under 720 px tall (such as the 960 x 640 itch.io frame): the stage at 0.55
+   (114 px) as well. */
+@media (min-width: 940px) and (min-height: 600px) and (max-height: 719px) {
+  .game .strip > .stage {
+    zoom: 0.55;
   }
 }
 .columns > .character {
@@ -1378,9 +1414,6 @@ body.dragging * {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-top: 0.3rem;
-  padding-top: 0.3rem;
-  border-top: 1px solid var(--line);
 }
 .details h3 {
   min-width: 0;
@@ -1390,6 +1423,64 @@ body.dragging * {
 }
 .details .row {
   margin: 0.3rem 0 0;
+}
+/* The item, its attributes and each comparison in blocks of their own. */
+.details .detail-block {
+  margin-top: 0.4rem;
+  padding: 0.35rem 0.5rem 0.4rem;
+  background: var(--head);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.details .detail-block:first-child {
+  margin-top: 0;
+}
+.details .detail-block-label {
+  margin-bottom: 0.2rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+/* Attributes grouped by what they do; the group's name, not only its colour,
+   says which. */
+.details .kind {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+.details .kind + .kind {
+  margin-top: 0.2rem;
+}
+/* The group's name on a pill in its colour, its values beside it. */
+.details .kind-label {
+  flex: none;
+  padding: 0 0.45rem;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.details .kind .lines {
+  min-width: 0;
+  margin: 0;
+}
+.kind-offence {
+  color: var(--offence);
+}
+.kind-defence {
+  color: var(--defence);
+}
+.kind-utility {
+  color: var(--utility);
+}
+/* Sell, Salvage and Craft on their own row over the item, in one place for
+   every item. */
+.details .row.actions {
+  margin: 0 0 0.4rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line);
 }
 .up {
   color: var(--up);
@@ -1416,7 +1507,11 @@ button.salvage:not([aria-disabled='true']) {
   color: var(--salvage);
   border-color: var(--salvage);
 }
-button:is(.sell, .salvage):not([aria-disabled='true']):hover {
+button[data-action='craft']:not([aria-disabled='true']) {
+  color: var(--craft);
+  border-color: var(--craft);
+}
+button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):hover {
   box-shadow: inset 0 0 0 1px currentColor;
 }
 .confirm[data-action='sell'] {
