@@ -1408,13 +1408,6 @@ body.dragging * {
   flex-wrap: wrap;
   gap: 0 0.75rem;
 }
-/* One comparison per position: where, vs what, and its Equip button on one line. */
-.details .cmp {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
 .details h3 {
   min-width: 0;
   font-size: inherit;
@@ -1442,6 +1435,30 @@ body.dragging * {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
+}
+/* The item's facts, each value beside its small label, wrapping like the
+   attributes do. */
+.details .facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.75rem;
+  margin: 0.25rem 0 0;
+}
+.details .facts div {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+.details .facts dt {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.details .facts dd {
+  margin: 0;
+}
+.details .detail-block p {
+  margin: 0.25rem 0 0;
 }
 /* Attributes grouped by what they do; the group's name, not only its colour,
    says which. */

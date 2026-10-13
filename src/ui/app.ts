@@ -66,6 +66,7 @@ import {
 import {
   canFaceTribulation,
   equip,
+  unequip,
   faceTribulation,
   newGame,
   retire,
@@ -174,10 +175,10 @@ import {
   bagPage,
   cellLabel,
   characterStatusLabel,
-  charmLineName,
-  favouredBy,
   compareToEquipped,
   equipBlock,
+  itemFacts,
+  unequipBlock,
   freshDrops,
   gridMove,
   itemLineGroups,
@@ -219,7 +220,6 @@ import {
   statRows,
   type StatGroup,
   stripEvents,
-  treasureTier,
   tribulationBanner,
   tribulationCall,
   tribulationFellDue,
@@ -1091,6 +1091,21 @@ function realmList(chip: HTMLElement, level: () => number): { refresh: () => voi
       if (isOpen() && realmOf(level()) !== shown) fill();
     },
   };
+}
+
+/**
+ * The line saying why `buttons` are off, with id `id`: the buttons are marked
+ * aria-disabled (as everywhere here; button() ignores their clicks) and point to it.
+ */
+function blockedBy(why: string, id: string, buttons: HTMLButtonElement[]): HTMLElement {
+  const line = el('p', 'down', why);
+  line.id = id;
+  for (const b of buttons) {
+    b.setAttribute('aria-disabled', 'true');
+    b.setAttribute('aria-describedby', id);
+    b.title = why;
+  }
+  return line;
 }
 
 /** A block of the details panel: a small label over its own lines. */
@@ -2729,8 +2744,10 @@ function play(
   function drawGear(): void {
     const c = state.cultivator;
     // The panel ignores the bag's length (drops only append), so a drop never
-    // rebuilds it and takes focus off its Equip button.
-    const detailsKey = `${gearVersion}|${c.level}|${JSON.stringify(selected)}`;
+    // rebuilds it and takes focus off its Equip button. A worn item's panel
+    // redraws only when a drop fills the bag, which turns its Unequip off.
+    const full = !!selected && 'slot' in selected && !!unequipBlock(state);
+    const detailsKey = `${gearVersion}|${c.level}|${JSON.stringify(selected)}|${full}`;
     if (detailsKey !== drawnDetails) {
       drawnDetails = detailsKey;
       drawDetails();
@@ -2797,42 +2814,42 @@ function play(
     const icon = el('span', 'icon');
     icon.setAttribute('aria-hidden', 'true');
     setIcon(icon, item);
-    const name = el('div');
-    name.append(
-      el('div', `title grade-${item.grade}`, itemName(item)),
-      el('div', `tag grade-${item.grade}`, itemTag(item)),
-      el('div', 'quality', qualityLine(item)),
-    );
-    const tier = treasureTier(item);
-    if (tier) name.append(el('div', 'muted', tier));
-    const line = charmLineName(item);
-    if (line) name.append(el('div', 'muted', line));
-    const lean = favouredBy(item, state.cultivator.path);
-    if (lean) name.append(el('div', lean.match ? 'up' : 'muted', lean.text));
-    const souls = soulsLine(item, state);
-    if (souls !== null) name.append((soulsText = el('div', 'muted', souls)));
-    head.append(icon, name);
+    head.append(icon, el('div', `title grade-${item.grade}`, itemName(item)));
+    // Each fact under its own label, as the attributes sit under theirs.
+    const facts = el('dl', 'facts');
+    for (const f of itemFacts(item, state)) {
+      const value = el('dd', f.tone, f.value);
+      if (f.id === 'souls') soulsText = value;
+      const pair = el('div');
+      pair.append(el('dt', '', f.label), value);
+      facts.append(pair);
+    }
     const about = block('details.item');
-    about.append(head);
+    about.append(head, facts);
     const parts: HTMLElement[] = [about, attrs];
     // Crafting works on bag and worn items alike.
     const craftBtn = button(t('details.craft'), '', () => openCraft());
     craftBtn.dataset.action = 'craft';
     craftBtn.setAttribute('aria-haspopup', 'dialog');
     const actions = el('div', 'row actions');
+    // Equip or Unequip in the Item block, on a row of their own.
+    const wear = el('div', 'row');
     if ('slot' in selected) {
       actions.append(craftBtn);
+      const from = selected.slot;
+      const off = button(t('details.unequip'), '', () => unequipFromSlot(from));
+      off.dataset.action = 'unequip';
+      wear.append(off);
       about.append(el('p', 'muted', t('details.equipped')));
+      const blocked = unequipBlock(state);
+      if (blocked) about.append(blockedBy(blocked, 'unequip-why', [off]));
+      about.append(wear);
     } else {
       const index = selected.bag;
       const blocked = equipBlock(state.cultivator, item);
-      if (blocked) {
-        const why = el('p', 'down', t('details.blocked', { why: blocked }));
-        why.id = 'equip-why';
-        about.append(why);
-      }
-      // One comparison and Equip button per position the item fits (two for
-      // accessories and charms), the default position first.
+      // One Equip button per position the item fits (two for accessories and
+      // charms, each naming its position), the default position first; each
+      // position's comparison below in a block of its own.
       const fits = slotsFor(item.slot);
       const first = defaultSlot(state.cultivator.equipment, item);
       for (const to of [first, ...fits.filter((p) => p !== first)]) {
@@ -2842,21 +2859,15 @@ function play(
         const compare = el('ul', 'compare');
         for (const d of diff) compare.append(el('li', d.better ? 'up' : 'down', d.text));
         if (!diff.length) compare.append(el('li', 'muted', t('details.noChange')));
-        // The line it sits on already names the position.
-        const equipBtn = el('button', 'primary', t('details.equip'));
-        if (fits.length > 1)
-          equipBtn.setAttribute('aria-label', t('details.equipIn', { slot: name }));
-        equipBtn.type = 'button';
-        // aria-disabled, as everywhere here; equipFromBag ignores the click.
-        if (blocked) {
-          equipBtn.setAttribute('aria-disabled', 'true');
-          equipBtn.setAttribute('aria-describedby', 'equip-why');
-          equipBtn.title = blocked;
-        }
-        equipBtn.addEventListener('click', () => equipFromBag(index, to));
-        // Each position's comparison in its own block, under its Equip button's line.
-        const cmp = el('div', 'cmp');
-        cmp.append(
+        const equipBtn = button(
+          fits.length > 1 ? t('details.equipIn', { slot: name }) : t('details.equip'),
+          'primary',
+          () => equipFromBag(index, to),
+        );
+        equipBtn.dataset.action = 'equip';
+        wear.append(equipBtn);
+        const vs = el('div', 'detail-block');
+        vs.append(
           el(
             'h3',
             '',
@@ -2864,12 +2875,15 @@ function play(
               ? t('details.vs', { slot: name, item: itemName(current) })
               : t('details.empty', { slot: name }),
           ),
-          equipBtn,
+          compare,
         );
-        const vs = el('div', 'detail-block');
-        vs.append(cmp, compare);
         parts.push(vs);
       }
+      if (blocked) {
+        const why = t('details.blocked', { why: blocked });
+        about.append(blockedBy(why, 'equip-why', [...wear.querySelectorAll('button')]));
+      }
+      about.append(wear);
       const sellBtn = button(t('details.sell', { n: sellPrice(item) }), 'sell', () =>
         dispose(index, 'sell'),
       );
@@ -2936,6 +2950,25 @@ function play(
       charTabs.show('gear');
       slotCells[at].focus();
     }
+  }
+
+  /**
+   * Takes off the item worn in `from` into the bag and keeps it selected there,
+   * so its Equip button sits where Unequip was and takes the focus.
+   */
+  function unequipFromSlot(from: EquipSlotId): void {
+    // A full bag does nothing; Details says why.
+    if (!state.cultivator.equipment[from] || unequipBlock(state)) return;
+    const fromDetails = details.box.contains(document.activeElement);
+    const next = unequip(state, from);
+    const index = next.inventory.length - 1;
+    // Turn to the page its cell sorts onto, so the selection is in view.
+    const at = bagOrder(next.inventory, sort, reverse).indexOf(index);
+    page = pageOf(at);
+    setCursor(at);
+    selected = { bag: index };
+    act(next);
+    if (fromDetails) detailBody.querySelector<HTMLButtonElement>('[data-action="equip"]')?.focus();
   }
 
   /** Applies a player action that changes the bag or the cultivator, then redraws. */

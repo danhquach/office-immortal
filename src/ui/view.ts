@@ -220,20 +220,17 @@ export function charmLineName(item: Item): string | null {
 }
 
 /**
- * The Path an item's family leans toward, for its details, e.g. "Favoured by:
- * Body Refiner"; `match` when it is the player's Path. Null for a neutral item.
+ * The Path an item's family leans toward, for its details, e.g. "Body Refiner";
+ * `match` when it is the player's Path. Null for a neutral item.
  */
 export function favouredBy(item: Item, path: PathId): { text: string; match: boolean } | null {
   const lean = itemPath(item);
   if (!lean) return null;
-  return {
-    text: t('item.favouredBy', { path: tn('path', PATHS[lean].name) }),
-    match: lean === path,
-  };
+  return { text: tn('path', PATHS[lean].name), match: lean === path };
 }
 
 /**
- * A Soul Banner's souls for its details, e.g. "Souls: 7 / 20 (+6.7 damage per
+ * A Soul Banner's souls for its details, e.g. "7 / 20 (+6.7 damage per
  * attack)": the equipped banner's from `state`, none for one in the bag. Null
  * for any other item.
  */
@@ -242,6 +239,51 @@ export function soulsLine(item: Item, state: GameState): string | null {
   const souls = state.cultivator.equipment.sideArm === item ? state.souls : 0;
   const damage = soulDamage(souls, state.cultivator.stats.spirit);
   return t('item.souls', { souls, cap: SOUL_CAPS[item.grade], damage: num(damage, 1) });
+}
+
+/** One labelled fact in a details panel's Item block, e.g. Grade: Spirit. */
+export interface ItemFact {
+  id: 'grade' | 'type' | 'level' | 'quality' | 'tier' | 'line' | 'favouredBy' | 'souls';
+  label: string;
+  value: string;
+  /** A class for the value: the grade's colour, or `up` for the player's own Path. */
+  tone: string;
+}
+
+/**
+ * The Item block's facts in display order: grade, type, level and quality,
+ * then those that apply to this item only (treasure tier, charm line, the Path
+ * it favours, a Soul Banner's souls).
+ */
+export function itemFacts(item: Item, state: GameState): ItemFact[] {
+  const facts: ItemFact[] = [
+    {
+      id: 'grade',
+      label: t('fact.grade'),
+      value: tn('grade', GRADES[item.grade].name),
+      tone: `grade-${item.grade}`,
+    },
+    { id: 'type', label: t('fact.type'), value: tn('slot', SLOTS[item.slot].name), tone: '' },
+    { id: 'level', label: t('fact.level'), value: String(item.level), tone: '' },
+    { id: 'quality', label: t('fact.quality'), value: `${quality(item)}%`, tone: '' },
+  ];
+  const tier = treasureTier(item);
+  if (tier) facts.push({ id: 'tier', label: t('fact.tier'), value: tier, tone: '' });
+  const line = charmLineName(item);
+  if (line) facts.push({ id: 'line', label: t('fact.line'), value: line, tone: '' });
+  const lean = favouredBy(item, state.cultivator.path);
+  if (lean) {
+    const tone = lean.match ? 'up' : '';
+    facts.push({ id: 'favouredBy', label: t('fact.favouredBy'), value: lean.text, tone });
+  }
+  const souls = soulsLine(item, state);
+  if (souls !== null) facts.push({ id: 'souls', label: t('fact.souls'), value: souls, tone: '' });
+  return facts;
+}
+
+/** Why a worn item can't be taken off now (a full bag); null when it can. */
+export function unequipBlock(state: GameState): string | null {
+  return state.inventory.length >= state.bagSize ? t('details.unequipBlocked') : null;
 }
 
 /**

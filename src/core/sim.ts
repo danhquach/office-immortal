@@ -225,6 +225,28 @@ export function equip(state: GameState, index: number, to?: EquipSlotId): GameSt
   return s;
 }
 
+/**
+ * Takes off the item worn in position `from` and puts it at the end of the bag,
+ * returning the new state; `state` is left untouched. A Soul Banner's souls
+ * leave with it, as when it is swapped out. Throws if nothing is worn there or
+ * the bag is full.
+ */
+export function unequip(state: GameState, from: EquipSlotId): GameState {
+  if (!Object.hasOwn(state.cultivator.equipment, from) || !state.cultivator.equipment[from]) {
+    throw new RangeError(`unequip: nothing in ${from}`);
+  }
+  if (state.inventory.length >= state.bagSize) throw new RangeError('unequip: bag is full');
+  const s = structuredClone(state);
+  const c = s.cultivator;
+  const item = c.equipment[from] as Item;
+  delete c.equipment[from];
+  s.inventory.push(item);
+  if (item.slot === 'sideArm') s.souls = 0;
+  // Max HP may have dropped with the item; never sit above it.
+  c.hp = Math.min(c.hp, derive(c).maxHp);
+  return s;
+}
+
 /** True while a Tribulation is due and not yet being fought, so the player can start it now. */
 export function canFaceTribulation(state: GameState): boolean {
   return readyForTribulation(state.cultivator) && state.enemies[0]?.kind !== 'tribulation';

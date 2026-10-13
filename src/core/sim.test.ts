@@ -27,6 +27,7 @@ import {
   requiredRealm,
   retire,
   tick,
+  unequip,
   type GameState,
   type TickOptions,
 } from './sim.ts';
@@ -331,6 +332,67 @@ describe('equip', () => {
     const b = tick(start, 600);
     expect(a.kills).toBeGreaterThan(b.kills);
     expect(a.highestFloor).toBeGreaterThanOrEqual(b.highestFloor);
+  });
+});
+
+describe('unequip', () => {
+  it('moves the worn item to the end of the bag and frees its position', () => {
+    const s = unequip(
+      equip(withBag(newGame(1, 'sword'), [weapon(5, 0), weapon(9, 1)]), 0),
+      'weapon',
+    );
+    expect(s.cultivator.equipment.weapon).toBeUndefined();
+    expect(Object.hasOwn(s.cultivator.equipment, 'weapon')).toBe(false);
+    expect(s.inventory).toEqual([weapon(9, 1), weapon(5, 0)]);
+  });
+
+  it('leaves the input state untouched and shares no objects with it', () => {
+    const start = equip(withBag(newGame(1, 'sword'), [weapon(5, 0)]), 0);
+    const copy = structuredClone(start);
+    const s = unequip(start, 'weapon');
+    expect(start).toEqual(copy);
+    expect(s.inventory[0]).not.toBe(start.cultivator.equipment.weapon);
+  });
+
+  it('takes off only the chosen one of two positions', () => {
+    const ring = (level: number): Item => ({ ...weapon(level, 0), slot: 'accessory' });
+    const worn = equip(equip(withBag(newGame(1, 'sword'), [ring(1), ring(2)]), 0), 0);
+    const s = unequip(worn, 'accessory2');
+    expect(s.cultivator.equipment).toEqual({ accessory1: ring(1) });
+    expect(s.inventory).toEqual([ring(2)]);
+  });
+
+  it('rejects an empty position, an unknown one and a full bag', () => {
+    const worn = equip(withBag(newGame(1, 'sword'), [weapon(5, 0)]), 0);
+    expect(() => unequip(worn, 'charm1')).toThrow(RangeError);
+    expect(() => unequip(worn, '__proto__' as 'weapon')).toThrow(RangeError);
+    const full = { ...worn, inventory: Array.from({ length: worn.bagSize }, () => weapon(1, 0)) };
+    expect(() => unequip(full, 'weapon')).toThrow(RangeError);
+    // One free cell is enough.
+    const roomy = { ...full, inventory: full.inventory.slice(1) };
+    expect(unequip(roomy, 'weapon').inventory).toHaveLength(worn.bagSize);
+  });
+
+  it("empties a Soul Banner's souls as it comes off", () => {
+    const banner: Item = { ...weapon(5, 0), slot: 'sideArm', name: 'Jade Hundred Ghosts Banner' };
+    const worn = { ...equip(withBag(newGame(1, 'talisman'), [banner]), 0), souls: 7 };
+    expect(unequip(worn, 'sideArm').souls).toBe(0);
+  });
+
+  it('never leaves HP above a lower max HP', () => {
+    const pendant: Item = {
+      slot: 'accessory',
+      name: 'Bone Bead Pendant',
+      level: 50,
+      grade: 'mortal',
+      baseRoll: 1,
+      affixes: [],
+    };
+    const s = equip(withBag(newGame(1, 'body'), [pendant]), 0);
+    s.cultivator.hp = derive(s.cultivator).maxHp;
+    const off = unequip(s, 'accessory1');
+    expect(off.cultivator.hp).toBe(derive(off.cultivator).maxHp);
+    expect(off.cultivator.hp).toBeLessThan(s.cultivator.hp);
   });
 });
 
