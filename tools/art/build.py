@@ -534,15 +534,16 @@ def kept_columns(columns: list[str]) -> Image.Image:
     return out
 
 
-def summary_atlas() -> Image.Image:
-    """The summary chips' icons in one row, manifest order, in item icon cells."""
+def row_atlas(key: str) -> Image.Image:
+    """The icons of manifest row `key` (summary chips, store offers) in one row,
+    manifest order, in item icon cells."""
     cell = MANIFEST["icon_size"] * MANIFEST["icon_scale"]
-    entries = MANIFEST["summary"]
+    entries = MANIFEST[key]
     out = Image.new("RGBA", (cell * len(entries), cell), (0, 0, 0, 0))
     for c, e in enumerate(entries):
         out.paste(smooth_icon(SRC / e["source"], cell, False), (c * cell, 0))
         if out.crop((c * cell, 0, (c + 1) * cell, cell)).getbbox() is None:
-            sys.exit(f"summary {e['id']}: came out empty")
+            sys.exit(f"{key} {e['id']}: came out empty")
     return out
 
 
@@ -567,6 +568,7 @@ KNOBS = {
     "background": {"id", "height", "seed", "prompt", "dim", "extra", "trim_top", "blend"},
     "icon": {"id", "sources", "renders", "pair", "source", "seed", "prompt"},
     "summary": {"id", "source", "seed", "prompt"},
+    "store": {"id", "source", "seed", "prompt"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -574,7 +576,10 @@ REQUIRED = {
     "background": {"id", "height"},
     "icon": {"id"},
     "summary": {"id", "source"},
+    "store": {"id", "source"},
 }
+# Manifest rows built as one-row atlases of the same name (summary.png, store.png).
+ROWS = ("summary", "store")
 
 
 def check_manifest(builds=lambda kind, name: True) -> None:
@@ -585,7 +590,7 @@ def check_manifest(builds=lambda kind, name: True) -> None:
     entries = [("variant" if "base" in a else "sprite", a) for a in MANIFEST["sprites"]]
     entries += [("background", b) for b in MANIFEST["backgrounds"]]
     entries += [("icon", i) for i in MANIFEST["icons"]]
-    entries += [("summary", s) for s in MANIFEST["summary"]]
+    entries += [(row, s) for row in ROWS for s in MANIFEST[row]]
     for kind, e in entries:
         name = e.get("id", "?")
         for k in sorted(set(e) - KNOBS[kind]):
@@ -602,8 +607,8 @@ def check_manifest(builds=lambda kind, name: True) -> None:
             for f in [*e.get("sources", []), *e.get("renders", [])] if builds(kind, name) else []:
                 if not (SRC / f).exists():
                     errors.append(f"icon {name}: source {f} missing")
-        if kind == "summary" and "source" in e and builds(kind, name) and not (SRC / e["source"]).exists():
-            errors.append(f"summary {name}: source {e['source']} missing")
+        if kind in ROWS and "source" in e and builds(kind, name) and not (SRC / e["source"]).exists():
+            errors.append(f"{kind} {name}: source {e['source']} missing")
         for f in [] if kind != "sprite" or not builds(kind, name) else [e["poses"]["idle"], *(p for r in ("attack", "hit", "death") for p in e["poses"][r])]:
             if not (SRC / f).exists():
                 errors.append(f"sprite {name}: source {f} missing")
@@ -625,8 +630,8 @@ def main() -> None:
     def builds(kind: str, name: str) -> bool:
         if kind == "icon":
             return not only or "icons" in only or name in columns
-        if kind == "summary":
-            return not only or "summary" in only
+        if kind in ROWS:
+            return not only or kind in only
         return not only or name in wanted
 
     check_manifest(builds)
@@ -637,8 +642,9 @@ def main() -> None:
         save_smooth(icon_atlas(), OUT / "icons.png")
     elif columns:
         save_smooth(kept_columns(columns), OUT / "icons.png")
-    if not only or "summary" in only:
-        save_smooth(summary_atlas(), OUT / "summary.png")
+    for row in ROWS:
+        if not only or row in only:
+            save_smooth(row_atlas(row), OUT / f"{row}.png")
     for bg in MANIFEST["backgrounds"]:
         if (not only or bg["id"] in only) and (SRC / f"{bg['id']}.jpg").exists():
             save(background(bg), OUT / f"bg-{bg['id']}.png")

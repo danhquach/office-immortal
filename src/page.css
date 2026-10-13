@@ -407,6 +407,11 @@ select {
   white-space: nowrap;
 }
 /* Decorative (aria-hidden): drawn at 64 px, shown at the chip's text size. */
+/* A running store boost wears the Spirit Stones colour it was bought with;
+   its name and time left are the words, so colour is not the only cue. */
+.kpi.boost {
+  border-left-color: var(--sell);
+}
 .kpi-icon {
   display: inline-block;
   width: 1.25em;
@@ -1838,6 +1843,79 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 .types legend {
   color: var(--muted);
   font-size: 0.85rem;
+}
+/* Store tab (§8): the rotation countdown and Refresh now, then one card per
+   offer. A chest's name wears its grade colour; every price is in the Buy
+   button's words, so colour is never the only cue. */
+.store-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.2rem 0.6rem;
+}
+.store-head .countdown {
+  margin: 0;
+  flex: 1 1 auto;
+}
+.store .why {
+  color: var(--down);
+  font-size: 0.8rem;
+}
+.store-head .why {
+  flex-basis: 100%;
+  text-align: right;
+}
+.store-head .why:empty,
+.offer .why:empty {
+  display: none;
+}
+.offers {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+.offer {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.35rem 0.45rem;
+}
+.offer.sold .store-icon {
+  opacity: 0.4;
+}
+.store-icon {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  background-repeat: no-repeat;
+}
+.offer-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.offer .title {
+  font-weight: 600;
+}
+.offer .desc {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.offer button {
+  flex: none;
+}
+.boosts {
+  margin-top: 0.6rem;
+}
+.boost-list {
+  margin: 0.2rem 0 0;
+  padding-left: 1.1rem;
+}
+.boosts .hint {
+  margin: 0.2rem 0 0;
 }
 /* Stats tab: base stats with their spend buttons, the derived numbers in
    groups, then Respec */

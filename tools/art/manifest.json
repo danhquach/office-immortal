@@ -705,6 +705,44 @@
       "prompt": "game icon, a white crane with spread wings soaring upward above swirling white and gold clouds, a bright beam of golden heavenly light behind it, grand and majestic, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
     }
   ],
+  "store": [
+    {
+      "id": "chest-spirit",
+      "source": "store/chest-spirit.jpg",
+      "seed": 6701,
+      "prompt": "game inventory icon, a single small closed treasure chest of dark lacquered wood with polished azure blue metal trim and corner bands, a round azure gem lock, a faint soft blue glow seeping from the lid seam, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "chest-earth",
+      "source": "store/chest-earth.jpg",
+      "seed": 6712,
+      "prompt": "game inventory icon, a single closed treasure chest carved from polished green jade stone with gold-edged corners, glowing emerald gem inlays along the lid and a jade dragon-head clasp, a soft green glow from the lid seam, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "chest-heaven",
+      "source": "store/chest-heaven.jpg",
+      "seed": 6713,
+      "prompt": "game inventory icon, a single ornate grand treasure chest of white porcelain and shining gold filigree, lid slightly ajar with radiant golden light and sparkles spilling out, small cloud motifs and a large gold sun emblem on the front, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "boost-xp",
+      "source": "store/boost-xp.jpg",
+      "seed": 6704,
+      "prompt": "game inventory icon, a single steaming celadon green porcelain teacup on a small saucer, golden tea inside, a curling swirl of glowing golden qi steam rising from it, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "boost-treasure",
+      "source": "store/boost-treasure.jpg",
+      "seed": 6705,
+      "prompt": "game inventory icon, a single lucky charm: a round green jade disc pendant with a square hole, a shiny gold coin tied to it, hanging from a red knotted cord with a long red silk tassel, small sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    },
+    {
+      "id": "boost-stones",
+      "source": "store/boost-stones.jpg",
+      "seed": 6706,
+      "prompt": "game inventory icon, a single red paper gift envelope with gold trim and a round gold seal, slightly open at the top with glowing pale cyan faceted crystal gems peeking out, small sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
+    }
+  ],
   "icon_size": 32,
   "icon_scale": 2
 }

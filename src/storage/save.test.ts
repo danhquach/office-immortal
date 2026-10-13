@@ -23,6 +23,7 @@ import {
   xpToNext,
 } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
+import { syncStore } from '../core/store.ts';
 import {
   ARRAY_TICK,
   ENEMY_ARRIVAL,
@@ -85,8 +86,16 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 
+/** The save as versions before 10 wrote it: no store and no boosts. */
+function beforeStore(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.store;
+  delete save.state.boosts;
+  return save;
+}
+
 /** The save as versions before 6 wrote it: no souls. */
 function beforeBanners(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  beforeStore(save);
   delete save.state.souls;
   return save;
 }
@@ -1799,7 +1808,7 @@ describe('realm caps and the Tribulation', () => {
     const order = (x: ReturnType<typeof heldRaw>) => x.state.enemies as J[];
     const loaded = decodeChanged(heldRaw(), (x) => {
       x.v = 5;
-      delete x.state.souls;
+      beforeBanners(x);
       order(x).at(-1)!.name = 'Heavenly Audit';
     }) as ReturnType<typeof decodeSave>;
     expect(loaded?.state.enemies.at(-1)?.name).toBe('Probation Review');
@@ -1812,6 +1821,7 @@ describe('realm caps and the Tribulation', () => {
     for (const name of ['Heavenly Audit', 'Annual Appraisal']) {
       const loaded = decodeChanged(heldRaw(), (x) => {
         x.v = 6;
+        beforeStore(x);
         order(x).at(-1)!.name = name;
       }) as ReturnType<typeof decodeSave>;
       expect(loaded?.state.enemies.at(-1)?.name).toBe('Probation Review');
@@ -1827,6 +1837,7 @@ describe('realm caps and the Tribulation', () => {
     ]) {
       const bad = decodeChanged(heldRaw(), (x) => {
         x.v = 6;
+        beforeStore(x);
         order(x).at(-1)!.name = name;
       });
       expect(bad).toBeNull();
@@ -1834,6 +1845,7 @@ describe('realm caps and the Tribulation', () => {
     expect(
       decodeChanged(heldRaw(), (x) => {
         x.v = 6;
+        beforeStore(x);
         order(x).at(-1)!.maxHp = 1;
       }),
     ).toBeNull();
@@ -2034,10 +2046,10 @@ describe('refine level (v8)', () => {
   });
 
   it('loads a v7 save with no refine levels, and rejects one that has them', () => {
-    const save = raw();
+    const save = beforeStore(raw());
     save.v = 7;
     expect(load(save)?.state).toEqual(STATE);
-    const old = withRefines(3);
+    const old = beforeStore(withRefines(3));
     old.v = 7;
     expect(load(old)).toBeNull();
   });
@@ -2179,13 +2191,12 @@ describe('longer realms (v9)', () => {
     }
     const save = JSON.parse(encodeSave(s, SAVED_AT)) as ReturnType<typeof raw>;
     save.v = 8;
-    return save;
+    return beforeStore(save);
   }
   const load8 = (save: ReturnType<typeof raw>) => decodeSave(JSON.stringify(save));
   const kinds = (s: GameState) => s.enemies.map((e) => e.kind);
 
-  it('is version 9, and still reads version 8', () => {
-    expect(SAVE_VERSION).toBe(9);
+  it('still reads version 8', () => {
     expect(load8(v8Raw(5))).not.toBeNull();
   });
 
@@ -2196,7 +2207,7 @@ describe('longer realms (v9)', () => {
     s.cultivator.xp = xpToNext(22) + 5;
     s.enemies.push(makeTribulation(s.floor, 1));
     const save = JSON.parse(encodeSave(s, SAVED_AT));
-    expect(save.v).toBe(9);
+    expect(save.v).toBe(SAVE_VERSION);
     expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
     // Held at a level that is no longer a cap, a v9 save is as invalid as ever.
     s.cultivator.level = 20;
@@ -2322,6 +2333,101 @@ describe('longer realms (v9)', () => {
         expect(st, `${level} ${tribulation}`).toBeDefined();
         expect(decodeSave(encodeSave(st as GameState, SAVED_AT))?.state).toEqual(st);
       }
+    }
+  });
+});
+
+describe('the store (v10)', () => {
+  /** STATE with a rolled stock, one offer sold, and an XP boost running. */
+  function stocked(): GameState {
+    const s = syncStore(structuredClone(STATE));
+    s.store.sold[1] = true;
+    s.boosts.xp = s.time + 600;
+    return s;
+  }
+  const withStore = (change: (st: J) => void): unknown => {
+    const save = JSON.parse(encodeSave(stocked(), SAVED_AT)) as ReturnType<typeof raw>;
+    change(save.state);
+    return decodeSave(JSON.stringify(save));
+  };
+
+  it('round-trips the stock and the boosts', () => {
+    const s = stocked();
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+  });
+
+  it('loads a v9 save with no stock and no boosts, and rejects one that has them', () => {
+    const save = beforeStore(raw());
+    save.v = 9;
+    const loaded = decodeSave(JSON.stringify(save))?.state;
+    expect(loaded?.store).toEqual({ rotation: -1, offers: [], sold: [] });
+    expect(loaded?.boosts).toEqual({ xp: 0, treasure: 0, stones: 0 });
+    const old = raw();
+    old.v = 9;
+    expect(decodeSave(JSON.stringify(old))).toBeNull();
+  });
+
+  it.each([
+    ['no store', (st: J) => void delete st.store],
+    ['no boosts', (st: J) => void delete st.boosts],
+    [
+      'an unknown offer',
+      (st: J) => void ((st.store as J).offers as unknown[]).splice(0, 1, 'chest-immortal'),
+    ],
+    [
+      'a look-alike offer',
+      (st: J) => void ((st.store as J).offers as unknown[]).splice(0, 1, 'chest-еarth'),
+    ],
+    [
+      'a bidi offer',
+      (st: J) => void ((st.store as J).offers as unknown[]).splice(0, 1, 'boost-xp‮'),
+    ],
+    [
+      'a repeated offer',
+      (st: J) => {
+        const o = (st.store as J).offers as unknown[];
+        o[1] = o[0];
+      },
+    ],
+    ['too few offers', (st: J) => void ((st.store as J).offers as unknown[]).pop()],
+    ['too many offers', (st: J) => void ((st.store as J).offers as unknown[]).push('boost-xp')],
+    [
+      'a sold flag that is not a boolean',
+      (st: J) => void (((st.store as J).sold as unknown[])[0] = 1),
+    ],
+    ['a short sold list', (st: J) => void ((st.store as J).sold as unknown[]).pop()],
+    ['a rotation from the future', (st: J) => void ((st.store as J).rotation = 1e9)],
+    ['a fractional rotation', (st: J) => void ((st.store as J).rotation = 0.5)],
+    ['a rotation below -1', (st: J) => void ((st.store as J).rotation = -2)],
+    ['offers before the first roll', (st: J) => void ((st.store as J).rotation = -1)],
+    ['an extra store key', (st: J) => void ((st.store as J).extra = 1)],
+    ['a null store', (st: J) => void (st.store = null)],
+    ['an array store', (st: J) => void (st.store = [])],
+    ['null boosts', (st: J) => void (st.boosts = null)],
+    ['array boosts', (st: J) => void (st.boosts = [1, 2, 3])],
+    ['a sold list that is not an array', (st: J) => void ((st.store as J).sold = { 0: false })],
+    ['offers that are not an array', (st: J) => void ((st.store as J).offers = 'chest-earth')],
+    ['a number offer', (st: J) => void ((st.store as J).offers as unknown[]).splice(0, 1, 3)],
+    ['a null offer', (st: J) => void ((st.store as J).offers as unknown[]).splice(0, 1, null)],
+    ['a NaN boost', (st: J) => void ((st.boosts as J).xp = NaN)],
+    ['a negative boost', (st: J) => void ((st.boosts as J).xp = -1)],
+    ['a boost past the cap', (st: J) => void ((st.boosts as J).xp = (st.time as number) + 3601)],
+    ['a huge boost', (st: J) => void ((st.boosts as J).stones = 1e308)],
+    ['a string boost', (st: J) => void ((st.boosts as J).treasure = '5')],
+    ['an unknown boost', (st: J) => void ((st.boosts as J).luck = 5)],
+    ['a missing boost', (st: J) => void delete (st.boosts as J).xp],
+  ])('rejects %s', (_, change) => {
+    expect(withStore(change)).toBeNull();
+  });
+
+  it('rejects a pollution key in the store or the boosts', () => {
+    for (const where of ['store', 'boosts']) {
+      const json = encodeSave(stocked(), SAVED_AT).replace(
+        `"${where}":{`,
+        `"${where}":{"__proto__":{"polluted":1},`,
+      );
+      expect(decodeSave(json)).toBeNull();
+      expect(({} as J).polluted).toBeUndefined();
     }
   });
 });

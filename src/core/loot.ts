@@ -615,7 +615,6 @@ const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
 const UNIQUE_IDS = Object.keys(UNIQUES) as UniqueId[];
 export const ARRAY_IDS = Object.keys(ARRAYS) as ArrayId[];
-const WEIGHT_TOTAL = GRADE_IDS.reduce((sum, g) => sum + GRADES[g].weight, 0);
 
 /** A roll in [0, 1] in steps of 1%, so both ends can be rolled. */
 function roll(rng: Rng): number {
@@ -667,9 +666,17 @@ export function quality(item: Item): number {
   return Math.floor(rolls.reduce((sum, r) => sum + Math.round(r * 100), 0) / rolls.length);
 }
 
-export function rollGrade(rng: Rng): GradeId {
-  let n = int(rng, 0, WEIGHT_TOTAL - 1);
-  for (const g of GRADE_IDS) {
+/**
+ * A grade by GRADES weight. `min` leaves out every grade below it, so the
+ * rest keep their odds to each other (a store chest, docs/design.md §8); from
+ * Mortal it draws exactly as a drop always has.
+ */
+export function rollGrade(rng: Rng, min: GradeId = 'mortal'): GradeId {
+  const grades = GRADE_IDS.slice(GRADE_IDS.indexOf(min));
+  if (grades.length === 0) throw new RangeError('rollGrade: unknown grade');
+  const total = grades.reduce((n, g) => n + GRADES[g].weight, 0);
+  let n = int(rng, 0, total - 1);
+  for (const g of grades) {
     n -= GRADES[g].weight;
     if (n < 0) return g;
   }
@@ -702,10 +709,11 @@ export function drawAffixes(
   return affixes;
 }
 
-export function rollItem(rng: Rng, level: number): Item {
+/** A fresh item of `level`, of `minGrade` or better (any grade by default, as a drop). */
+export function rollItem(rng: Rng, level: number, minGrade: GradeId = 'mortal'): Item {
   if (!Number.isInteger(level) || level < 1) throw new RangeError(`rollItem: bad level ${level}`);
   const slot = pick(rng, SLOT_IDS);
-  const grade = rollGrade(rng);
+  const grade = rollGrade(rng, minGrade);
   return rollItemAs(rng, slot, grade, pick(rng, namesFor(slot, grade)), level);
 }
 
