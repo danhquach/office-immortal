@@ -427,6 +427,19 @@ select {
 .kpi .value {
   font-weight: 600;
 }
+/* Overtime Cultivation: the chips, the drop-rate note and the button share a row. */
+.overtime-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.6rem;
+}
+.overtime-row .muted {
+  font-size: 0.85rem;
+}
+.overtime-row button {
+  margin-left: auto;
+}
 /* The Realm chip's hover list: every realm, the current one highlighted. */
 .realm-list {
   position: fixed;

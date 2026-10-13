@@ -225,7 +225,7 @@ import {
   type CraftMode,
   gearVerdict,
   type GearVerdict,
-  overtimeLines,
+  overtimeView,
   pageOf,
   passiveRow,
   pathBlurb,
@@ -1447,16 +1447,36 @@ let pickedCraftMode: CraftMode = 'refine';
 
 type Selection = { bag: number } | { slot: EquipSlotId } | null;
 
-/** The Overtime Cultivation summary, dismissed by its button. */
+/** The Overtime Cultivation summary: one row of chips, dismissed by its button. */
 function overtimePanel(summary: OvertimeSummary): HTMLElement {
   const box = el('section', 'panel overtime');
   box.setAttribute('aria-labelledby', 'overtime-title');
-  const h = elt('h2', '', 'overtime.title');
+  const h = el('h2');
   h.id = 'overtime-title';
-  const lines = el('ul', 'lines');
-  say(() => lines.replaceChildren(...overtimeLines(summary).map((line) => el('li', '', line))));
+  const chips = el('div', 'kpis');
+  const note = el('span', 'muted');
+  say(() => {
+    const v = overtimeView(summary);
+    h.replaceChildren(t('overtime.title'), el('span', 'muted', ` · ${v.away}`));
+    chips.replaceChildren(
+      ...v.chips.map((c) => {
+        const chip = el('div', c.boost ? 'kpi boost' : 'kpi');
+        if (c.icon) {
+          const icon = el('span', 'kpi-icon');
+          icon.setAttribute('aria-hidden', 'true');
+          setSummaryIcon(icon, summaryIcon(c.icon));
+          chip.append(icon);
+        }
+        chip.append(el('span', 'label', c.label), el('span', 'value', c.value));
+        return chip;
+      }),
+    );
+    note.textContent = v.note;
+  });
   const ok = buttonT('overtime.ok', 'primary', () => box.remove());
-  box.append(h, elt('p', 'muted', 'overtime.intro'), lines, ok);
+  const row = el('div', 'overtime-row');
+  row.append(chips, note, ok);
+  box.append(h, row);
   return box;
 }
 
