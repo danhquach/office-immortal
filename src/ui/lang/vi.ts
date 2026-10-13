@@ -331,7 +331,7 @@ const vi: Pack = {
     'cloud.getCode': 'Lấy mã liên kết',
     'cloud.codeFrame': 'Mã liên kết',
     'cloud.code':
-      'Mã liên kết: {code}. Nhập mã này trên thiết bị kia trong {minutes} phút. Chỉ dùng được một lần.',
+      'Mã liên kết: {code}. Nhập mã này trên thiết bị kia trong {minutes} phút. Mã chỉ liên kết được một thiết bị.',
     'cloud.turnOff': 'Tắt trên thiết bị này',
     'cloud.linkField': 'Mã liên kết từ thiết bị kia',
     'cloud.link': 'Liên kết thiết bị này',

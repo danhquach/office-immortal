@@ -110,6 +110,11 @@ export interface Cloud {
   createLinkCode(): Promise<{ code: string; ttl: number }>;
   redeemLinkCode(code: string): Promise<{ saveId: string; data: string; rev: number }>;
   deleteSave(): Promise<void>;
+  /**
+   * What this tab's renewals turned `access` into: the newest access token,
+   * null if the server refused one, undefined if this tab did not renew it.
+   */
+  renewedTo(access: string): string | null | undefined;
 }
 
 /** Whether `data` fits in a keepalive request (the page-leaving upload). */
@@ -119,6 +124,13 @@ export function fitsKeepalive(data: string): boolean {
 
 export function createCloud(deps: CloudDeps): Cloud {
   const { config, storage } = deps;
+  /** This tab's recent renewals, old access token to new (null: refused). */
+  const renewals = new Map<string, string | null>();
+  function renewed(from: string, to: string | null): void {
+    renewals.set(from, to);
+    // A tab renews about once an hour: a few are plenty to follow a chain.
+    for (const k of renewals.keys()) if (renewals.size > 8) renewals.delete(k);
+  }
 
   /** One POST with a body; resolves to the parsed JSON (null for an empty reply). */
   async function post(
@@ -227,11 +239,13 @@ export function createCloud(deps: CloudDeps): Cloud {
         session = readSession(json);
       } catch (e) {
         if (e instanceof CloudError && [400, 401, 403].includes(e.status)) {
+          renewed(meta.session.access, null);
           writeMeta(storage, { ...meta, session: null, relink: true });
           throw new CloudError('auth', null, e.status);
         }
         throw e;
       }
+      renewed(meta.session.access, session.access);
       writeMeta(storage, { ...meta, session });
       return session.access;
     });
@@ -318,6 +332,17 @@ export function createCloud(deps: CloudDeps): Cloud {
       shaped(await rpc('delete_save', {}), (r) => {
         if (obj(r, ['ok']).ok !== true) fail('not ok');
       });
+    },
+    renewedTo(access) {
+      let a = access;
+      // At most one step per renewal kept, so a cycle cannot loop forever.
+      for (let i = 0; i < renewals.size; i++) {
+        const to = renewals.get(a);
+        if (to === undefined) break;
+        if (to === null) return null;
+        a = to;
+      }
+      return a === access ? undefined : a;
     },
   };
 }

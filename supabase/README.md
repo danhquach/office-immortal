@@ -36,8 +36,8 @@ the page's Content-Security-Policy is unchanged.
   [Supabase CLI](https://supabase.com/docs/guides/local-development)):
   `supabase start && supabase test db`. They cover cross-player isolation,
   denied table and anon access, stale-revision conflicts, size and shape limits,
-  link-code expiry, replacement, cleanup and reuse, and cascade deletes. They
-  are not part of CI.
+  link-code expiry, replacement, cleanup, reuse and retry, and cascade deletes.
+  They are not part of CI.
 - Two-browser check: turn on cloud save in browser A, get a link code, enter it
   in browser B, and confirm B shows A's cultivator.
 
@@ -49,9 +49,11 @@ the page's Content-Security-Policy is unchanged.
   qualified names, and its own `auth.uid()` check. Only the `authenticated` role
   (which includes anonymous users) may execute them; `public` and `anon` may not.
 - Inputs are function parameters, never strings built into queries.
-- Link codes are 10 characters from a 32-letter alphabet (50 random bits), single
-  use, and expire after 15 minutes. A new code for the same save expires the
-  old one. Expired codes are kept for a day (at most the 4 newest per save), so
+- Link codes are 10 characters from a 32-letter alphabet (50 random bits), join
+  one player only, and expire after 15 minutes. The player who redeemed a code
+  may redeem it again until then, so a link that failed on their device can be
+  retried; the game keeps that attempt's sign-in aside for this. A new code for
+  the same save expires the old one. Expired codes are kept for a day (at most the 4 newest per save), so
   trying one says "expired", not "not valid"; after that a new code from any
   player deletes them.
 

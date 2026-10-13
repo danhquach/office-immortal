@@ -112,12 +112,14 @@ const uuid = (n: number): string => `00000000-0000-4000-8000-${String(n).padStar
 /**
  * A stand-in for the Supabase project that follows the migration's rules: users
  * with tokens, one save per user, revisions, one-time link codes. Knobs make it
- * misbehave: `down` answers 503, `loseNextPut` applies a put but drops the reply.
+ * misbehave: `down` answers 503, `loseNextPut` and `loseNextRedeem` apply the call
+ * but drop the reply.
  */
 export function fakeServer() {
   const saves = new Map<string, { data: string; rev: number }>();
   const members = new Map<string, string>();
-  const codes = new Map<string, string>();
+  /** Code to its save, and who redeemed it (only they may redeem it again). */
+  const codes = new Map<string, { save: string; by: string | null }>();
   const users = new Map<string, string>();
   const refreshOwner = new Map<string, string>();
   let nextId = 1;
@@ -126,6 +128,9 @@ export function fakeServer() {
     members,
     down: false,
     loseNextPut: false,
+    loseNextRedeem: false,
+    /** Refuse the next function call's token once, as if it had just expired. */
+    refuseNextToken: false,
     /** Refuse every renewal, as if the refresh token were revoked. */
     revokeRefresh: false,
     /** Replaces the next get_save reply, e.g. with a hostile save. */
@@ -167,6 +172,10 @@ export function fakeServer() {
       const headers = init.headers as Record<string, string>;
       const user = users.get((headers.Authorization ?? '').replace('Bearer ', ''));
       if (!user) return json({ message: 'JWT invalid' }, 401);
+      if (server.refuseNextToken) {
+        server.refuseNextToken = false;
+        return json({ message: 'JWT expired' }, 401);
+      }
       const name = url.split('/rpc/')[1];
       await server.hold[name ?? ''];
       const mine = members.get(user);
@@ -206,7 +215,7 @@ export function fakeServer() {
         case 'create_link_code': {
           if (!mine) return error('not_a_member');
           const code = `ABCDEFGH${String(codes.size + 10)}`;
-          codes.set(code, mine);
+          codes.set(code, { save: mine, by: null });
           return json({ code, ttl: 900 });
         }
         case 'redeem_link_code': {
@@ -215,15 +224,20 @@ export function fakeServer() {
             .replace(/[\s-]/g, '')
             .replace(/[IL]/g, '1')
             .replace(/O/g, '0');
-          const target = codes.get(code);
-          if (!target) return error('link_code_invalid');
-          codes.delete(code);
+          const link = codes.get(code);
+          if (!link || (link.by !== null && link.by !== user)) return error('link_code_invalid');
+          link.by = user;
+          const target = link.save;
           if (mine && mine !== target) {
             members.delete(user);
             if (![...members.values()].includes(mine)) saves.delete(mine);
           }
           members.set(user, target);
           const s = saves.get(target) as { data: string; rev: number };
+          if (server.loseNextRedeem) {
+            server.loseNextRedeem = false;
+            throw new TypeError('connection lost');
+          }
           return json({ save_id: target, data: s.data, rev: s.rev });
         }
         case 'delete_save': {
