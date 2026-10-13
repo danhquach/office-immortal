@@ -6,6 +6,7 @@
 import { derive, PATHS } from './cultivator.ts';
 import { INVENTORY_SIZE } from './economy.ts';
 import type { GameState } from './sim.ts';
+import { BOOST_IDS, boostLeft } from './store.ts';
 
 export type PassiveId = 'xp' | 'treasure' | 'offline' | 'points';
 
@@ -120,6 +121,8 @@ export interface RetirePreview {
   essence: number;
   /** Bag cells bought, lost with the run. */
   bagCells: number;
+  /** Store boosts still running, lost with the run. */
+  boosts: number;
 }
 
 export function retirePreview(state: GameState): RetirePreview {
@@ -133,5 +136,6 @@ export function retirePreview(state: GameState): RetirePreview {
     stones: state.stones,
     essence: state.essence,
     bagCells: state.bagSize - INVENTORY_SIZE,
+    boosts: BOOST_IDS.filter((id) => boostLeft(state, id) > 0).length,
   };
 }

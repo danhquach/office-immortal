@@ -5,6 +5,7 @@
 
 import { OFFLINE_SECONDS_PER_RANK, type Passives } from './prestige.ts';
 import { tick, type GameState } from './sim.ts';
+import { BOOST_IDS, type BoostId } from './store.ts';
 
 /** The most time away that is replayed before passives: 8 hours, in seconds. */
 export const MAX_OFFLINE_SECONDS = 8 * 60 * 60;
@@ -29,6 +30,8 @@ export interface OvertimeSummary {
   dropsSalvaged: number;
   stones: number;
   essence: number;
+  /** Store boosts that were active on leaving and ran out while away. */
+  boostsEnded: BoostId[];
 }
 
 /**
@@ -64,6 +67,9 @@ export function catchUp(
       dropsSalvaged: after.dropsSalvaged - state.dropsSalvaged,
       stones: after.stones - state.stones,
       essence: after.essence - state.essence,
+      boostsEnded: BOOST_IDS.filter(
+        (id) => state.boosts[id] > state.time && state.boosts[id] <= after.time,
+      ),
     },
   };
 }

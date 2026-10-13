@@ -83,6 +83,7 @@ describe('catchUp', () => {
       dropsSalvaged: 0,
       stones: 0,
       essence: 0,
+      boostsEnded: [],
     });
   });
 

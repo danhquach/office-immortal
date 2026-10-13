@@ -157,6 +157,7 @@ describe('retirePreview', () => {
       stones: 1234,
       essence: 56,
       bagCells: 8,
+      boosts: 0,
     });
     expect(p.items).toBeGreaterThan(0);
   });

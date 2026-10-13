@@ -15,6 +15,7 @@ import {
   iconCell,
   SPRITE_SIZE,
   stripEvents,
+  STORE_ICONS,
   SUMMARY_ICONS,
 } from './view.ts';
 
@@ -36,6 +37,7 @@ const manifest = JSON.parse(manifestText) as {
     source?: string;
   }[];
   summary: { id: string; source: string }[];
+  store: { id: string; source: string }[];
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -52,6 +54,7 @@ describe('shipped art', () => {
       'icons',
       'paperdoll',
       'summary',
+      'store',
     ];
     for (const name of sheets) expect(exists(name), name).toBe(true);
   });
@@ -118,6 +121,19 @@ describe('summary icons', () => {
     const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
     const cell = manifest.icon_size * manifest.icon_scale;
     expect([u32(16), u32(20)]).toEqual([cell * SUMMARY_ICONS.length, cell]);
+  });
+});
+
+describe('store icons', () => {
+  it('uses the atlas columns in the manifest order, one per offer', () => {
+    expect(manifest.store.map((s) => s.id)).toEqual(STORE_ICONS);
+  });
+
+  it('is one row of item icon cells, one per offer', () => {
+    const png = atob((INLINE['../assets/art/store.png'] ?? '').split(',')[1] ?? '');
+    const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect([u32(16), u32(20)]).toEqual([cell * STORE_ICONS.length, cell]);
   });
 });
 

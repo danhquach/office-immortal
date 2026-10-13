@@ -47,6 +47,7 @@ import {
   type Item,
 } from './loot.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
+import { boostBonus, emptyStore, noBoosts, type Boosts, type StoreState } from './store.ts';
 
 /** Defence that halves incoming damage. */
 export const DEFENCE_HALVES_AT = 50;
@@ -91,6 +92,10 @@ export interface GameState {
   /** Passive ranks bought with Dao Insight; kept through Early Retirement. */
   passives: Passives;
   retirements: number;
+  /** The Spirit Stone store's stock (docs/design.md §8); lost with the run. */
+  store: StoreState;
+  /** Timed boosts bought in the store; lost with the run. */
+  boosts: Boosts;
 }
 
 /** What a run carries into the next one through Early Retirement. */
@@ -123,6 +128,8 @@ export function newGame(
     insight: kept.insight,
     passives: kept.passives,
     retirements: kept.retirements,
+    store: emptyStore(),
+    boosts: noBoosts(),
   };
   startFloor(state, rngFrom(state.rng), 0);
   return state;
@@ -355,10 +362,10 @@ function defeated(s: GameState, rng: Rng, offline: boolean): void {
   const enemy = currentEnemy(s);
   s.kills += 1;
   s.souls = Math.min(soulCap(c.equipment), s.souls + 1);
-  earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind));
-  gainXp(c, Math.round(enemy.xp * xpMultiplier(s.passives)));
+  earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind + boostBonus(s, 'stones')));
+  gainXp(c, Math.round(enemy.xp * (xpMultiplier(s.passives) + boostBonus(s, 'xp'))));
   if (enemy.kind === 'tribulation') breakThrough(c);
-  const find = d.treasureFind + passiveTreasureFind(s.passives);
+  const find = d.treasureFind + passiveTreasureFind(s.passives) + boostBonus(s, 'treasure');
   const drop = rollDrop(rng, enemy.kind, s.floor, find, offline);
   if (drop) pickUp(s, drop);
   s.enemies.shift();

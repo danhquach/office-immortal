@@ -10,6 +10,7 @@ import {
 import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE, refineCost, rerollCost } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
+import { OFFER_IDS, syncStore, type OfferId } from '../core/store.ts';
 import {
   arraySetUp,
   BAG_PAGE,
@@ -54,6 +55,14 @@ import {
   retireLabel,
   SUMMARY_ICONS,
   summaryIcon,
+  boostChip,
+  boostLines,
+  offerCard,
+  offerName,
+  refreshView,
+  STORE_ICONS,
+  storeCountdown,
+  storeIcon,
   retireLines,
   respecView,
   STAT_GROUPS,
@@ -345,6 +354,7 @@ describe('Reincarnation', () => {
     stones: 1500,
     essence: 40,
     bagCells: 8,
+    boosts: 0,
   };
 
   it('labels the button with the insight, or the floor still needed', () => {
@@ -1315,6 +1325,7 @@ describe('overtimeLines', () => {
     dropsSalvaged: 0,
     stones: 450,
     essence: 0,
+    boostsEnded: [],
   };
 
   it('lists every count', () => {
@@ -1846,5 +1857,136 @@ describe('crafting', () => {
       'Reroll +0.7% Crit chance? It is replaced for good by a random affix and roll.',
     );
     expect(affixText(sword, 9)).toBe('');
+  });
+});
+
+describe('the store', () => {
+  /** A synced game on floor 20 at level 10, with `stones` and offer `id` first on show. */
+  function shop(id: OfferId, stones = 1_000_000): GameState {
+    const s = syncStore(newGame(1, 'sword'));
+    s.floor = s.highestFloor = 20;
+    s.cultivator.level = 10;
+    s.stones = stones;
+    s.store.offers = [id, ...OFFER_IDS.filter((o) => o !== id).slice(0, 3)];
+    s.store.sold = [false, false, false, false];
+    return s;
+  }
+
+  it('maps every offer to its own atlas column', () => {
+    expect(STORE_ICONS.map(storeIcon)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it('shows a chest with its grade, level, price and Buy', () => {
+    const card = offerCard(shop('chest-earth'), 0);
+    expect(card).toMatchObject({
+      name: 'Earth Chest',
+      grade: 'earth',
+      desc: 'One Lv 20 item, Earth or better',
+      buy: 'Buy · 900',
+      off: false,
+      why: '',
+    });
+    expect(card.buyName).toBe('Buy · 900: Earth Chest for 900 Spirit Stones');
+  });
+
+  it('says what is short, sold out, a full bag or a boost at its cap', () => {
+    expect(offerCard(shop('chest-earth', 850), 0)).toMatchObject({
+      off: true,
+      why: 'Need 50 more',
+    });
+    const sold = shop('boost-xp');
+    sold.store.sold[0] = true;
+    expect(offerCard(sold, 0)).toMatchObject({ buy: 'Sold out', off: true, why: '' });
+    const full = shop('chest-spirit');
+    full.bagSize = 0;
+    expect(offerCard(full, 0)).toMatchObject({ buy: 'Bag full', off: true });
+    const capped = shop('boost-treasure');
+    capped.boosts.treasure = capped.time + 3600;
+    expect(offerCard(capped, 0)).toMatchObject({ buy: 'At the 1 h cap', off: true });
+    expect(offerCard(capped, 0).desc).toBe('+50% treasure find for 10 min · 1 h 0 min left');
+  });
+
+  it('names a boost and what it does', () => {
+    expect(offerName('boost-stones')).toBe('Bonus Envelope');
+    expect(offerCard(shop('boost-xp'), 0)).toMatchObject({
+      name: 'Focus Tea',
+      grade: null,
+      desc: '+50% XP from kills for 10 min',
+      buy: 'Buy · 200',
+    });
+  });
+
+  it('counts down to the next rotation, and prices Refresh now', () => {
+    const s = shop('boost-xp', 499);
+    expect(storeCountdown(s)).toBe('New stock in 30 min');
+    expect(refreshView(s)).toEqual({ text: 'Refresh now · 500', off: true, why: 'Need 1 more' });
+    expect(refreshView({ ...s, stones: 500 }).off).toBe(false);
+  });
+
+  it('adds running stone and treasure boosts to the Stats find rows', () => {
+    const c = newCultivator('sword');
+    const value = (rows: ReturnType<typeof statRows>, label: string) =>
+      rows.find((r) => r.label === label)?.value;
+    const plain = statRows(c);
+    const boosted = statRows(c, noPassives(), { stoneFind: 0.5, treasureFind: 0.5 });
+    expect(value(plain, 'Spirit stone find')).toBe('0%');
+    expect(value(boosted, 'Spirit stone find')).toBe('50%');
+    expect(value(boosted, 'Treasure find')).toBe('50%');
+  });
+
+  it('gives a chip value only for a boost that is running', () => {
+    const s = shop('boost-xp');
+    expect(boostChip(s, 'xp')).toBeNull();
+    s.boosts.xp = s.time + 545;
+    s.boosts.treasure = s.time;
+    expect(boostChip(s, 'xp')).toBe('+50% XP · 9 min');
+    expect(boostChip(s, 'treasure')).toBeNull();
+  });
+
+  it('lists running boosts with their time left', () => {
+    const s = shop('boost-xp');
+    expect(boostLines(s)).toEqual([]);
+    s.boosts.xp = s.time + 125;
+    s.boosts.stones = s.time + 30;
+    expect(boostLines(s)).toEqual([
+      'Focus Tea (+50% XP): 2 min left',
+      'Bonus Envelope (+50% spirit stone find): 30 s left',
+    ]);
+  });
+
+  it('names boosts that ran out while away, and running ones lost to Reincarnation', () => {
+    const summary = {
+      seconds: 60,
+      capped: false,
+      floorsClimbed: 0,
+      levels: 0,
+      kills: 0,
+      dropsKept: 0,
+      dropsSold: 0,
+      dropsSalvaged: 0,
+      stones: 0,
+      essence: 0,
+    };
+    const preview: RetirePreview = {
+      insight: 8,
+      insightAfter: 11,
+      highestFloor: 20,
+      level: 14,
+      items: 0,
+      stones: 0,
+      essence: 0,
+      bagCells: 0,
+      boosts: 0,
+    };
+    expect(overtimeLines({ ...summary, boostsEnded: [] }).join()).not.toContain('ran out');
+    expect(overtimeLines({ ...summary, boostsEnded: ['xp', 'treasure'] })).toContain(
+      'Boosts that ran out: Focus Tea, Lucky Charm',
+    );
+    expect(retireLines({ ...preview, boosts: 2 }).lost).toContain(
+      '2 running boosts and the store stock',
+    );
+    expect(retireLines({ ...preview, boosts: 1 }).lost).toContain(
+      '1 running boost and the store stock',
+    );
   });
 });
