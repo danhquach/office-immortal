@@ -70,6 +70,22 @@ import {
   requiredRealm,
   type GameState,
 } from '../core/sim.ts';
+import {
+  BOOST_BONUS,
+  BOOST_IDS,
+  BOOST_SECONDS,
+  boostLeft,
+  boostOf,
+  chestGrade,
+  nextRotationIn,
+  OFFER_IDS,
+  offerBlock,
+  offerPrice,
+  refreshCost,
+  type BoostId,
+  type OfferBlock,
+  type OfferId,
+} from '../core/store.ts';
 import { lang, t, tn, type MessageKey } from './i18n.ts';
 
 /** The Path picker's one-liner: role, primary stat (docs/design.md §3). */
@@ -398,13 +414,18 @@ export function realmBoostTip(c: Cultivator, stat: StatId): string {
   });
 }
 
-/** The cultivator's numbers, with the passives that change them (treasure find). */
+/**
+ * The cultivator's numbers, with the passives (treasure find) and running
+ * store boosts (stone and treasure find) that change them.
+ */
 export function statRows(
   c: Cultivator,
   passives: Passives = noPassives(),
+  boosts: { stoneFind: number; treasureFind: number } = { stoneFind: 0, treasureFind: 0 },
 ): { label: string; short: string; group: StatGroup; value: string }[] {
   const d = derive(c);
-  d.treasureFind += passiveTreasureFind(passives);
+  d.treasureFind += passiveTreasureFind(passives) + boosts.treasureFind;
+  d.stoneFind += boosts.stoneFind;
   return STAT_ROWS.map((r) => ({
     label: t(r.label),
     short: t(r.short ?? r.label),
@@ -943,6 +964,10 @@ export function overtimeLines(summary: OvertimeSummary): string[] {
   if (summary.dropsSalvaged > 0) lines.push(t('overtime.salvaged', { n: summary.dropsSalvaged }));
   lines.push(t('overtime.stones', { n: summary.stones }));
   if (summary.essence > 0) lines.push(t('overtime.essence', { n: summary.essence }));
+  if (summary.boostsEnded.length > 0) {
+    const names = summary.boostsEnded.map((id) => t(`store.boost.${id}`)).join(', ');
+    lines.push(t('overtime.boostsEnded', { names }));
+  }
   // So a lower drop count isn't read as a bug.
   lines.push(t('overtime.rate', { percent: Math.round(OFFLINE_DROP_MULTIPLIER * 100) }));
   return lines;
@@ -1006,6 +1031,8 @@ export function retireLines(p: RetirePreview): { kept: string[]; lost: string[] 
     t('retire.lostEssence', { n: p.essence }),
   ];
   if (p.bagCells > 0) lost.push(t('retire.lostCells', { n: p.bagCells }));
+  if (p.boosts > 0)
+    lost.push(t(p.boosts === 1 ? 'retire.lostBoost' : 'retire.lostBoosts', { n: p.boosts }));
   return {
     kept: [
       t('retire.keptInsight', { n: p.insight, total: p.insightAfter }),
@@ -1103,4 +1130,113 @@ export function rerollResult(before: Item, after: Item, i: number): string {
 /** The reroll confirmation, naming affix `i` and its current value. */
 export function rerollConfirm(item: Item, i: number): string {
   return t('confirm.reroll', { affix: affixText(item, i) });
+}
+
+// The Spirit Stone store (docs/design.md §8).
+
+/** The store atlas's columns, in catalog order (tools/art/manifest.json "store"). */
+export const STORE_ICONS: readonly OfferId[] = OFFER_IDS;
+
+/** The store atlas column of offer `id`. */
+export function storeIcon(id: OfferId): number {
+  return STORE_ICONS.indexOf(id);
+}
+
+/** One offer as its card shows it. */
+export interface OfferCard {
+  id: OfferId;
+  name: string;
+  /** A chest's minimum grade, for its colour; null for a boost. */
+  grade: GradeId | null;
+  /** What it gives, e.g. "One Lv 20 item, Earth or better". */
+  desc: string;
+  /** The button's text: "Buy · 900", "Sold out" or "Bag full". */
+  buy: string;
+  /** The button's accessible name, naming the offer and its price. */
+  buyName: string;
+  off: boolean;
+  /** Why it is off, when that is not on the button: "Need 120 more". */
+  why: string;
+}
+
+const OFFER_BLOCK_TEXT: Readonly<Record<Exclude<OfferBlock, 'stones'>, MessageKey>> = {
+  sold: 'store.sold',
+  bagFull: 'store.bagFull',
+  boostCap: 'store.boostCap',
+};
+
+/** The name of offer `id` in the player's language. */
+export function offerName(id: OfferId): string {
+  const grade = chestGrade(id);
+  return grade ? t(`store.chest.${grade}`) : t(`store.boost.${boostOf(id) as BoostId}`);
+}
+
+/** Offer `at` of the current stock as its card shows it. */
+export function offerCard(state: GameState, at: number): OfferCard {
+  const id = state.store.offers[at] as OfferId;
+  const price = offerPrice(state, id);
+  const block = offerBlock(state, at);
+  const name = offerName(id);
+  const grade = chestGrade(id);
+  let desc: string;
+  if (grade) {
+    desc = t('store.chestDesc', { level: state.floor, grade: tn('grade', GRADES[grade].name) });
+  } else {
+    const boost = boostOf(id) as BoostId;
+    desc = t(`store.boostDesc.${boost}`, {
+      percent: Math.round(BOOST_BONUS * 100),
+      time: durationLabel(BOOST_SECONDS),
+    });
+    const left = boostLeft(state, boost);
+    if (left > 0) desc += ` · ${t('store.left', { time: durationLabel(left) })}`;
+  }
+  const buy =
+    block && block !== 'stones' ? t(OFFER_BLOCK_TEXT[block]) : t('store.buy', { n: price });
+  return {
+    id,
+    name,
+    grade,
+    desc,
+    buy,
+    buyName: `${buy}: ${t('store.buyName', { name, n: price })}`,
+    off: block !== null,
+    why: block === 'stones' ? t('respec.need', { n: price - state.stones }) : '',
+  };
+}
+
+/** When the stock next rotates, e.g. "New stock in 12 min". */
+export function storeCountdown(state: GameState): string {
+  return t('store.rotates', { time: durationLabel(nextRotationIn(state)) });
+}
+
+/** The Refresh now button, like respecView: its text, whether it is off and why. */
+export function refreshView(state: GameState): { text: string; off: boolean; why: string } {
+  const cost = refreshCost(state);
+  const short = state.stones < cost;
+  return {
+    text: t('store.refresh', { n: cost }),
+    off: short,
+    why: short ? t('respec.need', { n: cost - state.stones }) : '',
+  };
+}
+
+/** Boost `id`'s summary chip value, e.g. "+50% XP · 9 min"; null while it is off (the chip hides). */
+export function boostChip(state: GameState, id: BoostId): string | null {
+  const left = boostLeft(state, id);
+  if (left <= 0) return null;
+  return t('store.chip', {
+    effect: t(`store.boostEffect.${id}`, { percent: Math.round(BOOST_BONUS * 100) }),
+    time: durationLabel(left),
+  });
+}
+
+/** The boosts running now, one line each with the time left; empty when none are. */
+export function boostLines(state: GameState): string[] {
+  return BOOST_IDS.filter((id) => boostLeft(state, id) > 0).map((id) =>
+    t('store.boostLine', {
+      name: t(`store.boost.${id}`),
+      effect: t(`store.boostEffect.${id}`, { percent: Math.round(BOOST_BONUS * 100) }),
+      time: durationLabel(boostLeft(state, id)),
+    }),
+  );
 }

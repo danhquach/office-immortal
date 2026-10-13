@@ -330,7 +330,7 @@ export function statResetCost(c: Cultivator): number {
 }
 
 /** Takes `cost` of `currency` from a clone of `state`, or throws when it can't be paid. */
-function pay(state: GameState, currency: Currency, cost: number, what: string): GameState {
+export function pay(state: GameState, currency: Currency, cost: number, what: string): GameState {
   if (state[currency] < cost) {
     throw new RangeError(`${what}: needs ${cost} ${CURRENCY_NAMES[currency]}`);
   }

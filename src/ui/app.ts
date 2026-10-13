@@ -57,6 +57,15 @@ import {
 import { zoneOf } from '../core/floors.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
 import {
+  BOOST_IDS,
+  boostBonus,
+  buyOffer,
+  refreshStore,
+  STOCK_SIZE,
+  storeStale,
+  syncStore,
+} from '../core/store.ts';
+import {
   buyPassive,
   canRetire,
   PASSIVE_IDS,
@@ -213,6 +222,13 @@ import {
   retireLabel,
   SUMMARY_ICONS,
   summaryIcon,
+  boostChip,
+  boostLines,
+  offerCard,
+  refreshView,
+  STORE_ICONS,
+  storeCountdown,
+  storeIcon,
   retireLines,
   bulkAsk,
   tintOf,
@@ -988,6 +1004,14 @@ function setSummaryIcon(icon: HTMLElement, col: number): void {
   s.backgroundPosition = `${(col / (SUMMARY_ICONS.length - 1)) * 100}% 0`;
 }
 
+/** Shows column `col` of the store atlas on `icon`; sized by page.css. */
+function setStoreIcon(icon: HTMLElement, col: number): void {
+  const s = icon.style;
+  s.backgroundImage = cssUrl(artUrl('store'));
+  s.backgroundSize = `${STORE_ICONS.length * 100}% 100%`;
+  s.backgroundPosition = `${(col / (STORE_ICONS.length - 1)) * 100}% 0`;
+}
+
 /** A summary chip: an optional decorative icon, the label, then the value. */
 function kpi(
   label: MessageKey,
@@ -1611,7 +1635,18 @@ function play(
   const kStones = kpi('kpi.stones', summaryIcon('stones'));
   const kEssence = kpi('kpi.essence', summaryIcon('essence'));
   let realmIcon = summaryIcon('realm', state.cultivator.level);
-  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box);
+  // A chip per running store boost (§8): its icon, name, effect and time left; hidden while off.
+  const boostChips = BOOST_IDS.map((id) => {
+    const box = el('div', 'kpi boost');
+    const icon = el('span', 'kpi-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    setStoreIcon(icon, storeIcon(`boost-${id}`));
+    const value = el('span', 'value');
+    box.append(icon, elt('span', 'label', `store.boost.${id}`), value);
+    box.hidden = true;
+    return { id, box, value };
+  });
+  kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box, ...boostChips.map((b) => b.box));
   const realms = realmList(kRealm.box, () => state.cultivator.level);
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
@@ -1729,8 +1764,14 @@ function play(
   const pathLine = respecLine('path', pathPick, pathBtn);
   respec.append(respecHead, respecNote, resetLine.line, pathLine.line);
 
+  // Store boosts running now, with the time each has left.
+  const boosts = el('section', 'boosts');
+  const boostList = el('ul', 'boost-list');
+  const noBoosts = elt('p', 'muted hint', 'store.noBoosts');
+  boosts.append(elt('h3', '', 'store.boosts'), boostList, noBoosts);
+
   const statsBody = el('div', 'statstab');
-  statsBody.append(base, derived, respec);
+  statsBody.append(base, derived, boosts, respec);
 
   // Early Retirement: the Dao Insight total, the passive shop (one line per
   // passive, its effect on expand), then the retire box with its confirmation.
@@ -2101,9 +2142,42 @@ function play(
     });
   };
   filterBody.addEventListener('change', readFilterForm);
+  // The Spirit Stone store: the rotation countdown and Refresh now, then one
+  // card per offer (icon, name, what it gives, Buy). Cards are made once and
+  // filled by drawStore, so a redraw every tick keeps focus on a Buy button.
+  const storeCountdownText = el('p', 'muted countdown');
+  const refreshBtn = button('', 'sell', () => {
+    if (!storeStale(state)) act(refreshStore(state));
+  });
+  refreshBtn.setAttribute('aria-describedby', 'refresh-why');
+  const refreshWhy = el('small', 'why');
+  refreshWhy.id = 'refresh-why';
+  const storeHead = el('div', 'store-head');
+  storeHead.append(storeCountdownText, refreshBtn, refreshWhy);
+  const storeCards = Array.from({ length: STOCK_SIZE }, (_, at) => {
+    const card = el('li', 'offer');
+    const icon = el('span', 'store-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    const name = el('div', 'title');
+    const desc = el('div', 'desc');
+    const why = el('small', 'why');
+    why.id = `offer-why-${at}`;
+    const buy = button('', 'sell', () => buyFromStore(at));
+    buy.setAttribute('aria-describedby', why.id);
+    const text = el('div', 'offer-text');
+    text.append(name, desc, why);
+    card.append(icon, text, buy);
+    return { card, icon, name, desc, why, buy, drawn: '' };
+  });
+  const storeList = el('ul', 'offers');
+  storeList.append(...storeCards.map((c) => c.card));
+  const storeBody = el('div', 'store');
+  storeBody.append(storeHead, storeList);
+
   const bagTabs = tabs([
     { id: 'bag', label: 'tab.bag', body: bagBody },
     { id: 'filter', label: 'tab.filter', body: filterBody },
+    { id: 'store', label: 'tab.store', body: storeBody },
   ]);
   inventory.box.append(bagTabs.bar, ...bagTabs.panels);
 
@@ -2714,6 +2788,11 @@ function play(
       realmIcon = icon;
       setSummaryIcon(kRealm.icon, icon);
     }
+    for (const chip of boostChips) {
+      const value = boostChip(state, chip.id);
+      chip.box.hidden = value === null;
+      setText(chip.value, value ?? '');
+    }
     const bar = xpBar(c);
     xp.style.setProperty('--xp', `${bar.percent}%`);
     for (const n of [xpLevel, xpFillLevel]) setText(n, bar.level);
@@ -2728,7 +2807,10 @@ function play(
       boostValues[id].hidden = boost === '';
     }
     for (const refresh of boostTips) refresh();
-    const rows = statRows(c, state.passives);
+    const rows = statRows(c, state.passives, {
+      stoneFind: boostBonus(state, 'stones'),
+      treasureFind: boostBonus(state, 'treasure'),
+    });
     // Built once, then only the values change, so selecting text doesn't flicker.
     if (derivedValues.length === 0) {
       for (const r of rows) {
@@ -3017,6 +3099,20 @@ function play(
     if (pending && !bagStillShows(state, pending.seen))
       askBelow(pending.action, pending.grade, false);
     draw(null);
+  }
+
+  /**
+   * Buys offer `at`. A chest's item is a drop the player paid for: it shows in
+   * Recent drops and the toast like one. A stock that has just rotated is not
+   * sold from; the next redraw shows the new one.
+   */
+  function buyFromStore(at: number): void {
+    if (storeStale(state)) return;
+    const next = buyOffer(state, at);
+    const bought = next.inventory.slice(state.inventory.length);
+    act(next);
+    logDrops(bought);
+    noteDrops(bought);
   }
 
   /**
@@ -3378,6 +3474,38 @@ function play(
     setButton(popBtn, t(pip ? 'tools.closePopOut' : 'tools.popOut'), false);
   }
 
+  /** The store tab and the Stats tab's boosts: prices, time left and what can be paid change every tick. */
+  function drawStore(): void {
+    setText(storeCountdownText, storeCountdown(state));
+    const refresh = refreshView(state);
+    setButton(refreshBtn, refresh.text, refresh.off);
+    setText(refreshWhy, refresh.why);
+    // Only the step syncs the stock; until it has, the old cards stay as they are.
+    if (!storeStale(state))
+      storeCards.forEach((c, at) => {
+        const card = offerCard(state, at);
+        setButton(c.buy, card.buy, card.off);
+        if (c.buy.getAttribute('aria-label') !== card.buyName)
+          c.buy.setAttribute('aria-label', card.buyName);
+        setText(c.name, card.name);
+        setText(c.desc, card.desc);
+        setText(c.why, card.why);
+        c.card.classList.toggle('sold', state.store.sold[at] === true);
+        if (c.drawn !== card.id) {
+          c.drawn = card.id;
+          setStoreIcon(c.icon, storeIcon(card.id));
+          c.name.className = card.grade ? `title grade-${card.grade}` : 'title';
+        }
+      });
+    const lines = boostLines(state);
+    const key = lines.join('\n');
+    if (boostList.dataset.lines !== key) {
+      boostList.dataset.lines = key;
+      boostList.replaceChildren(...lines.map((line) => el('li', '', line)));
+    }
+    noBoosts.hidden = lines.length > 0;
+  }
+
   /** Title, favicon and the pop-out's status line, refreshed while the tab is in the background too. */
   function drawHud(): void {
     const c = state.cultivator;
@@ -3495,6 +3623,7 @@ function play(
     drawSummary();
     drawGear();
     drawShop();
+    drawStore();
     drawCraft();
     const handled = [];
     if (state.dropsSold > 0) handled.push(t('drops.soldOnPickup', { n: state.dropsSold }));
@@ -3542,6 +3671,7 @@ function play(
     draw(null);
   }
 
+  state = syncStore(state);
   drawTools();
   draw(null);
 
@@ -3551,7 +3681,8 @@ function play(
   function step(): void {
     const now = performance.now();
     const prev = state;
-    state = tick(state, (now - last) / 1000);
+    // The store rolls its new stock outside tick(), so the fight draws the same numbers.
+    state = syncStore(tick(state, (now - last) / 1000));
     last = now;
     const fresh = freshDrops(prev, state);
     logDrops(fresh);

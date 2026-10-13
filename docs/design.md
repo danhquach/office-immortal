@@ -440,7 +440,7 @@ from the game's seeded stream (`state.rng`), like every other roll.
 
 | Currency | Source | Spent on |
 |---|---|---|
-| Spirit Stones | Kills and selling | Path change, stat reset, inventory space |
+| Spirit Stones | Kills and selling | Path change, stat reset, inventory space, the Store |
 | Spirit Essence | Salvage | Crafting (§7): refining the base roll, rerolling one affix |
 | Dao Insight | Reincarnation | Permanent passives (§9) |
 
@@ -449,6 +449,55 @@ from the game's seeded stream (`state.rng`), like every other roll.
   level-ups keep going to the primary stat.
 - **Inventory space** adds a row of 8 cells, each row dearer, up to 80 (on a
   second inventory page).
+
+### Store
+
+The Inventory panel's **Store** tab (Bag | Auto filter | Store) sells gear
+chests and timed boosts for Spirit Stones, from a rotating stock.
+
+- **Stock:** 4 different offers from the catalog below, rolled from the
+  game's seeded stream (`state.rng`). The stock rotates every 30 minutes of
+  sim time, so Overtime Cultivation rotates it too; the tab counts down to the
+  next rotation. Each offer sells once per rotation, then reads "Sold out".
+  **Refresh now** rolls a new stock early for 50 × cultivator level; the
+  rotation clock is unchanged. The new stock is rolled outside the combat tick
+  (the first time it is asked for after a rotation is due), so the fight draws
+  the same numbers whether or not the store is ever opened.
+- **Gear chests** put one item of the current floor's item level straight in
+  the bag, of the chest's grade or better: the grade is rolled with the drop
+  weights (§6) with every lower grade left out. The auto filter never sees it
+  (the player paid for it); it shows in Recent drops and the toast like a drop.
+  A full bag turns Buy off ("Bag full").
+
+  | Chest | Grade or better | Price |
+  |---|---|---|
+  | Spirit Chest | Spirit | 3 × Spirit sell value × floor (15 × floor) |
+  | Earth Chest | Earth | 45 × floor |
+  | Heaven Chest | Heaven | 120 × floor |
+
+  There is no Immortal chest: Immortal stays a lucky roll inside a Heaven chest.
+- **Timed boosts** run on sim time and stack: each purchase adds 10 minutes, up
+  to 60 minutes left (Buy turns off at the cap, "At the 1 h cap"). They act at
+  each kill, next to the passives (§9).
+
+  | Boost | Effect | Price |
+  |---|---|---|
+  | Focus Tea | +50% XP from kills | 20 × level |
+  | Lucky Charm | +50% treasure find | 30 × level |
+  | Bonus Envelope | +50% spirit stone find | 20 × level |
+
+  Bonuses add to the passives': Focus Tea adds 50% of a kill's base XP
+  beside Seniority's ranks. Each running boost has its own summary chip, after
+  Spirit Essence: its icon, name, effect and time left ("Focus Tea +50% XP ·
+  9 min"), with a `--sell` edge; the chip goes when the boost runs out. The
+  Stats tab also lists the boosts running, with the
+  time each has left, and its Find rows include a running Lucky Charm or Bonus
+  Envelope.
+- **Colours:** Buy and Refresh now wear `--sell`; a chest's name wears its
+  grade colour; the price is in the button's words, so colour is never the
+  only cue. Without enough stones the button is off and says how many more are
+  needed.
+- **Icons:** one per offer from the store atlas (§14).
 
 ## 9. Prestige: Reincarnation
 
@@ -459,8 +508,8 @@ treasure find, a higher offline cap, more starting stat points.
 - **Insight paid:** highest floor² / 50, rounded down; nothing below floor 10,
   where the Reincarnate button stays off (floor 10 pays 2, 20 pays 8, 50 pays 50).
 - **Kept:** Dao Insight, passives, the Path and the auto filter. **Lost:**
-  level, floors, every item (bag and equipped), Spirit Stones, Spirit Essence
-  and bought bag slots.
+  level, floors, every item (bag and equipped), Spirit Stones, Spirit Essence,
+  bought bag slots, running boosts and the store's stock (§8).
 - **Confirmation** lists what is kept and lost before the run ends; the new
   run is saved at once.
 - **Passives** (any time, apply at once; each rank costs twice the last):
@@ -478,7 +527,8 @@ treasure find, a higher offline cap, more starting stat points.
   time, because browsers throttle background tabs.
 - **Overtime Cultivation:** on return, the game replays the time away (capped
   at 8 hours, more with Flexible Hours, §9) and shows a summary: floors
-  cleared, levels, drops kept, sold and salvaged, and the currencies earned.
+  cleared, levels, drops kept, sold and salvaged, the currencies earned and
+  any store boosts that ran out while away (§8).
   Offline means the browser or the game's tab was closed. The replay plays
   the same as an open tab, except items drop at half the online rate (§6), so
   playing is the better way to find loot and catch-up is mostly for floors and
@@ -901,6 +951,13 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   an orange essence drop, and one per realm, each grander than the last (qi
   swirl, jade foundation, golden core, lotus with a spirit flame, azure flying
   sword, crane over the clouds, crimson and gold sun emblem).
+- **Store icons:** in the same style and size, one atlas row (`store.png`),
+  one per offer (§8) in catalog order: three chests that grow grander with
+  their grade (an azure-trimmed wooden chest, a carved jade chest, an open
+  white-and-gold chest spilling light), a steaming celadon teacup with golden
+  qi, a red-tasselled jade charm, and a red envelope with spirit stones
+  peeking out. Built by `python3 tools/art/build.py store` from the manifest's
+  `store` row.
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
@@ -938,6 +995,8 @@ Grade is also written as text, never shown by colour alone.
 - The title bar's language button (globe and code) sits beside **Menu**.
 - The title bar's **Menu** holds Settings (notifications, Reset progress,
   which asks first and then deletes the save) and Help (how to play).
+- The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Store
+  cards stack in one column in every view.
 - The Crafting panel (§7) is a modal over the Full view; in the Narrow view
   it is a full-width sheet along the bottom. Esc, Close or a click outside it
   closes it, and focus goes back to the Craft button.

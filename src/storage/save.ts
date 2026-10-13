@@ -66,21 +66,33 @@ import {
 import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
 import { ARRAY_TICK, ENEMY_ARRIVAL, startFloor, type GameState } from '../core/sim.ts';
+import {
+  BOOST_CAP_SECONDS,
+  BOOST_IDS,
+  emptyStore,
+  noBoosts,
+  OFFER_IDS,
+  rotationAt,
+  STOCK_SIZE,
+  type Boosts,
+  type OfferId,
+  type StoreState,
+} from '../core/store.ts';
 import { arr, fail, int, num, obj, oneOf } from './validate.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
  * where Boots are now; v4 came before Formation Discs; v5 before Soul Banners;
  * v6 had seven realms, so a due Tribulation may carry another realm's name;
  * v7 came before crafting, so no item has a refine level; v8 had a cap every
- * 10 levels.
+ * 10 levels; v9 came before the store and its boosts.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -260,6 +272,8 @@ function readState(v: unknown, version: number): GameState {
   // Before v9 the realm ladder was different (seven realms before v7, then a
   // cap every 10 levels): a due Tribulation is renamed for its realm.
   const before9 = version < 9;
+  // Before v10 there was no store, so no stock and no boosts.
+  const before10 = version < 10;
   const items: ItemReader = {
     slot: before4 ? fromPants : (id) => id,
     refines: version >= 8,
@@ -281,6 +295,7 @@ function readState(v: unknown, version: number): GameState {
       ? ['dropsLost']
       : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
     ...(before3 ? [] : ['insight', 'passives', 'retirements']),
+    ...(before10 ? [] : ['store', 'boosts']),
   ]);
   const time = num(o.time, 0, MAX_TIME);
   const highestFloor = int(o.highestFloor, 1, MAX_FLOOR);
@@ -333,9 +348,31 @@ function readState(v: unknown, version: number): GameState {
     insight: before3 ? 0 : int(o.insight, 0, COUNT),
     passives,
     retirements: before3 ? 0 : int(o.retirements, 0, COUNT),
+    store: before10 ? emptyStore() : readStore(o.store, time),
+    boosts: before10 ? noBoosts() : readBoosts(o.boosts, time),
   };
   if (before9) toLongerRealms(state);
   return state;
+}
+
+/** A stock rolled at or before `time`'s rotation: STOCK_SIZE different offers, or none before the first roll. */
+function readStore(v: unknown, time: number): StoreState {
+  const o = obj(v, ['rotation', 'offers', 'sold']);
+  const rotation = int(o.rotation, -1, rotationAt(time));
+  const size = rotation < 0 ? 0 : STOCK_SIZE;
+  const offers = arr(o.offers, size).map((id) => oneOf(id, OFFER_IDS));
+  const sold = arr(o.sold, size).map((b) => (typeof b === 'boolean' ? b : fail('sold')));
+  if (offers.length !== size || sold.length !== size) fail('stock size');
+  if (new Set<OfferId>(offers).size !== size) fail('repeated offer');
+  return { rotation, offers, sold };
+}
+
+/** Each expiry in sim seconds, never more than a full boost past `time`. */
+function readBoosts(v: unknown, time: number): Boosts {
+  const o = obj(v, BOOST_IDS);
+  const boosts = noBoosts();
+  for (const id of BOOST_IDS) boosts[id] = num(o[id], 0, time + BOOST_CAP_SECONDS);
+  return boosts;
 }
 
 function readPassives(v: unknown): Passives {
