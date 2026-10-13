@@ -76,6 +76,7 @@ import {
   BOOST_SECONDS,
   boostLeft,
   boostOf,
+  CHEST_GRADES,
   chestGrade,
   nextRotationIn,
   OFFER_IDS,
@@ -321,6 +322,8 @@ export type StatGroup = (typeof STAT_GROUPS)[number];
 
 interface StatRow {
   label: MessageKey;
+  /** The kind the details panel files this stat under; the Stats tab's `group` is separate. */
+  kind: StatKind;
   /** The label under its group heading, if shorter than `label`. */
   short?: MessageKey;
   group: StatGroup;
@@ -332,23 +335,44 @@ interface StatRow {
 
 /** The combat numbers on the character panel, in display order. */
 export const STAT_ROWS: readonly StatRow[] = [
-  { label: 'row.maxHp', group: 'Defence', value: (d) => d.maxHp, format: (v) => num(v, 0) },
-  { label: 'row.damage', group: 'Offence', value: (d) => d.damage, format: (v) => num(v, 1) },
-  { label: 'row.defence', group: 'Defence', value: (d) => d.defence, format: (v) => num(v, 1) },
+  {
+    label: 'row.maxHp',
+    kind: 'defence',
+    group: 'Defence',
+    value: (d) => d.maxHp,
+    format: (v) => num(v, 0),
+  },
+  {
+    label: 'row.damage',
+    kind: 'offence',
+    group: 'Offence',
+    value: (d) => d.damage,
+    format: (v) => num(v, 1),
+  },
+  {
+    label: 'row.defence',
+    kind: 'defence',
+    group: 'Defence',
+    value: (d) => d.defence,
+    format: (v) => num(v, 1),
+  },
   {
     label: 'row.attacks',
+    kind: 'offence',
     group: 'Offence',
     value: (d) => 1 / d.attackInterval,
     format: (v) => num(v, 2),
   },
   {
     label: 'row.critChance',
+    kind: 'offence',
     group: 'Offence',
     value: (d) => d.critChance,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
     label: 'row.critDamage',
+    kind: 'offence',
     group: 'Offence',
     value: (d) => d.critMultiplier,
     format: (v) => `×${num(v, 2)}`,
@@ -357,18 +381,21 @@ export const STAT_ROWS: readonly StatRow[] = [
   },
   {
     label: 'row.lifesteal',
+    kind: 'defence',
     group: 'Defence',
     value: (d) => d.lifesteal,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
     label: 'row.qiRegen',
+    kind: 'utility',
     group: 'Defence',
     value: (d) => d.qiRegen,
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
     label: 'row.stoneFind',
+    kind: 'utility',
     short: 'row.stoneFindShort',
     group: 'Find',
     value: (d) => d.stoneFind,
@@ -376,6 +403,7 @@ export const STAT_ROWS: readonly StatRow[] = [
   },
   {
     label: 'row.treasureFind',
+    kind: 'utility',
     short: 'row.treasureFindShort',
     group: 'Find',
     value: (d) => d.treasureFind,
@@ -459,12 +487,30 @@ export function compareToEquipped(
   item: Item,
   to: EquipSlotId,
   now: Derived = derive(c),
-): { text: string; better: boolean }[] {
+): CompareLine[] {
   const lines = statChanges(c, item, to, now).map(({ row, change, text }) => ({
     text: `${signed(change, text)} ${t(row.label)}`,
     better: change > 0,
+    kind: row.kind,
   }));
   return [...lines, ...compareArrays(c.equipment[to], item)];
+}
+
+/** One line of a comparison; `kind` is the Attributes box group it belongs to. */
+export interface CompareLine {
+  text: string;
+  better: boolean;
+  kind: StatKind;
+}
+
+/** A comparison's lines grouped by kind, in STAT_KINDS order like the Attributes box; empty kinds left out. */
+export function compareGroups(
+  lines: readonly CompareLine[],
+): { kind: StatKind; lines: { text: string; better: boolean }[] }[] {
+  return STAT_KINDS.map((kind) => ({
+    kind,
+    lines: lines.filter((l) => l.kind === kind).map(({ text, better }) => ({ text, better })),
+  })).filter((g) => g.lines.length > 0);
 }
 
 /**
@@ -536,7 +582,7 @@ function arrayAmount(id: ArrayId, value: number): string {
 }
 
 /** How the array changes when `next` replaces `now`: stronger or weaker, or one gained and one lost. */
-function compareArrays(now: Item | undefined, next: Item): { text: string; better: boolean }[] {
+function compareArrays(now: Item | undefined, next: Item): CompareLine[] {
   const was = now?.array ? { id: now.array, value: arrayValue(now) } : null;
   const will = next.array ? { id: next.array, value: arrayValue(next) } : null;
   if (was && will && was.id === will.id) {
@@ -544,16 +590,26 @@ function compareArrays(now: Item | undefined, next: Item): { text: string; bette
     const text = arrayAmount(will.id, Math.abs(change));
     if (text === arrayAmount(will.id, 0)) return [];
     const name = tn('array', ARRAYS[will.id].name);
-    return [{ text: `${signed(change, text)} ${name}`, better: change > 0 }];
+    return [
+      { text: `${signed(change, text)} ${name}`, better: change > 0, kind: ARRAY_KIND[will.id] },
+    ];
   }
-  const lines: { text: string; better: boolean }[] = [];
+  const lines: CompareLine[] = [];
   if (will) {
     const amount = arrayAmount(will.id, will.value);
-    lines.push({ text: `+${tn('array', ARRAYS[will.id].name)} (${amount})`, better: true });
+    lines.push({
+      text: `+${tn('array', ARRAYS[will.id].name)} (${amount})`,
+      better: true,
+      kind: ARRAY_KIND[will.id],
+    });
   }
   if (was) {
     const amount = arrayAmount(was.id, was.value);
-    lines.push({ text: `−${tn('array', ARRAYS[was.id].name)} (${amount})`, better: false });
+    lines.push({
+      text: `−${tn('array', ARRAYS[was.id].name)} (${amount})`,
+      better: false,
+      kind: ARRAY_KIND[was.id],
+    });
   }
   return lines;
 }
@@ -1210,6 +1266,20 @@ export function storeIcon(id: OfferId): number {
   return STORE_ICONS.indexOf(id);
 }
 
+/**
+ * The stock positions of its chests in the order the Chests section shows
+ * them: best grade first (Heaven, Earth, Spirit), whatever order they rolled in.
+ */
+export function chestOrder(offers: readonly string[]): number[] {
+  return offers
+    .flatMap((id, at) => {
+      const grade = chestGrade(id as OfferId);
+      return grade ? [{ at, rank: CHEST_GRADES.indexOf(grade) }] : [];
+    })
+    .sort((a, b) => b.rank - a.rank)
+    .map((c) => c.at);
+}
+
 /** One offer as its card shows it. */
 export interface OfferCard {
   id: OfferId;
@@ -1292,14 +1362,28 @@ export function refreshView(state: GameState): { text: string; off: boolean; why
   };
 }
 
-/** Boost `id`'s summary chip value, e.g. "+50% XP · 9 min"; null while it is off (the chip hides). */
-export function boostChip(state: GameState, id: BoostId): string | null {
+/**
+ * Boost `id`'s summary chip: the bonus and the short word it shows beside its
+ * icon ("+50%", "drops"; a narrow chip drops the word), and the whole line its
+ * tip and screen readers give ("Lucky Charm (+50% treasure find): 9 min left");
+ * null while it is off.
+ */
+export function boostChip(
+  state: GameState,
+  id: BoostId,
+): { bonus: string; word: string; full: string } | null {
   const left = boostLeft(state, id);
   if (left <= 0) return null;
-  return t('store.chip', {
-    effect: t(`store.boostEffect.${id}`, { percent: Math.round(BOOST_BONUS * 100) }),
-    time: durationLabel(left),
-  });
+  const percent = Math.round(BOOST_BONUS * 100);
+  return {
+    bonus: `+${percent}%`,
+    word: t(`store.boostShort.${id}`),
+    full: t('store.boostLine', {
+      name: t(`store.boost.${id}`),
+      effect: t(`store.boostEffect.${id}`, { percent }),
+      time: durationLabel(left),
+    }),
+  };
 }
 
 /** The boosts running now, one line each with the time left; empty when none are. */

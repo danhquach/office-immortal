@@ -412,6 +412,48 @@ select {
 .kpi.boost {
   border-left-color: var(--sell);
 }
+/* The boosts' own row: three fixed columns, kept even while no boost runs, so
+   a boost starting never grows the chips. Running boosts fill it from the left
+   in catalog order; an off boost's chip goes to the end, unseen, and still
+   holds the row's height. A chip shows its icon and bonus; hover, focus or a
+   tap opens the whole line with the time left (hoverTip). */
+.kpi-boosts {
+  flex-basis: 100%;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+.kpi-boosts > .kpi {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  cursor: help;
+}
+/* A guard: should the bonus and word ever outgrow the chip, they end in an
+   ellipsis instead of spilling out (the container query below drops the word
+   first); the tip still has the whole line. */
+.kpi-boosts .value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpi-boosts .kpi-icon {
+  flex: none;
+}
+.kpi-boosts .word::before {
+  content: ' ';
+}
+/* Under the room the longest word needs (a phone), only the bonus shows. */
+@container (max-width: 30rem) {
+  .kpi-boosts .word {
+    display: none;
+  }
+}
+.kpi.boost.off {
+  order: 1;
+  visibility: hidden;
+}
 .kpi-icon {
   display: inline-block;
   width: 1.25em;
@@ -1457,8 +1499,7 @@ body.dragging * {
   font-weight: 600;
   font-size: 0.95rem;
 }
-.details .lines,
-.details .compare {
+.details .lines {
   list-style: none;
   margin: 0.2rem 0;
   padding: 0;
@@ -1551,11 +1592,22 @@ body.dragging * {
   color: var(--utility);
 }
 /* Sell, Salvage and Craft on their own row over the item, in one place for
-   every item. */
+   every item: three equal columns, so a long label wraps inside its button
+   instead of pushing the next button onto a new line. Craft keeps the last
+   column even when it is alone (a worn item). */
 .details .row.actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
   margin: 0 0 0.4rem;
   padding-bottom: 0.4rem;
   border-bottom: 1px solid var(--line);
+}
+.details .row.actions button {
+  overflow-wrap: anywhere;
+}
+.details .row.actions button[data-action='craft'] {
+  grid-column: 3;
 }
 .up {
   color: var(--up);
