@@ -263,8 +263,9 @@ select {
   stroke: currentColor;
   stroke-width: 1.2;
 }
-/* Opens in the top layer (a popover); app.ts places it under the button. */
-.lang-list {
+/* A short list under a title-bar button (language, pop-out style). Opens in
+   the top layer (a popover); app.ts places it under the button. */
+.pick-list {
   position: fixed;
   inset: auto;
   min-width: max-content;
@@ -277,20 +278,20 @@ select {
   border-radius: 3px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 0.25);
 }
-.lang-list li {
+.pick-list li {
   padding: 0.3rem 0.8rem;
   cursor: pointer;
 }
-.lang-list li:hover {
+.pick-list li:hover {
   background: var(--head);
 }
-.lang-list li[aria-checked='true'] {
+.pick-list li[aria-checked='true'] {
   font-weight: 600;
 }
-.lang-list li[aria-checked='true']::before {
+.pick-list li[aria-checked='true']::before {
   content: '✓ ';
 }
-.lang-list li[aria-checked='false']::before {
+.pick-list li[aria-checked='false']::before {
   content: '✓ ';
   visibility: hidden;
 }
@@ -2078,6 +2079,45 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Discreet view: the other pop-out, a plain sheet with no art and no grade or
+   tier colours (docs/design.md §14). Seven rows and a header fit 160 px. */
+.discreet {
+  box-sizing: border-box;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 0.75rem;
+  line-height: 1.2;
+  cursor: default;
+}
+.discreet table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.discreet th,
+.discreet td {
+  border: 1px solid var(--line);
+  padding: 0.05rem 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.discreet th {
+  background: var(--head);
+  color: var(--muted);
+  font-weight: 400;
+}
+.discreet tr > :first-child {
+  width: 1.5rem;
+  text-align: center;
+}
+.discreet tr > :nth-child(2) {
+  width: 30%;
 }
 
 /* Main menu: Settings and Help, a modal dialog over the game. */
