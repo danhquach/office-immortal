@@ -880,8 +880,8 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   shows a still pose.
 - The Full view shows the whole stage at 3/4 (156 px tall) in the left half
   of the page, with the summary chips and Recent drops beside it, so the
-  panels fit one screen (at 0.55, 114 px, in a window under 900 px tall); the
-  Mini view at 3/8 so it fits its 160 px window. Narrow shows it at 1×, whole
+  panels fit one screen; a window under 720 px tall shows it at 0.55 (114 px). The
+  Mini view shows it at 3/8 so it fits its 160 px window. Narrow shows it at 1×, whole
   pixels.
 
 ### Grade colours
@@ -901,7 +901,7 @@ Grade is also written as text, never shown by colour alone.
 
 | View | When | Shows |
 |---|---|---|
-| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall (such as the 960 × 640 itch.io frame) it compacts further: no formula bar, the stage at 0.55 with names and HP over it, the bag's tabs on its header bar |
+| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
 

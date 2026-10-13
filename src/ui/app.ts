@@ -716,12 +716,13 @@ function showPaths(root: HTMLElement, storage: SaveStorage | null): void {
     showPaths(root, storage);
     root.querySelector<HTMLButtonElement>('.lang > button')?.focus();
   });
-  root.replaceChildren(
-    bar,
-    updateNote,
+  // One column, as wide as the choice: the link panel under it matches it.
+  const start = el('div', 'path-start');
+  start.append(
     pathChoice((path) => play(root, newGame(newSeed(), path), storage, null)),
     ...(cloud ? [pathLink(cloud)] : []),
   );
+  root.replaceChildren(bar, updateNote, start);
   say(() => drawUpdate(false));
 }
 

@@ -345,6 +345,8 @@ describe('Full view layout', () => {
   };
   const FIT = '(min-width: 940px) and (min-height: 600px)';
   const SHORT = '(min-width: 940px) and (min-height: 600px) and (max-height: 899px)';
+  const SHORTER = '(min-width: 940px) and (min-height: 600px) and (max-height: 809px)';
+  const SHORTEST = '(min-width: 940px) and (min-height: 600px) and (max-height: 719px)';
 
   it('starts at 940 px, so the 960 px itch.io frame gets three columns', () => {
     expect(code).not.toMatch(/@media \(min-width: 1100px\)|@media \(max-width: 1099px\)/);
@@ -390,11 +392,27 @@ describe('Full view layout', () => {
   it('compacts a short window without moving the name off its own row', () => {
     const short = media(SHORT);
     expect(rule(short, '.formula')).toMatch(/display:\s*none/);
-    expect(rule(short, '.game .strip > .stage')).toMatch(/zoom:\s*0\.55/);
-    expect(rule(short, '.game .fighter')).toMatch(/grid-template-areas:\s*'name name'\s*'bar hp'/);
-    expect(rule(short, '.game .foe')).toMatch(/grid-template-areas:\s*'name name'\s*'hp bar'/);
+    expect(rule(short, '.inventory > .tabs')).toMatch(/grid-area:\s*1 \/ 2/);
+    // 810 to 899 px tall keeps the Full strip: names under a 3/4 stage.
+    expect(short).not.toMatch(/zoom|\.fighter|\.strip/);
+    const shorter = media(SHORTER);
+    expect(rule(shorter, '.game .strip > .fighters')).toMatch(/grid-row:\s*3/);
+    expect(rule(shorter, '.game .fighter')).toMatch(
+      /grid-template-areas:\s*'name name'\s*'bar hp'/,
+    );
+    expect(rule(shorter, '.game .foe')).toMatch(/grid-template-areas:\s*'name name'\s*'hp bar'/);
     // Damage numbers rise over the names.
-    expect(rule(short, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
+    expect(rule(shorter, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
+    expect(shorter).not.toMatch(/zoom/);
+    // Only the itch.io frame's height shrinks the stage to 0.55.
+    expect(rule(media(SHORTEST), '.game .strip > .stage')).toMatch(/zoom:\s*0\.55/);
+  });
+
+  it('sets the link code panel under the Path choice at its width', () => {
+    const start = rule(code, '.path-start');
+    expect(start).toMatch(/grid-template-columns:\s*fit-content\(40rem\)/);
+    expect(start).toMatch(/justify-content:\s*center/);
+    expect(code).not.toMatch(/\.choose\s*{[^}]*max-width/);
   });
 
   it('gives the chips and drops the whole row while the strip is popped out', () => {
