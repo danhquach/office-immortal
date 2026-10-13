@@ -136,7 +136,7 @@ describe('sell and salvage', () => {
 describe('equipped items', () => {
   const worn = (): GameState => {
     const s = game([item('immortal', 1), item('mortal'), item('spirit')]);
-    s.cultivator.level = 23; // An Immortal Treasure needs Golden Core.
+    s.cultivator.level = 21; // An Immortal Treasure needs Golden Core.
     return equip(s, 0);
   };
 

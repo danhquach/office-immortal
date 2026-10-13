@@ -23,6 +23,7 @@ import {
   tick,
   type GameState,
 } from '../../src/core/sim.ts';
+import { syncStore } from '../../src/core/store.ts';
 import { decodeSave, encodeSave } from '../../src/storage/save.ts';
 import { SAVED_AT } from './stage.ts';
 
@@ -79,12 +80,15 @@ function spend(state: GameState, order: readonly PassiveId[]): GameState {
 
 /**
  * The first seed, from 1 up, whose next `seconds` of play drop an Immortal
- * item into the bag, so the capture can play on until it lands.
+ * item into the bag, so the capture can play on until it lands. Played as the
+ * page plays it: the store's stock is rolled on load and after every step, and
+ * each roll draws from the same random numbers as the fight.
  */
 function immortalSoon(state: GameState, seconds: number): GameState {
   for (let s = 1; s < 1_000_000; s++) {
     const seeded = { ...state, rng: { s } };
-    const later = tick(seeded, seconds);
+    let later = syncStore(seeded);
+    for (let t = 0; t < seconds; t++) later = syncStore(tick(later, 1));
     if (later.inventory.some((item) => item.grade === 'immortal')) return seeded;
   }
   throw new Error('no seed drops an Immortal item');
@@ -105,11 +109,11 @@ const saves: Record<string, GameState> = {
   'early-floor': playUntil(newGame(7, 'sword'), (s) => s.floor >= 3, DAY),
   // The late run with room in the bag; an Immortal item drops within the minute.
   'immortal-drop': immortalSoon(bulkTake(late, 'sell', 'heaven'), 60),
-  // A Body Refiner held at the Foundation Establishment cap (level 22), the Tribulation started.
+  // A Body Refiner held at the Foundation Establishment cap (level 20), the Tribulation started.
   tribulation: faceTribulation(
     playUntil(
       newGame(1, 'body'),
-      (s) => s.cultivator.level >= 22 && readyForTribulation(s.cultivator) && canFaceTribulation(s),
+      (s) => s.cultivator.level >= 20 && readyForTribulation(s.cultivator) && canFaceTribulation(s),
       5 * DAY,
     ),
   ),

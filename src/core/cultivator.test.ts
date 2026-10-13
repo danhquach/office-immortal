@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { affixValue, EQUIP_SLOTS, type AffixId, type EquipSlotId, type Item } from './loot.ts';
+import { XP_GROWTH } from './floors.ts';
 import {
+  LEVEL_XP_GROWTH,
   BASE_STAT,
   breakThrough,
   derive,
@@ -20,6 +22,7 @@ import {
   realmOf,
   realmPrimaryBonus,
   realmPrimaryShare,
+  realmLevels,
   REALMS,
   STARTING_PRIMARY_BONUS,
   STAT_POINTS_PER_LEVEL,
@@ -135,6 +138,14 @@ describe('derive', () => {
 });
 
 describe('xpToNext', () => {
+  it('starts at 50 and grows 1.15× a level, rounded', () => {
+    expect([1, 2, 3, 10].map(xpToNext)).toEqual([50, 57, 66, 176]);
+  });
+
+  it("grows at the same rate as a kill's XP per floor", () => {
+    expect(LEVEL_XP_GROWTH).toBe(XP_GROWTH);
+  });
+
   it('grows with level', () => {
     for (let level = 1; level < 60; level++) {
       expect(xpToNext(level + 1)).toBeGreaterThan(xpToNext(level));
@@ -199,18 +210,32 @@ describe('realms', () => {
       'Tribulation Transcendence',
       'Immortal Ascension',
     ]);
-    expect([1, 10, 11, 22, 23, 52, 53, 90, 91, 162, 163, 500].map(realmOf)).toEqual([
-      0, 0, 1, 1, 2, 3, 4, 5, 6, 8, 9, 9,
-    ]);
+    expect(
+      [1, 10, 11, 20, 21, 40, 41, 60, 61, 80, 81, 110, 111, 140, 141, 170, 171, 210, 211, 500].map(
+        realmOf,
+      ),
+    ).toEqual([0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9]);
   });
 
-  it('caps at the end of each realm, each 2 levels longer, up to Tribulation Transcendence, then never', () => {
+  it('caps at the end of each realm, on a multiple of 10 and never shorter than the last, up to Tribulation Transcendence, then never', () => {
     const caps = Array.from({ length: 300 }, (_, i) => i + 1).filter(isRealmCap);
-    expect(caps).toEqual([10, 22, 36, 52, 70, 90, 112, 136, 162]);
+    expect(caps).toEqual([10, 20, 40, 60, 80, 110, 140, 170, 210]);
     expect(caps).toEqual(REALM_CAPS);
-    expect(LAST_CAP).toBe(162);
+    expect(LAST_CAP).toBe(210);
     const lengths = REALM_CAPS.map((cap, i) => cap - (REALM_CAPS[i - 1] ?? 0));
-    expect(lengths).toEqual([10, 12, 14, 16, 18, 20, 22, 24, 26]);
+    expect(lengths).toEqual([10, 10, 20, 20, 20, 30, 30, 30, 40]);
+    expect(REALMS.map((_, i) => realmLevels(i))).toEqual([
+      { from: 1, to: 10 },
+      { from: 11, to: 20 },
+      { from: 21, to: 40 },
+      { from: 41, to: 60 },
+      { from: 61, to: 80 },
+      { from: 81, to: 110 },
+      { from: 111, to: 140 },
+      { from: 141, to: 170 },
+      { from: 171, to: 210 },
+      { from: 211, to: null },
+    ]);
   });
 });
 
@@ -224,9 +249,9 @@ describe('realm caps', () => {
   });
 
   it('keeps holding however much XP comes in', () => {
-    const c = atLevel('body', 22);
+    const c = atLevel('body', 40);
     for (let i = 0; i < 50; i++) gainXp(c, 1e6);
-    expect(c.level).toBe(22);
+    expect(c.level).toBe(40);
     expect(c.xp).toBe(5e7);
   });
 
@@ -239,13 +264,15 @@ describe('realm caps', () => {
   });
 
   it('never caps after Immortal Ascension', () => {
-    const c = atLevel('sword', 162);
-    c.xp = xpToNext(162);
+    const c = atLevel('sword', 210);
+    c.xp = xpToNext(210);
     breakThrough(c);
-    expect(c.level).toBe(163);
-    gainXp(c, xpToNext(163) + xpToNext(164) + xpToNext(165));
-    expect(c.level).toBe(166);
-    expect(readyForTribulation({ ...c, level: 100, xp: 1e9 })).toBe(false);
+    expect(c.level).toBe(211);
+    gainXp(c, xpToNext(211) + xpToNext(212) + xpToNext(213));
+    expect(c.level).toBe(214);
+    // Immortal Ascension has no cap, so nothing is ever held there.
+    expect(Array.from({ length: 90 }, (_, i) => 211 + i).some(isRealmCap)).toBe(false);
+    expect(readyForTribulation({ ...c, xp: Number.MAX_SAFE_INTEGER })).toBe(false);
   });
 });
 
@@ -253,11 +280,11 @@ describe('breakThrough', () => {
   it('passes the cap and spends the held XP up to the next one', () => {
     const c = atLevel('sword', 10);
     let xp = 0;
-    for (let l = 10; l < 22; l++) xp += xpToNext(l);
-    c.xp = xp + xpToNext(22) + 9;
+    for (let l = 10; l < 20; l++) xp += xpToNext(l);
+    c.xp = xp + xpToNext(20) + 9;
     breakThrough(c);
-    expect(c.level).toBe(22);
-    expect(c.xp).toBe(xpToNext(22) + 9);
+    expect(c.level).toBe(20);
+    expect(c.xp).toBe(xpToNext(20) + 9);
     expect(readyForTribulation(c)).toBe(true);
   });
 
@@ -293,11 +320,10 @@ describe('breakThrough', () => {
   });
 
   it("keeps every cap's XP to the next level within what a save can hold", () => {
-    // Held XP is clamped to MAX_SAFE_INTEGER, so each cap's price must fit under it.
-    expect(xpToNext(LAST_CAP)).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
-    for (const cap of REALM_CAPS) {
-      expect(Number.isSafeInteger(xpToNext(cap))).toBe(true);
-    }
+    // Held XP is clamped to MAX_SAFE_INTEGER, so a cap's price must fit under it
+    // for its Tribulation to fall due, and Immortal Ascension keeps levelling past it.
+    for (const cap of REALM_CAPS) expect(Number.isSafeInteger(xpToNext(cap))).toBe(true);
+    expect(xpToNext(LAST_CAP + 20)).toBeLessThan(Number.MAX_SAFE_INTEGER);
   });
 
   it('never holds more XP than a whole number can store', () => {
@@ -323,11 +349,11 @@ describe('realm primary stat bonus', () => {
     const at = (level: number) => realmPrimaryBonus(level);
     expect(at(10)).toBe(0);
     expect(at(11)).toBeCloseTo(0.01);
-    expect(at(22)).toBeCloseTo(0.01);
-    expect(at(23)).toBeCloseTo(0.02625);
-    expect(at(37)).toBeCloseTo(0.04875);
-    expect(at(162)).toBeCloseTo(0.255);
-    expect(at(163)).toBeCloseTo(0.315);
+    expect(at(20)).toBeCloseTo(0.01);
+    expect(at(21)).toBeCloseTo(0.02625);
+    expect(at(41)).toBeCloseTo(0.04875);
+    expect(at(210)).toBeCloseTo(0.255);
+    expect(at(211)).toBeCloseTo(0.315);
     expect(at(5000)).toBeCloseTo(0.315);
   });
 
@@ -346,7 +372,7 @@ describe('realm primary stat bonus', () => {
   });
 
   it.each(PATH_IDS)('raises only the primary stat of %s', (path) => {
-    const c = atLevel(path, 163);
+    const c = atLevel(path, 211);
     const eff = effectiveStats(c);
     const primary = PATHS[path].primary;
     for (const stat of ['body', 'agility', 'spirit'] as const) {
@@ -395,7 +421,7 @@ describe('realm primary stat bonus', () => {
   });
 
   it('feeds derive: the max HP and defence of a Body path use the boosted stat', () => {
-    const c = atLevel('body', 163);
+    const c = atLevel('body', 211);
     const eff = effectiveStats(c);
     const d = derive(c);
     expect(d.maxHp).toBe(Math.round((40 + 12 * eff.body) * (1 + REALM_BONUS * 9)));

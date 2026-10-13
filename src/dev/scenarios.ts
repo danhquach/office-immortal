@@ -43,7 +43,7 @@ import {
 import { MAX_FLOOR } from '../storage/save.ts';
 
 /** The highest level a setup goes to: XP to the next level stays a safe whole number. */
-export const MAX_DEBUG_LEVEL = 180;
+export const MAX_DEBUG_LEVEL = 230;
 
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
 const EQUIP_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
