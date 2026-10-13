@@ -66,7 +66,7 @@ import {
 import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
 import { ARRAY_TICK, ENEMY_ARRIVAL, startFloor, type GameState } from '../core/sim.ts';
-import { arr, fail, int, num, obj, oneOf } from './validate.ts';
+import { arr, Bad, fail, int, num, obj, oneOf } from './validate.ts';
 
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
@@ -123,6 +123,21 @@ export function decodeSave(raw: unknown): Save | null {
     return readSave(JSON.parse(raw));
   } catch {
     return null;
+  }
+}
+
+/**
+ * Why the save checker would refuse `state` once saved, or null when it loads.
+ * The same checks as decodeSave, run on the state as encodeSave writes it.
+ */
+export function saveProblem(state: GameState): string | null {
+  try {
+    const raw = encodeSave(state, 0);
+    if (raw.length > MAX_SAVE_CHARS) return 'too big';
+    readSave(JSON.parse(raw));
+    return null;
+  } catch (e) {
+    return e instanceof Bad ? e.message : 'not a save';
   }
 }
 

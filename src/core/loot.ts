@@ -706,9 +706,25 @@ export function rollItem(rng: Rng, level: number): Item {
   if (!Number.isInteger(level) || level < 1) throw new RangeError(`rollItem: bad level ${level}`);
   const slot = pick(rng, SLOT_IDS);
   const grade = rollGrade(rng);
+  return rollItemAs(rng, slot, grade, pick(rng, namesFor(slot, grade)), level);
+}
+
+/**
+ * Rolls the rest of an item whose type, grade and name are already chosen: its
+ * base roll, a disc's array, the grade's affixes and an Immortal's unique.
+ */
+export function rollItemAs(
+  rng: Rng,
+  slot: SlotId,
+  grade: GradeId,
+  name: string,
+  level: number,
+): Item {
+  if (!Number.isInteger(level) || level < 1) throw new RangeError(`rollItem: bad level ${level}`);
+  if (!namesFor(slot, grade).includes(name)) throw new RangeError(`rollItem: bad name ${name}`);
   const item: Item = {
     slot,
-    name: pick(rng, namesFor(slot, grade)),
+    name,
     level,
     grade,
     baseRoll: roll(rng),
