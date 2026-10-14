@@ -66,6 +66,30 @@ export const QI_PER_HIT_TAKEN = 4;
 /** Qi an enemy with a pool gains per attack, and per second. */
 export const ENEMY_QI_PER_ATTACK = 10;
 export const ENEMY_QI_REGEN = 1;
+/** Tribulation losses in a row before it is set aside (docs/design.md §4). */
+export const TRIAL_LOSS_LIMIT = 3;
+/** Seconds after the last loss before a set-aside Tribulation gets another try. */
+export const TRIAL_RETRY_SECONDS = 10 * 60;
+/** How much stronger (damage or max HP, as a share) earns a set-aside Tribulation another try. */
+export const TRIAL_STRONGER = 0.05;
+
+/** The Tribulation retry limit's record (docs/design.md §4). */
+export interface TrialState {
+  /** Auto-Tribulation: a due Tribulation joins the end of the floor; off, only Face it starts one. */
+  auto: boolean;
+  /** Tribulation losses in a row; at TRIAL_LOSS_LIMIT or more it is set aside. */
+  losses: number;
+  /** Sim time of the last loss, in seconds; 0 before any. */
+  lostAt: number;
+  /** The cultivator's damage and max HP at the last loss. */
+  lostDamage: number;
+  lostMaxHp: number;
+}
+
+/** No losses yet, with the switch as given (on by default). */
+export function newTrial(auto = true): TrialState {
+  return { auto, losses: 0, lostAt: 0, lostDamage: 0, lostMaxHp: 0 };
+}
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -106,6 +130,8 @@ export interface GameState {
   store: StoreState;
   /** Timed boosts bought in the store; lost with the run. */
   boosts: Boosts;
+  /** Auto-Tribulation and the retry limit; the switch is kept through Early Retirement. */
+  trial: TrialState;
 }
 
 /** What a run carries into the next one through Early Retirement. */
@@ -141,6 +167,7 @@ export function newGame(
     retirements: kept.retirements,
     store: emptyStore(),
     boosts: noBoosts(),
+    trial: newTrial(),
   };
   startFloor(state, rngFrom(state.rng), 0);
   return state;
@@ -188,12 +215,14 @@ export function retire(state: GameState): GameState {
   const s = structuredClone(state);
   // The next run's seed comes from this run's, so a run still replays from one seed.
   const seed = Math.floor(rngFrom(s.rng)() * 2 ** 32);
-  return newGame(seed, s.cultivator.path, {
+  const next = newGame(seed, s.cultivator.path, {
     insight: Math.min(Number.MAX_SAFE_INTEGER, s.insight + insightFor(s.highestFloor)),
     passives: s.passives,
     retirements: s.retirements + 1,
     filter: s.filter,
   });
+  next.trial.auto = s.trial.auto;
+  return next;
 }
 
 /**
@@ -284,9 +313,54 @@ export function canFaceTribulation(state: GameState): boolean {
   return readyForTribulation(state.cultivator) && state.enemies[0]?.kind !== 'tribulation';
 }
 
+/** True while a due Tribulation is set aside after TRIAL_LOSS_LIMIT losses in a row. */
+export function trialSetAside(state: GameState): boolean {
+  return readyForTribulation(state.cultivator) && state.trial.losses >= TRIAL_LOSS_LIMIT;
+}
+
+/**
+ * True when a set-aside Tribulation has earned another try: the cultivator's
+ * damage or max HP is TRIAL_STRONGER above the last loss's, or
+ * TRIAL_RETRY_SECONDS have passed since it.
+ */
+export function trialRetryDue(state: GameState): boolean {
+  if (!trialSetAside(state)) return false;
+  const { trial } = state;
+  const d = derive(state.cultivator);
+  return (
+    state.time >= trial.lostAt + TRIAL_RETRY_SECONDS ||
+    d.damage >= trial.lostDamage * (1 + TRIAL_STRONGER) ||
+    d.maxHp >= trial.lostMaxHp * (1 + TRIAL_STRONGER)
+  );
+}
+
+/**
+ * Seconds until a set-aside Tribulation's timed retry: 0 once due (it joins
+ * the floor at the next kill), null when not set aside or Auto-Tribulation is off.
+ */
+export function trialRetryIn(state: GameState): number | null {
+  if (!trialSetAside(state) || !state.trial.auto) return null;
+  return trialRetryDue(state)
+    ? 0
+    : Math.max(0, state.trial.lostAt + TRIAL_RETRY_SECONDS - state.time);
+}
+
+/**
+ * Turns Auto-Tribulation on or off, returning the new state; `state` is left
+ * untouched. Off takes a due Tribulation waiting at the end of the floor off
+ * it (one being fought stays); on queues it as a kill would.
+ */
+export function setAutoTribulation(state: GameState, on: boolean): GameState {
+  const s = structuredClone(state);
+  s.trial.auto = on;
+  if (on) queueTribulation(s);
+  else s.enemies = s.enemies.filter((e, i) => i === 0 || e.kind !== 'tribulation');
+  return s;
+}
+
 /** What the cultivator is doing now, as the status bar names it (docs/design.md §14). */
 export type CharacterStatusKind =
-  'tribulation' | 'tribulationDue' | 'boss' | 'elite' | 'cultivating';
+  'tribulation' | 'tribulationPaused' | 'tribulationDue' | 'boss' | 'elite' | 'cultivating';
 
 export interface CharacterStatus {
   kind: CharacterStatusKind;
@@ -295,12 +369,13 @@ export interface CharacterStatus {
 
 /**
  * The cultivator's status, the first that applies: fighting a Tribulation, one
- * due, fighting the floor's boss, an elite, else cultivating.
+ * set aside, one due, fighting the floor's boss, an elite, else cultivating.
  */
 export function characterStatus(state: GameState): CharacterStatus {
   const { floor } = state;
   const foe = state.enemies[0]?.kind;
   if (foe === 'tribulation') return { kind: 'tribulation', floor };
+  if (trialSetAside(state)) return { kind: 'tribulationPaused', floor };
   if (canFaceTribulation(state)) return { kind: 'tribulationDue', floor };
   if (foe === 'boss' || foe === 'elite') return { kind: foe, floor };
   return { kind: 'cultivating', floor };
@@ -391,7 +466,10 @@ function defeated(s: GameState, rng: Rng, offline: boolean): void {
   s.souls = Math.min(soulCap(c.equipment), s.souls + 1);
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind + boostBonus(s, 'stones')));
   gainXp(c, Math.round(enemy.xp * (xpMultiplier(s.passives) + boostBonus(s, 'xp'))));
-  if (enemy.kind === 'tribulation') breakThrough(c);
+  if (enemy.kind === 'tribulation') {
+    breakThrough(c);
+    s.trial = newTrial(s.trial.auto);
+  }
   const find = d.treasureFind + passiveTreasureFind(s.passives) + boostBonus(s, 'treasure');
   const drop = rollDrop(rng, enemy.kind, s.floor, find, offline);
   if (drop) pickUp(s, drop);
@@ -400,6 +478,12 @@ function defeated(s: GameState, rng: Rng, offline: boolean): void {
   if (s.enemies.length > 0) {
     // At the attack speed from before any level-up this kill paid for.
     startFight(s, ENEMY_ARRIVAL, d.attackInterval);
+    return;
+  }
+  // A due Tribulation not on the floor (set aside, or Auto-Tribulation off)
+  // still bars the way: the floor is played again.
+  if (readyForTribulation(c)) {
+    startFloor(s, rng, ENEMY_ARRIVAL);
     return;
   }
   s.floor += 1;
@@ -421,20 +505,35 @@ function enemyAttacks(s: GameState, rng: Rng): void {
   if (c.hp > 0) return;
 
   // Lost: drop back a floor and climb again from there, so a run never gets
-  // stuck. Losing to a Tribulation costs nothing: the floor is played again.
+  // stuck. Losing to a Tribulation costs nothing: the floor is played again,
+  // and the loss is counted towards setting it aside.
   s.deaths += 1;
-  if (enemy.kind !== 'tribulation') s.floor = Math.max(1, s.floor - 1);
+  if (enemy.kind === 'tribulation') lostTrial(s);
+  else s.floor = Math.max(1, s.floor - 1);
   startFloor(s, rng, ENEMY_ARRIVAL);
+}
+
+/** A Tribulation loss: counted, with the time and the cultivator's strength, for the retry limit. */
+function lostTrial(s: GameState): void {
+  const d = derive(s.cultivator);
+  s.trial.losses = Math.min(Number.MAX_SAFE_INTEGER, s.trial.losses + 1);
+  s.trial.lostAt = s.time;
+  s.trial.lostDamage = d.damage;
+  s.trial.lostMaxHp = d.maxHp;
 }
 
 /**
  * Once the cultivator is held at a realm cap, the realm's Tribulation joins the
- * end of the floor, so the floor can't be cleared until it is won. Draws no
- * randomness, so step size never changes what is fought.
+ * end of the floor, so the floor can't be cleared until it is won: only with
+ * Auto-Tribulation on, and once set aside only when a retry is due. Checked
+ * at kills and floor starts and draws no randomness, so step size never
+ * changes what is fought.
  */
 function queueTribulation(s: GameState): void {
   const c = s.cultivator;
-  if (!readyForTribulation(c) || s.enemies.some((e) => e.kind === 'tribulation')) return;
+  if (!readyForTribulation(c) || !s.trial.auto) return;
+  if (s.enemies.some((e) => e.kind === 'tribulation')) return;
+  if (trialSetAside(s) && !trialRetryDue(s)) return;
   s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
 }
 

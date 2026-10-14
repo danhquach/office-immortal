@@ -66,7 +66,15 @@ import {
 } from '../core/loot.ts';
 import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
-import { ARRAY_TICK, ENEMY_ARRIVAL, QI_TICK, startFloor, type GameState } from '../core/sim.ts';
+import {
+  ARRAY_TICK,
+  ENEMY_ARRIVAL,
+  newTrial,
+  QI_TICK,
+  startFloor,
+  type GameState,
+  type TrialState,
+} from '../core/sim.ts';
 import {
   BOOST_CAP_SECONDS,
   BOOST_IDS,
@@ -84,7 +92,8 @@ import { arr, Bad, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 13;
+// 12 is taken by other work in flight; it is never reused.
+export const SAVE_VERSION = 14;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
@@ -92,9 +101,10 @@ export const SAVE_VERSION = 13;
  * v6 had seven realms, so a due Tribulation may carry another realm's name;
  * v7 came before crafting, so no item has a refine level; v8 had a cap every
  * 10 levels; v9 came before the store and its boosts; v10 had caps at 10, 22,
- * 36 … 162; v11 came before qi.
+ * 36 … 162; v11 came before qi; v13 before Auto-Tribulation and the retry
+ * limit.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -294,30 +304,36 @@ function readState(v: unknown, version: number): GameState {
   const before10 = version < 10;
   // Before v13 there was no qi: everyone starts with none.
   const before13 = version < 13;
+  // Before v14 there was no Auto-Tribulation switch or retry limit.
+  const before14 = version < 14;
   const items: ItemReader = {
     slot: before4 ? fromPants : (id) => id,
     refines: version >= 8,
   };
-  const o = obj(v, [
-    'time',
-    'rng',
-    'cultivator',
-    'floor',
-    'highestFloor',
-    'enemies',
-    'enemyNextAttackAt',
-    ...(before5 ? [] : ['arrayNextAt']),
-    ...(before13 ? [] : ['qiNextAt']),
-    ...(before6 ? [] : ['souls']),
-    'inventory',
-    'kills',
-    'deaths',
-    ...(v1
-      ? ['dropsLost']
-      : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
-    ...(before3 ? [] : ['insight', 'passives', 'retirements']),
-    ...(before10 ? [] : ['store', 'boosts']),
-  ]);
+  const o = obj(
+    v,
+    [
+      'time',
+      'rng',
+      'cultivator',
+      'floor',
+      'highestFloor',
+      'enemies',
+      'enemyNextAttackAt',
+      ...(before5 ? [] : ['arrayNextAt']),
+      ...(before13 ? [] : ['qiNextAt']),
+      ...(before6 ? [] : ['souls']),
+      'inventory',
+      'kills',
+      'deaths',
+      ...(v1
+        ? ['dropsLost']
+        : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
+      ...(before3 ? [] : ['insight', 'passives', 'retirements']),
+      ...(before10 ? [] : ['store', 'boosts']),
+    ],
+    before14 ? [] : ['trial'],
+  );
   const time = num(o.time, 0, MAX_TIME);
   const highestFloor = int(o.highestFloor, 1, MAX_FLOOR);
   const floor = int(o.floor, 1, highestFloor);
@@ -374,6 +390,7 @@ function readState(v: unknown, version: number): GameState {
     retirements: before3 ? 0 : int(o.retirements, 0, COUNT),
     store: before10 ? emptyStore() : readStore(o.store, time),
     boosts: before10 ? noBoosts() : readBoosts(o.boosts, time),
+    trial: readTrial(o.trial, time, readyForTribulation(cultivator)),
   };
   if (oldCaps) toNewRealms(state);
   return state;
@@ -397,6 +414,34 @@ function readBoosts(v: unknown, time: number): Boosts {
   const boosts = noBoosts();
   for (const id of BOOST_IDS) boosts[id] = num(o[id], 0, time + BOOST_CAP_SECONDS);
   return boosts;
+}
+
+/**
+ * The Tribulation retry record. Unlike the rest of the save, a bad or missing
+ * one does not reject the save: it falls back to the defaults (switch on, no
+ * losses), which at worst puts the Tribulation back on the floor.
+ */
+function readTrial(v: unknown, time: number, held: boolean): TrialState {
+  if (v === undefined) return newTrial();
+  try {
+    const o = obj(v, ['auto', 'losses', 'lostAt', 'lostDamage', 'lostMaxHp']);
+    if (typeof o.auto !== 'boolean') fail('auto');
+    const trial: TrialState = {
+      auto: o.auto,
+      losses: int(o.losses, 0, COUNT),
+      // A loss is never in the future.
+      lostAt: num(o.lostAt, 0, time),
+      lostDamage: num(o.lostDamage, 0, COUNT),
+      lostMaxHp: int(o.lostMaxHp, 0, COUNT),
+    };
+    // A loss is recorded with the cultivator's strength, which is never 0.
+    if (trial.losses > 0 && (trial.lostDamage <= 0 || trial.lostMaxHp <= 0)) fail('no strength');
+    // Losses only count against a Tribulation that is due; a win clears them.
+    return held ? trial : newTrial(trial.auto);
+  } catch (e) {
+    if (e instanceof Bad) return newTrial();
+    throw e;
+  }
 }
 
 function readPassives(v: unknown): Passives {
@@ -577,15 +622,18 @@ function readEnemies(
   oldLadder: boolean,
   before13: boolean,
 ): Enemy[] {
-  // A cultivator held at a cap has the realm's Tribulation at the end of the
-  // floor (or at its front, once faced), and only then.
-  const order: readonly EnemyKind[] = ready ? [...FLOOR_KINDS, 'tribulation'] : FLOOR_KINDS;
-  const list = arr(v, order.length);
+  // A cultivator held at a cap may have the realm's Tribulation at the end of
+  // the floor (or at its front, once faced), and only then. It may also be off
+  // the floor: set aside after losses, or waiting for Face it with
+  // Auto-Tribulation off.
+  const list = arr(v, FLOOR_KINDS.length + (ready ? 1 : 0));
+  const trial = ready && list.some((e) => (e as { kind?: unknown } | null)?.kind === 'tribulation');
+  const order: readonly EnemyKind[] = trial ? [...FLOOR_KINDS, 'tribulation'] : FLOOR_KINDS;
   // A floor always has an enemy until it is cleared, and clearing starts the next one.
   if (list.length === 0) fail('no enemies');
   // Faced early (faceTribulation), it fights first and the floor it interrupted waits behind it.
   const faced =
-    ready && list.length > 1 && (list[0] as { kind?: unknown } | null)?.kind === 'tribulation';
+    trial && list.length > 1 && (list[0] as { kind?: unknown } | null)?.kind === 'tribulation';
   const kinds = faced
     ? ['tribulation', ...FLOOR_KINDS.slice(FLOOR_KINDS.length - (list.length - 1))]
     : order.slice(order.length - list.length);

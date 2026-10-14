@@ -866,7 +866,7 @@ select {
     text-transform: none;
     letter-spacing: 0;
   }
-  .game .strip > .trial-call > span {
+  .game .strip > .trial-call > span:not(.trial-retry) {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1104,6 +1104,20 @@ select {
   color: var(--grade-immortal);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+/* Set aside: the Try again chip at the row's end, never squeezed out by the text. */
+.trial-call .trial-retry {
+  flex: none;
+  margin-left: auto;
+  padding: 0 0.45rem;
+  border: 1px solid var(--grade-immortal);
+  border-radius: 3px;
+  color: var(--grade-immortal);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trial-call .trial-retry[hidden] {
+  display: none;
 }
 .trial-call:hover,
 .trial-call:focus-visible {
@@ -2570,17 +2584,61 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   align-items: center;
   margin-bottom: 0.5rem;
 }
-.settings h3 {
-  margin: 0.75rem 0 0.35rem;
-  font-size: 0.85rem;
-  color: var(--muted);
-  font-weight: 400;
+/* Settings: one section per setting, set off by a rule; a name and hint over
+   or beside its controls, every control one width so nothing is sized by its text. */
+.settings {
+  --control: 10rem;
 }
-.settings h3:first-child {
-  margin-top: 0;
+.settings > section {
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+}
+.settings > section:first-child {
+  padding-top: 0.15rem;
+  border-top: 0;
+}
+.settings > section:last-child {
+  padding-bottom: 0;
+}
+.settings h3 {
+  margin: 0 0 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings .hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+}
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control);
+  gap: 0.25rem 1rem;
+  align-items: center;
+}
+.setting-row .hint {
+  margin: 0;
+}
+.settings select,
+.settings button {
+  box-sizing: border-box;
+  min-width: var(--control);
+}
+.setting-row > select,
+.setting-row > button {
+  width: 100%;
+}
+.settings button.toggle[aria-pressed='true'] {
+  color: var(--up);
+  border-color: var(--up);
 }
 .settings .confirm {
   margin-top: 0.5rem;
+}
+@media (max-width: 479px) {
+  .setting-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 /* Cloud save: the link-code row, and the panels over the game (a note, a choice). */
 .field input {
