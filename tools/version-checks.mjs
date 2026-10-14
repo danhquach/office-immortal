@@ -23,6 +23,7 @@ export function bumpProblems({ base, head, locks }) {
   const b = parts(base);
   const h = parts(head);
   if (!h) problems.push(`The version "${head}" is not x.y.z`);
+  if (!b) problems.push(`main's version "${base}" is not x.y.z`);
   const stale = locks.filter((v) => v !== head);
   if (stale.length) {
     problems.push(
@@ -38,6 +39,27 @@ export function bumpProblems({ base, head, locks }) {
     }
   }
   return problems;
+}
+
+const ZERO = /^0+$/;
+// A full object name: SHA-1 (40 hex digits) or SHA-256 (64).
+const SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * The tip commit of each branch a push sends, other than main, which must
+ * raise the version over main's; tags, other refs and branch deletes are left to CI.
+ * @param {string} lines git's pre-push stdin: "<local ref> <local sha> <remote ref> <remote sha>" per line
+ * @returns {string[]} the local commits to check
+ */
+export function pushedBranches(lines) {
+  const shas = [];
+  for (const line of lines.split('\n')) {
+    const [, sha, remoteRef] = line.trim().split(/\s+/);
+    if (!sha || !remoteRef || ZERO.test(sha) || !SHA.test(sha)) continue;
+    if (!remoteRef.startsWith('refs/heads/') || remoteRef === 'refs/heads/main') continue;
+    shas.push(sha);
+  }
+  return shas;
 }
 
 /**
