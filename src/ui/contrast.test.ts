@@ -428,32 +428,37 @@ describe('Full view layout', () => {
   const SHORTER = '(min-width: 940px) and (min-height: 600px) and (max-height: 809px)';
   const SHORTEST = '(min-width: 940px) and (min-height: 600px) and (max-height: 719px)';
 
-  it('starts at 940 px, so the 960 px itch.io frame gets three columns', () => {
+  it('starts at 940 px, so the 960 px itch.io frame gets two panels and a ten-cell bag', () => {
     expect(code).not.toMatch(/@media \(min-width: 1100px\)|@media \(max-width: 1099px\)/);
     expect(rule(media('(min-width: 940px)'), '.top')).toMatch(
       /grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/,
     );
-    expect(rule(media('(max-width: 939px)'), '.columns')).toMatch(/'char bag'\s*'char side'/);
+    expect(rule(code, '.columns')).toMatch(/grid-template-areas:\s*'char bag';/);
+    // No details column anywhere: the details are a card over the panels.
+    expect(code).not.toMatch(/'side'|\.side\b/);
+    const full = media('(min-width: 940px)', code.indexOf('.inventory .bag {'));
+    expect(rule(full, '.inventory .bag')).toMatch(/repeat\(10,\s*minmax\(0,\s*46px\)\)/);
   });
 
-  it('fits the character, a bag of 39 px cells and the details into 940 px', () => {
+  it('fits the character and a bag of ten 44 px cells into 940 px', () => {
     const columns = rule(code, '.columns');
-    const [char, side] = [
-      /grid-template-columns:\s*([\d.]+)rem/.exec(columns)?.[1],
+    const [char, bagRem] = [
       /minmax\(([\d.]+)rem,\s*1fr\)/.exec(columns)?.[1],
+      /minmax\(0,\s*([\d.]+)rem\)/.exec(columns)?.[1],
     ].map(Number) as [number, number];
-    expect(columns).toMatch(/minmax\(0,\s*26\.5rem\)/);
     expect(rule(media('(min-width: 940px) and (max-width: 1099px)'), 'main')).toMatch(
       /padding:\s*0 0\.5rem/,
     );
     const MARGINS = 2 * 8; // main's 0.5rem each side
-    const COLUMN_GAPS = 2 * 8;
+    const COLUMN_GAP = 8;
     const PANEL_CHROME = 2 * 0.6 * 16 + 2; // the panel's padding and border
     const THIN_SCROLLBAR = 13; // measured in Chromium
-    const CELL_GAPS = 7 * 4;
-    const bag = 940 - MARGINS - COLUMN_GAPS - (char + side) * 16;
-    // 39 px cells at 940 px (41 at 960): the 32 px icon and its 2 px border still fit.
-    expect((bag - PANEL_CHROME - THIN_SCROLLBAR - CELL_GAPS) / 8).toBeGreaterThanOrEqual(38.5);
+    const CELL_GAPS = 9 * 4;
+    // The character keeps the paper doll's width beside the full bag.
+    expect(char + bagRem).toBeLessThanOrEqual((940 - MARGINS - COLUMN_GAP) / 16);
+    const cells = (bagRem * 16 - PANEL_CHROME - THIN_SCROLLBAR - CELL_GAPS) / 10;
+    // The 32 px icon and its 2 px border fit with room to spare.
+    expect(cells).toBeGreaterThanOrEqual(44);
   });
 
   it('keeps each Character tab on one line, the Stats dot beside its label', () => {
@@ -558,12 +563,19 @@ describe('Full view layout', () => {
     );
   });
 
-  it('keeps the details panel’s action row still while the item scrolls under it', () => {
-    // The (min-width: 940px) block that holds the column rules, not the strip's.
-    const full = media('(min-width: 940px)', code.indexOf('.columns > .side {'));
-    expect(rule(full, '.side > .details')).toMatch(/overflow:\s*hidden/);
-    expect(rule(full, '.side > .details > .detail-body')).toMatch(/min-height:\s*0/);
-    expect(rule(full, '.side .detail-info')).toMatch(/overflow-y:\s*auto/);
+  it('keeps the item card’s action row still while the item scrolls under it', () => {
+    expect(rule(code, '.game > .details')).toMatch(/position:\s*fixed/);
+    expect(rule(code, '.game > .details')).toMatch(/overflow:\s*hidden/);
+    expect(rule(code, '.game > .details[hidden]')).toMatch(/display:\s*none/);
+    expect(rule(code, '.details > .detail-body')).toMatch(/min-height:\s*0/);
+    expect(rule(code, '.details .detail-info')).toMatch(/overflow-y:\s*auto/);
+    // Under a dragged item (the ghost is z-index 10).
+    expect(Number(/z-index:\s*(\d+)/.exec(rule(code, '.game > .details'))?.[1])).toBeLessThan(10);
+    // A label wraps only between words.
+    expect(rule(code, '.details .row.actions button')).toMatch(/overflow-wrap:\s*normal/);
+    // Side by side only when the card is wide enough; a sheet in a narrow window.
+    expect(code).toMatch(/@container \(min-width: 26rem\)/);
+    expect(rule(code, '.game > .details.sheet')).toMatch(/bottom:\s*0/);
   });
 
   it('sets the link code panel under the Path choice at its width', () => {

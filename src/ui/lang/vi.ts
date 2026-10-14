@@ -446,6 +446,8 @@ const vi: Pack = {
     'details.sell': 'Bán: {n} Linh Thạch',
     'details.salvage': 'Phân giải: {n} Tinh Hoa',
     'details.craft': 'Luyện khí',
+    'details.close': 'Đóng chi tiết',
+    'details.change': 'Khi trang bị',
     'item.tag': '{grade} · {slot} · Cấp {level}',
     'item.quality': 'Chất lượng {quality}%',
     'item.cell': '{name}, {tag}',

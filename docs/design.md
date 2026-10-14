@@ -1404,11 +1404,13 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   thin halo in the cell's background colour keeps the refine level readable
   over the art. The badge has a small backing and may touch the icon's
   corner. Equipment cells show the grade and refine level the same
-  way. Selecting a cell shows
-  a details panel: Sell, Salvage and the Craft button (§7) on a row at its
-  top, then blocks for the item (name with its refine level, the tag,
-  labeled quality), its attributes, and the gains / losses against each
-  position it fits, with that position's Equip button. The attributes are
+  way. Selecting a cell opens
+  its item card (the details): Sell, Salvage and the Craft button (§7) on a
+  row at its top, then blocks for the item (name with its refine level, the
+  tag, labeled quality, with that position's Equip button) and its
+  attributes. Beside them, for a bag item, a block per position it fits (both
+  of a pair): the item worn there with its attributes, or that the position
+  is empty, then the gains / losses equipping this one brings. The attributes are
   grouped by what they do, each group on a pill naming it in its colour:
   Offence (`--offence`, rose: damage, crit, attack speed, the Killing
   Array), Defence (`--defence`, indigo: HP, defence, lifesteal, the Binding
@@ -1418,12 +1420,29 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   Equip by dragging the item onto the character panel (onto one of a pair to
   choose it; anywhere else picks its default position), by double-click, or
   with the panel's Equip button (touch and keyboard use the button).
-- In the Full view the character, inventory and side panels keep fixed widths
-  and one shared height whatever tab is open; a taller tab or item scrolls
-  inside its panel. The details panel's Sell, Salvage and Craft row sits at
-  its top, over the item, in three equal columns (Craft always the last, even
-  alone on a worn item; a long label wraps inside its button), and only the
-  item's lines scroll, so the buttons never move under the pointer.
+- In the Full view the character and inventory panels keep fixed widths and
+  one shared height whatever tab is open; a taller tab scrolls inside its
+  panel. The item card floats over them beside its cell, never over it: on
+  the right when 480 px fit there (320 px for a worn item, one column), else
+  on the roomier side, narrowed; level with the cell, kept inside the window.
+  The item and the worn items sit side by side when the card is at least
+  26rem wide, one over the other otherwise. In a window under 940 px wide,
+  or with under 272 px either side, it is a sheet along the bottom (at most
+  60% of the height), and the page scrolls so the sheet never covers the
+  cell. Its Sell, Salvage and Craft row sits at its top, over the item, in
+  three equal columns (Craft always the last, even alone on a worn item; a
+  long label wraps between words inside its button), and only the item's
+  lines scroll, so the buttons never move under the pointer.
+- The card closes with Esc (from the card or its cell; focus goes back to
+  the cell), its ✕ button, a press anywhere outside it (a tap on touch, so
+  the page still scrolls under the sheet; not a cell, which opens that
+  cell's card, nor the Crafting panel it opened), switching away from the
+  tab its cell is on, starting to drag a bag item, and once its item leaves
+  the cell: sold, salvaged, equipped or unequipped (focus then goes to the
+  cell, or the slot it was equipped to). Enter or Space on a cell opens it
+  with focus on the card itself (Tab reaches its buttons), so a repeated
+  Enter never sells. It is a dialog named after the item, and follows its
+  cell when the window, a panel's scroll or a re-sort moves it.
 - Dark theme by default; Menu → Settings offers Light and Match system. The
   choice is a display preference, so Reset progress keeps it, and the page
   paints in it from the first frame. Text 4.5:1 or more on its background in
@@ -1537,7 +1556,7 @@ Grade is also written as text, never shown by colour alone.
 
 | View | When | Shows |
 |---|---|---|
-| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips and Recent drops side by side (stacked under 560 px wide); then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
+| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips and Recent drops side by side (stacked under 560 px wide); then Character and Inventory side by side, the bag ten cells wide, with an item's details in a card over them (under 940 px wide the strip spans the page, the bag is eight cells wide and the card is a sheet along the bottom). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`; `Tribulation due` or `Tribulation paused` in place of the realm, §4; then `· +6 pts` while stat points wait) and the latest-drop toast |
 | **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, Review due while a Tribulation is due, or Review postponed while it is set aside, §4). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |

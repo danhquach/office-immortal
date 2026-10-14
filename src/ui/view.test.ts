@@ -46,6 +46,11 @@ import {
   formatBonus,
   freshDrops,
   gridMove,
+  cardPlace,
+  CARD_EDGE,
+  CARD_MIN,
+  CARD_NARROW,
+  CARD_WIDTH,
   itemLineGroups,
   itemLines,
   itemTag,
@@ -1402,6 +1407,65 @@ describe('inventory pages', () => {
     expect(pageOf(BAG_PAGE - 1)).toBe(0);
     expect(pageOf(BAG_PAGE)).toBe(1);
     expect(pageOf(MAX_BAG_SIZE - 1)).toBe(1);
+  });
+});
+
+describe('cardPlace', () => {
+  const cell = (left: number, top = 300) => ({ left, top, width: 46 });
+
+  it('goes right of the cell when its full width fits there', () => {
+    expect(cardPlace(cell(320), 960, 640, 300)).toEqual({
+      sheet: false,
+      left: 320 + 46 + CARD_EDGE,
+      top: 300,
+      width: CARD_WIDTH,
+      maxHeight: 640 - 2 * CARD_EDGE,
+    });
+  });
+
+  it('goes left of a cell near the right edge, never over it', () => {
+    const p = cardPlace(cell(880), 960, 640, 300);
+    if (p.sheet) throw new Error('expected a card');
+    expect(p.width).toBe(CARD_WIDTH);
+    expect(p.left + p.width).toBe(880 - CARD_EDGE);
+  });
+
+  it('narrows to the roomier side when neither side fits it whole', () => {
+    // A middle cell in the 960 px frame: 438 px left, 444 px right.
+    const p = cardPlace(cell(454), 960, 640, 300);
+    if (p.sheet) throw new Error('expected a card');
+    expect(p.width).toBe(960 - 500 - 2 * CARD_EDGE);
+    expect(p.left).toBe(500 + CARD_EDGE);
+    expect(p.width).toBeGreaterThanOrEqual(CARD_MIN);
+  });
+
+  it('takes a narrower width when asked, on the side that fits it', () => {
+    // 618 px left, 264 px right of the cell: 320 fits only on the left.
+    const p = cardPlace(cell(634), 960, 640, 300, CARD_NARROW);
+    if (p.sheet) throw new Error('expected a card');
+    expect(p.width).toBe(CARD_NARROW);
+    expect(p.left).toBe(634 - CARD_EDGE - CARD_NARROW);
+  });
+
+  it('keeps the card inside the window, top and bottom', () => {
+    const low = cardPlace(cell(320, 600), 960, 640, 300);
+    if (low.sheet) throw new Error('expected a card');
+    expect(low.top + 300).toBe(640 - CARD_EDGE);
+    const high = cardPlace(cell(320, -20), 960, 640, 300);
+    if (high.sheet) throw new Error('expected a card');
+    expect(high.top).toBe(CARD_EDGE);
+    // Taller than the window: from the top edge, at the window's height.
+    const tall = cardPlace(cell(320, 400), 960, 640, 2000);
+    if (tall.sheet) throw new Error('expected a card');
+    expect(tall.top).toBe(CARD_EDGE);
+    expect(tall.maxHeight).toBe(640 - 2 * CARD_EDGE);
+  });
+
+  it('is a sheet in a narrow window or with no room either side', () => {
+    expect(cardPlace(cell(100), 939, 640, 300)).toEqual({ sheet: true });
+    expect(cardPlace(cell(100), 375, 812, 300)).toEqual({ sheet: true });
+    // A cell as wide as the window leaves no side.
+    expect(cardPlace({ left: 200, top: 0, width: 600 }, 1000, 640, 300)).toEqual({ sheet: true });
   });
 });
 
