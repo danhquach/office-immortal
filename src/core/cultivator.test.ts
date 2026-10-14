@@ -533,11 +533,12 @@ describe('stat curves (docs/design.md §3)', () => {
     }
   });
 
-  it('adds damage only for the Path main stat, +1.5 a point', () => {
+  it("adds damage only for the Path main stat, +1.5 a point times the Path's damage", () => {
     for (const path of PATH_IDS) {
       for (const stat of STAT_IDS) {
         const gain = at(path, stat, 101).damage - at(path, stat, 100).damage;
-        expect(gain).toBeCloseTo(stat === PATHS[path].primary ? DAMAGE_PER_MAIN : 0, 9);
+        const full = DAMAGE_PER_MAIN * PATHS[path].damageMultiplier;
+        expect(gain).toBeCloseTo(stat === PATHS[path].primary ? full : 0, 9);
       }
     }
   });

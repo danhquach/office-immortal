@@ -29,6 +29,9 @@ import {
 } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import { syncStore } from '../core/store.ts';
+import { freshCombat } from '../core/skills.ts';
+import { pathSkills } from '../core/path-skills.ts';
+import { setLevel } from '../dev/scenarios.ts';
 import {
   ARRAY_TICK,
   canEquip,
@@ -38,6 +41,8 @@ import {
   ENEMY_ARRIVAL,
   equip,
   faceTribulation,
+  gameSkills,
+  loadedFightAt,
   newGame,
   QI_TICK,
   newTrial,
@@ -223,9 +228,56 @@ describe('round trip', () => {
     }
   });
 
-  it('plays on from a loaded save exactly as from the original', () => {
+  it('plays on from a loaded save exactly as from the original, its fight skill state ended', () => {
     const loaded = decodeSave(encodeSave(STATE, SAVED_AT));
-    expect(loaded && tick(loaded.state, 600)).toEqual(tick(STATE, 600));
+    // A load ends the fight's buffs, burns and cooldowns (docs/design.md §5 Skills).
+    expect(loaded && tick(loaded.state, 600)).toEqual(
+      tick({ ...STATE, combat: freshCombat(loadedFightAt(STATE)) }, 600),
+    );
+  });
+
+  it('loads with the skills for its Path and realm: none are saved', () => {
+    expect(encodeSave(STATE, SAVED_AT)).not.toContain('Flying Sword');
+    for (const [path, level] of [
+      ['sword', 1],
+      ['body', 45],
+      ['talisman', 215],
+    ] as const) {
+      const s = setLevel(newGame(3, path), level);
+      const loaded = decodeSave(encodeSave(s, SAVED_AT));
+      expect(loaded && gameSkills(loaded.state, 'you')).toBe(pathSkills(path, realmOf(level)));
+    }
+  });
+
+  it('loads with the fight start it had: no casts in an arrival pause, fight-start rules on time', () => {
+    // Just after a kill: the next fight starts after the arrival pause.
+    const s = newGame(3, 'sword');
+    s.enemies[0]!.hp = 1;
+    s.cultivator.qi = 100;
+    const paused = tick(s, s.cultivator.nextAttackAt + 0.1);
+    expect(paused.kills).toBe(1);
+    expect(paused.combat.fightAt).toBeGreaterThan(paused.time);
+    const loaded = decodeSave(encodeSave(paused, SAVED_AT))!.state;
+    expect(loaded.combat.fightAt).toBe(paused.combat.fightAt);
+    // Qi to spare, but nothing is cast before the fight starts.
+    const later = tick(loaded, paused.combat.fightAt - paused.time - 0.01);
+    expect(later.combat.log).toEqual([]);
+    // Mid-fight, without a Killing Array: the start it had, exactly.
+    const mid = tick(paused, ENEMY_ARRIVAL + 0.5);
+    expect(mid.combat.fight).toBe(paused.combat.fight);
+    expect(decodeSave(encodeSave(mid, SAVED_AT))!.state.combat.fightAt).toBe(mid.combat.fightAt);
+  });
+
+  it('stays loadable after high-realm Path skills fire', () => {
+    for (const path of ['sword', 'body', 'talisman'] as const) {
+      for (const level of [60, 120, 200, 230]) {
+        let s = setLevel(newGame(7, path), level);
+        for (let i = 0; i < 20; i++) {
+          s = tick(s, 600);
+          expect(decodeSave(encodeSave(s, SAVED_AT)), `${path} ${level} ${i}`).not.toBeNull();
+        }
+      }
+    }
   });
 
   it('round-trips every point of long runs with gear put on in any order', () => {
@@ -1260,6 +1312,49 @@ describe('rejects', () => {
       const save = raw();
       save.state.arrayNextAt = at(save.state.time as number);
       expect(load(save)).toBeNull();
+    });
+
+    it.each([
+      ['the earliest array time', () => 0, false],
+      ['the latest array time', (t: number) => t + ENEMY_ARRIVAL + ARRAY_TICK, false],
+      ['a past array time under a Killing Array', () => 0, true],
+    ])('loads %s with a fight start in bounds, and plays on', (_, at, killing) => {
+      const s = structuredClone(STATE);
+      if (killing) {
+        s.cultivator.equipment.attachment = {
+          slot: 'attachment',
+          name: 'Golden Star Disc',
+          level: 1,
+          grade: 'heaven',
+          baseRoll: 0.3,
+          affixes: [
+            { id: 'critChance', roll: 0.5 },
+            { id: 'maxHp', roll: 0.5 },
+            { id: 'defence', roll: 0.5 },
+            { id: 'qiRegen', roll: 0.5 },
+          ],
+          array: 'killing',
+        };
+        s.cultivator.hp = Math.min(s.cultivator.hp, derive(s.cultivator).maxHp);
+      }
+      s.arrayNextAt = at(s.time);
+      const loaded = decodeSave(encodeSave(s, SAVED_AT))?.state;
+      expect(loaded).toBeDefined();
+      if (!loaded) return;
+      const { fightAt } = loaded.combat;
+      expect(Number.isFinite(fightAt)).toBe(true);
+      expect(fightAt).toBeGreaterThanOrEqual(killing ? 0 : -ARRAY_TICK);
+      expect(fightAt).toBeLessThanOrEqual(loaded.time + ENEMY_ARRIVAL);
+      expect(tick(loaded, 60).time).toBe(loaded.time + 60);
+    });
+
+    it('rejects an array time written as 1e999', () => {
+      const text = encodeSave(STATE, SAVED_AT).replace(
+        /"arrayNextAt":[\d.]+/,
+        '"arrayNextAt":1e999',
+      );
+      expect(text).toContain('"arrayNextAt":1e999');
+      expect(decodeSave(text)).toBeNull();
     });
 
     it('accepts an array time left in the past while no Killing Array is worn', () => {

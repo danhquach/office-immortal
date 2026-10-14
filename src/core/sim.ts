@@ -49,23 +49,29 @@ import {
   type GradeId,
   type Item,
 } from './loot.ts';
+import { pathSkills } from './path-skills.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
+  BURN_TICK,
   CAST_PAUSE,
   chooseSkill,
   cooldownFor,
   enduring,
   freshCombat,
+  MAX_BURNS,
   modFactor,
   modInterval,
   modTotal,
   note,
+  reachesOther,
   reflectShare,
   shieldLeft,
+  SKILL_DAMAGE_PER_SPIRIT,
   usable,
   WIND_UP,
   type Combat,
   type Effect,
+  type ModStat,
   type RuleInputs,
   type Side,
   type SkillDef,
@@ -232,18 +238,38 @@ export function newGame(
   return state;
 }
 
+/**
+ * When the fight a loaded save is in started, for its fresh skill state (the
+ * fight's own is never saved). startFight sets the array timer a tick after
+ * the start, and only a Killing Array moves it on: so it says the start
+ * exactly in the arrival pause, and through the fight without one. Under a
+ * Killing Array mid-fight it says the last hit, not the start: the clock's
+ * start (0) is taken, never later than the real one, so nobody casts early
+ * and a fight-start rule is simply past.
+ */
+export function loadedFightAt(s: GameState): number {
+  const at = s.arrayNextAt - ARRAY_TICK;
+  if (at >= s.time || equippedArray(s.cultivator.equipment)?.id !== 'killing') return at;
+  return 0;
+}
+
 /** The skills each side may cast now, in priority order for ties. */
 export type Loadout = (state: GameState, side: Side) => readonly SkillDef[];
 
-/**
- * The skills in the game: none yet. The Path skills (#144) and the enemy
- * skills (#145, #146) fill this in.
- */
+/** No skills on either side, for tests of the rest of combat. */
 export const noSkills: Loadout = () => [];
 
 /**
+ * The skills in the game: the cultivator's Path skills for its Path and realm
+ * (docs/design.md §5 Path skills), derived at every event, never saved. The
+ * enemy skills (#145, #146) fill in the other side.
+ */
+export const gameSkills: Loadout = (s, side) =>
+  side === 'you' ? pathSkills(s.cultivator.path, realmOf(s.cultivator.level)) : [];
+
+/**
  * How a tick is played: `offline` is Overtime Cultivation, at the offline drop
- * rate. `loadout` replaces the game's skills, for tests.
+ * rate. `loadout` replaces the game's skills (gameSkills), for tests.
  */
 export interface TickOptions {
   offline?: boolean;
@@ -264,7 +290,7 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
   const p: Play = {
     rng: rngFrom(s.rng),
     offline: opts.offline === true,
-    loadout: opts.loadout ?? noSkills,
+    loadout: opts.loadout ?? gameSkills,
   };
   const end = s.time + dt;
   for (;;) {
@@ -276,8 +302,11 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
     const youCastAt = you.pending?.at ?? Infinity;
     const foeCastAt = foe.pending?.at ?? Infinity;
     const landAt = foe.windUp?.end ?? Infinity;
+    const youTimerAt = timerAt(you);
+    const foeTimerAt = timerAt(foe);
     // Ties go to the cultivator, then the array, then the enemy, then qi
-    // regen, then the casts, so event order never depends on step size.
+    // regen, then the casts, then burns and endure ends, so event order never
+    // depends on step size.
     const next = Math.min(
       c.nextAttackAt,
       arrayAt,
@@ -286,6 +315,8 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
       youCastAt,
       foeCastAt,
       landAt,
+      youTimerAt,
+      foeTimerAt,
     );
     if (next > end) break;
     s.time = next;
@@ -295,7 +326,9 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
     else if (s.qiNextAt === next) regenQi(s);
     else if (youCastAt === next) castNow(s, p, 'you');
     else if (foeCastAt === next) castNow(s, p, 'foe');
-    else landWindUp(s, p);
+    else if (landAt === next) landWindUp(s, p);
+    else if (youTimerAt === next) statusTimer(s, p, 'you');
+    else statusTimer(s, p, 'foe');
     considerCasts(s, p);
   }
   s.time = end;
@@ -571,6 +604,7 @@ function arrayHits(s: GameState, p: Play): void {
   strikeFoe(s, 0, (d.damage / d.attackInterval) * share * ARRAY_TICK);
   s.arrayNextAt = s.time + ARRAY_TICK;
   if (enemy.hp <= 0) defeated(s, p);
+  else bursts(s, p);
 }
 
 /**
@@ -613,10 +647,17 @@ function strikeYou(s: GameState, raw: number, mitigated = true): number {
   return taken;
 }
 
-/** What gets past a shield (using it up) and a "can't drop below 1 HP" with `hp` left. */
+/**
+ * What gets past a shield (using it up) and a "can't drop below 1 HP" with
+ * `hp` left. A shield with a burst that breaks leaves the burst due.
+ */
 function shielded(status: Status, damage: number, hp: number, now: number): number {
   const absorbed = Math.min(shieldLeft(status, now), damage);
   status.shield -= absorbed;
+  if (absorbed > 0 && status.shield <= 0 && status.shieldBurst > 0) {
+    status.burstDue += status.shieldBurst;
+    status.shieldBurst = 0;
+  }
   const through = damage - absorbed;
   return enduring(status, now) ? Math.min(through, Math.max(0, hp - 1)) : through;
 }
@@ -627,14 +668,45 @@ function shielded(status: Status, damage: number, hp: number, now: number): numb
  * Rounded, so a sliver of reflect sends back nothing rather than 1 HP a hit.
  */
 function reflect(s: GameState, p: Play, hit: Side, taken: number): void {
+  const fight = s.combat.fight;
   const iron = hit === 'you' ? derive(s.cultivator).reflect : 0;
   const back = Math.round(taken * (iron + reflectShare(s.combat[hit], s.time)));
-  if (back <= 0) return;
-  if (hit === 'you') {
-    strikeFoe(s, 0, back, false);
+  if (back > 0) {
+    if (hit === 'you') {
+      strikeFoe(s, 0, back, false);
+      if (currentEnemy(s).hp <= 0) defeated(s, p);
+    } else {
+      strikeYou(s, back, false);
+      if (s.cultivator.hp <= 0) lost(s, p);
+    }
+  }
+  if (s.combat.fight === fight) bursts(s, p);
+}
+
+/**
+ * Every broken shield bursts, the cultivator's first: a burst that breaks
+ * the other side's shield sets that one off too. Each can end the fight.
+ */
+function bursts(s: GameState, p: Play): void {
+  const fight = s.combat.fight;
+  for (;;) {
+    const side = (['you', 'foe'] as const).find((k) => s.combat[k].burstDue > 0);
+    if (!side) return;
+    shieldBurst(s, p, side);
+    if (s.combat.fight !== fight) return;
+  }
+}
+
+/** `side`'s broken shield bursts at the other side, past its defence, which can end the fight. */
+function shieldBurst(s: GameState, p: Play, side: Side): void {
+  const status = s.combat[side];
+  const burst = status.burstDue;
+  status.burstDue = 0;
+  if (side === 'you') {
+    strikeFoe(s, 0, burst, false);
     if (currentEnemy(s).hp <= 0) defeated(s, p);
   } else {
-    strikeYou(s, back, false);
+    strikeYou(s, burst, false);
     if (s.cultivator.hp <= 0) lost(s, p);
   }
 }
@@ -691,6 +763,7 @@ function enemyAttacks(s: GameState, p: Play): void {
   const array = equippedArray(c.equipment);
   if (array?.id === 'illusion' && chance(p.rng, array.value)) return;
   if (chance(p.rng, d.dodge)) return;
+  if (evaded(s, p)) return;
   const taken = strikeYou(s, enemy.damage * modFactor(foe, 'damage', s.time));
   c.qi = Math.min(d.maxQi, c.qi + QI_PER_HIT_TAKEN);
   if (c.hp <= 0) lost(s, p);
@@ -786,6 +859,16 @@ function skillsOf(s: GameState, p: Play, side: Side): readonly SkillDef[] {
   return list;
 }
 
+/**
+ * Enemies a spill can reach, the one in front included: a Tribulation
+ * waiting at the end of the wave can't be.
+ */
+function reachable(s: GameState): number {
+  let n = s.enemies.length;
+  while (n > 1 && s.enemies[n - 1]?.kind === 'tribulation') n -= 1;
+  return n;
+}
+
 /** What the shared rules and a skill's own rule see for `side`, now. */
 function rules(s: GameState, side: Side): RuleInputs {
   const c = s.cultivator;
@@ -801,6 +884,8 @@ function rules(s: GameState, side: Side): RuleInputs {
     maxQi: d.maxQi,
     windingUp: you.windUp !== null,
     fightTime,
+    burning: you.burns.length > 0,
+    evades: you.evades,
   };
   const theirs = {
     hp: enemy.hp,
@@ -809,21 +894,22 @@ function rules(s: GameState, side: Side): RuleInputs {
     maxQi: maxQi(enemy.kind),
     windingUp: foe.windUp !== null,
     fightTime,
+    burning: foe.burns.length > 0,
+    evades: foe.evades,
   };
-  // The next normal hit, without crit or burst, through defence (and the
-  // cultivator's pierce) as strikeFoe/strikeYou take it: what rule 2 reads. A
-  // shield or "can't drop below 1 HP" on the target is left out.
-  const nextHitKills =
-    side === 'you'
-      ? mitigate(
-          d.damage * modFactor(you, 'damage', now) * modFactor(foe, 'damageTaken', now),
-          enemy.defence * modFactor(foe, 'defence', now),
-          d.pierce,
-        ) >= enemy.hp
-      : mitigate(
-          enemy.damage * modFactor(foe, 'damage', now) * modFactor(you, 'damageTaken', now),
-          d.defence * modFactor(you, 'defence', now),
-        ) >= c.hp;
+  // Each side's next normal hit, without crit or burst, through defence (and
+  // the cultivator's pierce) as strikeFoe/strikeYou take it: what rule 2 and
+  // `incoming` read. A shield or "can't drop below 1 HP" on the target is left out.
+  const yourHit = mitigate(
+    d.damage * modFactor(you, 'damage', now) * modFactor(foe, 'damageTaken', now),
+    enemy.defence * modFactor(foe, 'defence', now),
+    d.pierce,
+  );
+  const theirHit = mitigate(
+    enemy.damage * modFactor(foe, 'damage', now) * modFactor(you, 'damageTaken', now),
+    d.defence * modFactor(you, 'defence', now),
+  );
+  const nextHitKills = side === 'you' ? yourHit >= enemy.hp : theirHit >= c.hp;
   return {
     ctx: {
       side,
@@ -831,6 +917,8 @@ function rules(s: GameState, side: Side): RuleInputs {
       other: side === 'you' ? theirs : mine,
       foeKind: enemy.kind,
       waveLeft: s.enemies.length,
+      reachable: reachable(s),
+      incoming: side === 'you' ? theirHit : yourHit,
     },
     status: s.combat[side],
     now,
@@ -895,14 +983,114 @@ function landWindUp(s: GameState, p: Play): void {
   if (def) land(s, p, 'foe', def);
 }
 
-/** A skill lands: its effects in order, until one ends the fight. */
+/**
+ * A skill lands: its effects in order, until one ends the fight. An evade on
+ * the other side turns aside every effect that reaches it (using up all its
+ * evades); the caster's own effects still land.
+ */
 function land(s: GameState, p: Play, side: Side, def: SkillDef): void {
   const fight = s.combat.fight;
-  note(s.combat, { at: s.time, who: side, skill: def.name, windUp: false });
+  const combat = s.combat;
+  note(combat, { at: s.time, who: side, skill: def.name, windUp: false });
+  const target = combat[otherSide(side)];
+  const dodged = target.evades > 0 && def.effects.some(reachesOther);
+  if (dodged) target.evades = 0;
   for (const effect of def.effects) {
-    apply(s, p, side, effect);
+    if (dodged && reachesOther(effect)) continue;
+    apply(s, p, side, effect, def);
     if (s.combat.fight !== fight) return;
   }
+  if (dodged && target.counter) counter(s, p, otherSide(side));
+}
+
+/** A crit at the normal hit, answering a dodge (an evade with `counter`). */
+const COUNTER: Extract<Effect, { type: 'hit' }> = { type: 'hit', mult: 1, crit: 'always' };
+
+function counter(s: GameState, p: Play, side: Side): void {
+  hits(s, p, side, COUNTER, 0);
+}
+
+/**
+ * An evade turns aside an enemy's normal attack, using one up, and answers it
+ * with a crit when it has `counter`. False when there is none to use.
+ */
+function evaded(s: GameState, p: Play): boolean {
+  const { you } = s.combat;
+  if (you.evades <= 0) return false;
+  you.evades -= 1;
+  if (you.counter) counter(s, p, 'you');
+  return true;
+}
+
+/**
+ * The cultivator's skill damage multiplier: SKILL_DAMAGE_PER_SPIRIT a point of
+ * Spirit (after the realm bonus), on every Path. An enemy's skills have none.
+ */
+function skillScale(s: GameState, side: Side): number {
+  return side === 'you' ? 1 + SKILL_DAMAGE_PER_SPIRIT * effectiveStats(s.cultivator).spirit : 1;
+}
+
+/** The next burn tick or endure end on a fighter, Infinity for none. */
+function timerAt(status: Status): number {
+  let at = status.endureHeal > 0 ? status.endureUntil : Infinity;
+  for (const b of status.burns) at = Math.min(at, b.next);
+  return at;
+}
+
+/**
+ * `side`'s timer came due: an endure ends and heals, or a burn ticks through
+ * defence (no crit, no qi, no lifesteal, no reflect), which can end the fight.
+ */
+function statusTimer(s: GameState, p: Play, side: Side): void {
+  const status = s.combat[side];
+  const now = s.time;
+  const c = s.cultivator;
+  if (status.endureHeal > 0 && status.endureUntil <= now) {
+    const share = status.endureHeal;
+    status.endureHeal = 0;
+    heal(s, side, share);
+    return;
+  }
+  const burn = status.burns.find((b) => b.next <= now);
+  if (!burn) return;
+  burn.left -= 1;
+  burn.next += BURN_TICK;
+  status.burns = status.burns.filter((b) => b.left > 0);
+  const fight = s.combat.fight;
+  if (side === 'foe') {
+    strikeFoe(s, 0, burn.damage);
+    if (currentEnemy(s).hp <= 0) defeated(s, p);
+  } else {
+    strikeYou(s, burn.damage);
+    if (c.hp <= 0) lost(s, p);
+  }
+  if (s.combat.fight === fight) bursts(s, p);
+}
+
+/** Heals `side` by `share` of its max HP, never past it. */
+function heal(s: GameState, side: Side, share: number): void {
+  const c = s.cultivator;
+  if (side === 'you') {
+    const max = derive(c).maxHp;
+    c.hp = Math.min(max, c.hp + Math.round(max * share));
+  } else {
+    const enemy = currentEnemy(s);
+    enemy.hp = Math.min(enemy.maxHp, enemy.hp + Math.round(enemy.maxHp * share));
+  }
+}
+
+/** A side's normal hit as a skill reads it: its damage with its damage buffs, times skillScale. */
+function skillBase(s: GameState, side: Side): number {
+  const own = side === 'you' ? derive(s.cultivator).damage : currentEnemy(s).damage;
+  return own * modFactor(s.combat[side], 'damage', s.time) * skillScale(s, side);
+}
+
+/** A share stat's own value for `side`, for a relative mod: lifesteal or crit chance; 1 otherwise. */
+function ownShare(s: GameState, side: Side, stat: ModStat): number {
+  if (stat !== 'lifesteal' && stat !== 'critChance') return 1;
+  if (side === 'foe') return 0;
+  const d = derive(s.cultivator);
+  return stat === 'lifesteal' ? d.lifesteal : d.critChance;
 }
 
 /** The side opposite `side`. */
@@ -910,7 +1098,7 @@ function otherSide(side: Side): Side {
   return side === 'you' ? 'foe' : 'you';
 }
 
-function apply(s: GameState, p: Play, side: Side, e: Effect): void {
+function apply(s: GameState, p: Play, side: Side, e: Effect, def: SkillDef): void {
   const c = s.cultivator;
   const d = derive(c);
   const enemy = currentEnemy(s);
@@ -922,23 +1110,25 @@ function apply(s: GameState, p: Play, side: Side, e: Effect): void {
   const maxHp = side === 'you' ? d.maxHp : enemy.maxHp;
   switch (e.type) {
     case 'hit':
-      hits(s, p, side, e);
+      hits(s, p, side, e, def.qi);
       return;
     case 'mod': {
-      const target = combat[e.on === 'self' ? side : other];
+      const on = e.on === 'self' ? side : other;
+      const target = combat[on];
       // Ended ones go, so a buff cast over and over never piles up.
       target.mods = target.mods.filter((m) => m.until > now);
-      target.mods.push({ stat: e.stat, amount: e.amount, until: now + e.duration });
+      const amount = e.relative ? e.amount * ownShare(s, on, e.stat) : e.amount;
+      target.mods.push({ stat: e.stat, amount, until: now + e.duration, source: def.id });
       return;
     }
     case 'shield':
       mine.shield = Math.round(maxHp * e.share);
       mine.shieldUntil = now + e.duration;
+      mine.shieldBurst = (e.burst ?? 0) * mine.shield;
       note(combat, { at: now, who: side, effect: 'shielded' });
       return;
     case 'heal':
-      if (side === 'you') c.hp = Math.min(maxHp, c.hp + Math.round(maxHp * e.share));
-      else enemy.hp = Math.min(maxHp, enemy.hp + Math.round(maxHp * e.share));
+      heal(s, side, e.share);
       return;
     case 'stun': {
       const until = Math.max(theirs.stunUntil, now + e.duration);
@@ -974,34 +1164,72 @@ function apply(s: GameState, p: Play, side: Side, e: Effect): void {
       return;
     case 'endure':
       mine.endureUntil = now + e.duration;
+      mine.endureHeal = e.heal ?? 0;
       return;
+    case 'evade':
+      mine.evades = e.hits;
+      mine.counter = e.counter === true;
+      return;
+    case 'burn': {
+      const ticks = Math.max(1, Math.round(e.duration / BURN_TICK));
+      const burn = {
+        damage: (skillBase(s, side) * e.mult) / ticks,
+        left: ticks,
+        next: now + BURN_TICK,
+      };
+      if (!e.stack) theirs.burns = [burn];
+      else {
+        theirs.burns.push(burn);
+        if (theirs.burns.length > MAX_BURNS) theirs.burns.shift();
+      }
+      return;
+    }
   }
 }
 
-/** A hit effect: each hit (and its spill) lands, stopping once the fight ends. */
-function hits(s: GameState, p: Play, side: Side, e: Extract<Effect, { type: 'hit' }>): void {
+/**
+ * A hit effect: each hit (and its spill) lands, stopping once the fight ends.
+ * A refund pays back its share of the skill's `qi` at the first kill.
+ */
+function hits(
+  s: GameState,
+  p: Play,
+  side: Side,
+  e: Extract<Effect, { type: 'hit' }>,
+  qi: number,
+): void {
   const fight = s.combat.fight;
   const c = s.cultivator;
   const d = derive(c);
+  let refunded = false;
   for (let i = 0; i < (e.hits ?? 1); i++) {
     const now = s.time;
+    const base = skillBase(s, side);
+    const enemy = currentEnemy(s);
+    const target = side === 'you' ? enemy : { hp: c.hp, maxHp: d.maxHp };
+    const low = e.low && target.hp < target.maxHp * e.low.below ? e.low.mult : 1;
+    const ownMaxHp = side === 'you' ? d.maxHp : enemy.maxHp;
+    const extra = ownMaxHp * (e.maxHp ?? 0) * skillScale(s, side);
     if (side === 'foe') {
-      const { foe } = s.combat;
-      const taken = strikeYou(s, currentEnemy(s).damage * e.mult * modFactor(foe, 'damage', now));
+      const taken = strikeYou(s, base * e.mult * low + extra);
       if (c.hp <= 0) lost(s, p);
       else reflect(s, p, 'you', taken);
     } else {
       const { you } = s.combat;
-      const base = d.damage * modFactor(you, 'damage', now);
       const crit =
         e.crit === 'always' ||
         ((e.crit ?? 'roll') === 'roll' &&
           chance(p.rng, d.critChance + modTotal(you, 'critChance', now)));
-      const dealt = strikeFoe(s, 0, base * e.mult * (crit ? d.critMultiplier : 1));
+      const dealt = strikeFoe(s, 0, base * e.mult * low * (crit ? d.critMultiplier : 1) + extra);
       // Spill never reaches a Tribulation waiting at the end: it is faced whole.
-      let spill = Math.min(e.spill?.count ?? 0, s.enemies.length - 1);
-      while (spill > 0 && s.enemies[spill]?.kind === 'tribulation') spill -= 1;
+      const spill = Math.min(e.spill?.count ?? 0, reachable(s) - 1);
       for (let j = 1; j <= spill; j++) strikeFoe(s, j, base * (e.spill?.mult ?? 0));
+      // Paid before the kills: clearing the floor empties qi, as it always does.
+      const killed = s.enemies.slice(0, spill + 1).some((foe) => foe.hp <= 0);
+      if (killed && e.refund && !refunded) {
+        refunded = true;
+        c.qi = Math.min(d.maxQi, c.qi + Math.round(qi * e.refund));
+      }
       // The ones waiting fall first, from the back, so the indices hold.
       for (let j = spill; j >= 1; j--) if ((s.enemies[j]?.hp ?? 1) <= 0) defeated(s, p, j);
       if (currentEnemy(s).hp <= 0) defeated(s, p);

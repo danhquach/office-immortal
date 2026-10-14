@@ -12,6 +12,8 @@ export interface Path {
   readonly primary: StatId;
   /** Damage multiplier on a crit. */
   readonly critMultiplier: number;
+  /** Multiplies the Path's damage (docs/design.md §3). */
+  readonly damageMultiplier: number;
   /** Share of damage dealt that heals the cultivator. */
   readonly lifesteal: number;
   /** Every Nth attack is a burst for `burstMultiplier` damage; 0 means never. */
@@ -26,6 +28,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     name: 'Sword Cultivator',
     primary: 'agility',
     critMultiplier: 2,
+    damageMultiplier: 1,
     lifesteal: 0.05,
     burstEvery: 0,
     burstMultiplier: 1,
@@ -35,6 +38,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     name: 'Body Refiner',
     primary: 'body',
     critMultiplier: 1.5,
+    damageMultiplier: 1.15,
     lifesteal: 0.15,
     burstEvery: 0,
     burstMultiplier: 1,
@@ -44,6 +48,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     name: 'Talisman Master',
     primary: 'spirit',
     critMultiplier: 1.5,
+    damageMultiplier: 1,
     lifesteal: 0,
     burstEvery: 5,
     burstMultiplier: 5,
@@ -225,7 +230,10 @@ export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipme
   return {
     maxHp: Math.round((40 + HP_PER_BODY * bodyShare * body + b.maxHp) * (1 + b.maxHpPct + realm)),
     defence: DEFENCE_PER_BODY * bodyShare * body + b.defence,
-    damage: (4 + DAMAGE_PER_MAIN * stats[path.primary] + b.damage) * (1 + b.damagePct + realm),
+    damage:
+      (4 + DAMAGE_PER_MAIN * stats[path.primary] + b.damage) *
+      (1 + b.damagePct + realm) *
+      path.damageMultiplier,
     attackInterval: Math.max(minInterval, 1 / (attacks + b.attackSpeed)),
     // A chance: never above certain.
     critChance: Math.min(1, CRIT_BASE + curve(CRIT_CURVE, agility) * agilityShare + b.critChance),
