@@ -166,7 +166,7 @@ const LIGHTNING: SkillDef = {
   kind: 'damage',
   windUp: LIGHTNING_WIND_UP,
   strikes: 3,
-  effects: [{ type: 'hit', mult: 1.5 }],
+  effects: [{ type: 'cut', share: 0.1, of: 'max' }],
   when: (ctx: SkillContext) => ctx.self.hp < ctx.self.maxHp * LIGHTNING_HP_SHARE,
 };
 
@@ -178,8 +178,8 @@ const SIGNATURES: Readonly<Record<(typeof TRIBULATIONS)[number], SkillDef>> = {
     qi: 30,
     cooldown: 0,
     kind: 'damage',
-    // 150% at full HP, up to 300% near 0.
-    effects: [{ type: 'hit', mult: 1.5, missing: 1 }],
+    // 100% at full HP, up to 200% near 0.
+    effects: [{ type: 'hit', mult: 1, missing: 1 }],
     when: always,
   },
   'Annual Appraisal': {
@@ -204,9 +204,9 @@ const SIGNATURES: Readonly<Record<(typeof TRIBULATIONS)[number], SkillDef>> = {
     id: 'assetSeizure',
     name: 'Asset Seizure',
     qi: 30,
-    cooldown: 10,
+    cooldown: 20,
     kind: 'other',
-    effects: [{ type: 'drain', amount: 60, steal: true }],
+    effects: [{ type: 'drain', amount: 40, steal: true }],
     when: (ctx: SkillContext) => ctx.other.qi >= SEIZURE_MIN_QI,
   },
   'Shareholder Revolt': {
@@ -214,9 +214,9 @@ const SIGNATURES: Readonly<Record<(typeof TRIBULATIONS)[number], SkillDef>> = {
     name: 'Vote of No Confidence',
     qi: 40,
     // Longer than the silence, so it is never cast over one still running.
-    cooldown: 15,
+    cooldown: 20,
     kind: 'other',
-    effects: [{ type: 'silence', duration: 5 }],
+    effects: [{ type: 'silence', duration: 2 }],
     when: always,
   },
   'Board Inquiry': {
@@ -224,34 +224,34 @@ const SIGNATURES: Readonly<Record<(typeof TRIBULATIONS)[number], SkillDef>> = {
     name: 'Under Investigation',
     qi: 40,
     // Longer than the burn, so it is never cast over one still running.
-    cooldown: 12,
+    cooldown: 20,
     kind: 'damage',
-    effects: [{ type: 'burn', mult: 3, duration: 8 }],
+    effects: [{ type: 'burn', mult: 1, duration: 5 }],
     when: always,
   },
   'Regulatory Probe': {
     id: 'complianceFreeze',
     name: 'Compliance Freeze',
     qi: 40,
-    cooldown: 12,
+    cooldown: 20,
     kind: 'other',
-    effects: [{ type: 'stun', duration: 2 }],
+    effects: [{ type: 'stun', duration: 1.5 }],
     when: always,
   },
   'Market Crash': {
     id: 'freefall',
     name: 'Freefall',
     qi: 60,
-    cooldown: 20,
+    cooldown: 30,
     kind: 'damage',
-    effects: [{ type: 'cut', share: 0.15, of: 'max', hits: 3 }],
+    effects: [{ type: 'cut', share: 0.1, of: 'max', hits: 3 }],
     when: always,
   },
   'Heavenly Audit': {
     id: 'finalJudgement',
     name: 'Final Judgement',
     qi: 60,
-    cooldown: 0,
+    cooldown: 30,
     kind: 'damage',
     windUp: FINAL_JUDGEMENT_WIND_UP,
     effects: [{ type: 'hit', mult: 4 }],

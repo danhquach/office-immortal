@@ -105,12 +105,19 @@ export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
   };
 }
 
+/**
+ * The qi the first Tribulation steps up with, enough for Final Warning: a quick
+ * cultivator wins that fight in seconds, before it could build the qi
+ * (docs/design.md §5 Tribulation skills). Every later one steps up at 0.
+ */
+export const FIRST_TRIBULATION_QI = 30;
+
 /** The Tribulation that closes realm `realm` (an index into REALMS below Immortal Ascension), on `floor`. */
 export function makeTribulation(floor: number, realm: number): Enemy {
   const name = TRIBULATIONS[realm];
   if (name === undefined)
     throw new RangeError(`makeTribulation: no Tribulation for realm ${realm}`);
-  return makeEnemy(floor, 'tribulation', name);
+  return { ...makeEnemy(floor, 'tribulation', name), qi: realm === 0 ? FIRST_TRIBULATION_QI : 0 };
 }
 
 /** Every enemy on a floor, in fighting order: the waves, then the elite, then the boss. */

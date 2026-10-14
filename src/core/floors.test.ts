@@ -3,12 +3,16 @@ import {
   BOSSES,
   DEMONS,
   DEMONS_PER_WAVE,
+  FIRST_TRIBULATION_QI,
   makeEnemy,
   makeFloor,
+  makeTribulation,
+  TRIBULATIONS,
   WAVES_PER_FLOOR,
   zoneOf,
   ZONES,
 } from './floors.ts';
+import { enemySkills } from './enemy-skills.ts';
 import { createRng } from './rng.ts';
 
 describe('makeFloor', () => {
@@ -57,6 +61,22 @@ describe('makeEnemy', () => {
     expect(elite.maxHp).toBeGreaterThan(demon.maxHp);
     expect(boss.maxHp).toBeGreaterThan(elite.maxHp);
     expect(boss.xp).toBeGreaterThan(elite.xp);
+  });
+});
+
+describe('makeTribulation', () => {
+  it('steps the first up with the qi for Final Warning, every later one at 0', () => {
+    expect(makeTribulation(7, 0)).toMatchObject({
+      name: 'Probation Review',
+      qi: FIRST_TRIBULATION_QI,
+    });
+    for (let realm = 1; realm < TRIBULATIONS.length; realm++) {
+      expect(makeTribulation(7, realm).qi, TRIBULATIONS[realm]).toBe(0);
+    }
+    const finalWarning = enemySkills({ kind: 'tribulation', name: 'Probation Review' }, {}).find(
+      (k) => k.id === 'finalWarning',
+    );
+    expect(FIRST_TRIBULATION_QI).toBeGreaterThanOrEqual(finalWarning?.qi ?? Infinity);
   });
 });
 

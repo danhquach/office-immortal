@@ -708,7 +708,8 @@ describe('spending Spirit Stones', () => {
   });
 
   it('spends new points by the plan with Auto-assign on, leaving older unspent points alone', () => {
-    let s = tick(newGame(3, 'sword'), 300);
+    // Level 6, so new points come before the first Tribulation.
+    let s = tick(newGame(3, 'sword'), 120);
     const held = s.cultivator.unspent;
     const level = s.cultivator.level;
     const stats = { ...s.cultivator.stats };
