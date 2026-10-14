@@ -280,6 +280,9 @@ describe('round trip', () => {
     }
   });
 
+  // Ten hours of sim per Path: about 1 s on a laptop, but over 5 s on a CI
+  // runner busy with the balance tests (#165), so the limit is raised, the
+  // work is not cut.
   it('round-trips every point of long runs with gear put on in any order', () => {
     for (const path of ['sword', 'body', 'talisman'] as const) {
       let s = newGame(21, path);
@@ -291,7 +294,7 @@ describe('round trip', () => {
         expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
       }
     }
-  });
+  }, 30_000);
 
   it('writes to and reads from storage', () => {
     const store = memory();
