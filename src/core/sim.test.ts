@@ -75,6 +75,12 @@ import { skipToTribulation } from '../dev/scenarios.ts';
  * loaded machine could time them out; the limit is raised, the work is not cut.
  */
 const LONG_SIM_MS = 30_000;
+/**
+ * The Path balance test's limit: 64 seeds × 3 Paths × 70 minutes with every
+ * skill cast, about 9 s on a laptop and over 30 s on a CI runner once enemies
+ * cast too (#145). Raised, as above, not cut.
+ */
+const BALANCE_MS = 120_000;
 
 const PATH_IDS = Object.keys(PATHS) as PathId[];
 
@@ -1356,7 +1362,7 @@ describe('Path balance', () => {
         expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
       }
     },
-    LONG_SIM_MS,
+    BALANCE_MS,
   );
 });
 
