@@ -50,7 +50,14 @@ import {
   requiredRealm,
   restartFloor,
   retire,
+  setAutoTribulation,
   tick,
+  TRIAL_LOSS_LIMIT,
+  TRIAL_RETRY_SECONDS,
+  TRIAL_STRONGER,
+  trialRetryDue,
+  trialRetryIn,
+  trialSetAside,
   unequip,
   type GameState,
   type TickOptions,
@@ -553,7 +560,10 @@ describe('Tribulation', () => {
   it('is queued once, never twice, while the cultivator is held', () => {
     let s = until(newGame(7, 'talisman'), hasTribulation);
     for (let t = 0; t < 900; t++) {
-      expect(s.enemies.filter((e) => e.kind === 'tribulation')).toHaveLength(1);
+      const queued = s.enemies.filter((e) => e.kind === 'tribulation');
+      // Once set aside it leaves the floor (see 'Tribulation retry limit').
+      if (trialSetAside(s)) expect(queued.length).toBeLessThanOrEqual(1);
+      else expect(queued).toHaveLength(1);
       for (const e of s.enemies) if (e.kind === 'tribulation') e.damage = 1e9;
       s = tick(s, 1);
     }
@@ -1302,4 +1312,212 @@ describe('Path balance', () => {
     },
     LONG_SIM_MS,
   );
+});
+
+describe('Tribulation retry limit', () => {
+  /** Held at level 10 with the Tribulation queued at the end of the floor. */
+  const held = (): GameState => until(newGame(7, 'sword'), hasTribulation);
+
+  /** Faces the Tribulation (unless it is already in front) and loses to it. */
+  function loseTrial(state: GameState): GameState {
+    const losses = state.trial.losses;
+    const s =
+      state.enemies[0]?.kind === 'tribulation' ? structuredClone(state) : faceTribulation(state);
+    s.enemies[0]!.damage = 1e9;
+    return until(s, (x) => x.trial.losses > losses, 60);
+  }
+
+  /** Loses `n` times in a row. */
+  function loseTimes(state: GameState, n: number): GameState {
+    for (let i = 0; i < n; i++) state = loseTrial(state);
+    return state;
+  }
+
+  it(`sets it aside after exactly ${TRIAL_LOSS_LIMIT} losses in a row, not before`, () => {
+    let s = held();
+    for (let i = 1; i < TRIAL_LOSS_LIMIT; i++) {
+      s = loseTrial(s);
+      expect(s.trial.losses).toBe(i);
+      expect(trialSetAside(s)).toBe(false);
+      // Unchanged before the limit: the floor replays with it at the end.
+      expect(s.enemies[s.enemies.length - 1]?.kind).toBe('tribulation');
+      expect(characterStatus(s).kind).toBe('tribulationDue');
+    }
+    s = loseTrial(s);
+    expect(s.trial.losses).toBe(TRIAL_LOSS_LIMIT);
+    expect(trialSetAside(s)).toBe(true);
+    expect(hasTribulation(s)).toBe(false);
+    expect(characterStatus(s).kind).toBe('tribulationPaused');
+    // Still due, so the alert's Try again can start it.
+    expect(readyForTribulation(s.cultivator)).toBe(true);
+    expect(canFaceTribulation(s)).toBe(true);
+  });
+
+  it('records the time and the strength of the last loss', () => {
+    const s = loseTrial(held());
+    const d = derive(s.cultivator);
+    expect(s.trial.lostDamage).toBe(d.damage);
+    expect(s.trial.lostMaxHp).toBe(d.maxHp);
+    expect(s.trial.lostAt).toBeLessThanOrEqual(s.time);
+    expect(s.trial.lostAt).toBeGreaterThan(s.time - 60);
+  });
+
+  it('keeps farming the same floor while set aside, never passing it', () => {
+    const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
+    const later = tick(s, TRIAL_RETRY_SECONDS - 60);
+    expect(later.floor).toBe(s.floor);
+    expect(later.highestFloor).toBe(s.highestFloor);
+    expect(later.kills).toBeGreaterThan(s.kills + 10);
+    expect(later.cultivator.level).toBe(s.cultivator.level);
+    expect(hasTribulation(later)).toBe(false);
+  });
+
+  it(`retries once ${TRIAL_RETRY_SECONDS / 60} minutes after the last loss, at the end of the floor`, () => {
+    const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
+    const before = tick(s, TRIAL_RETRY_SECONDS - 60);
+    expect(trialRetryDue(before)).toBe(false);
+    expect(trialRetryIn(before)).toBeCloseTo(s.trial.lostAt + TRIAL_RETRY_SECONDS - before.time, 9);
+    const queued = until(before, hasTribulation, 120);
+    expect(queued.time).toBeGreaterThanOrEqual(s.trial.lostAt + TRIAL_RETRY_SECONDS);
+    expect(queued.enemies[queued.enemies.length - 1]?.kind).toBe('tribulation');
+    expect(trialRetryIn(queued)).toBe(0);
+  });
+
+  it('sets it aside again after a lost retry, restarting the timer', () => {
+    const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
+    const queued = until(tick(s, TRIAL_RETRY_SECONDS), hasTribulation, 120);
+    const again = loseTrial(queued);
+    expect(again.trial.losses).toBe(TRIAL_LOSS_LIMIT + 1);
+    expect(again.trial.lostAt).toBeGreaterThan(s.trial.lostAt + TRIAL_RETRY_SECONDS);
+    expect(trialSetAside(again)).toBe(true);
+    expect(hasTribulation(again)).toBe(false);
+    expect(trialRetryDue(again)).toBe(false);
+    // Not before another full wait.
+    expect(hasTribulation(tick(again, TRIAL_RETRY_SECONDS - 60))).toBe(false);
+  });
+
+  it('gives Try again a single try: a loss sets it aside again', () => {
+    const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
+    const tried = loseTrial(s);
+    expect(tried.trial.losses).toBe(TRIAL_LOSS_LIMIT + 1);
+    expect(hasTribulation(tried)).toBe(false);
+  });
+
+  it('clears the loss count on a win', () => {
+    const s = faceTribulation(loseTimes(held(), TRIAL_LOSS_LIMIT));
+    s.enemies[0]!.hp = 1;
+    const won = until(s, (x) => x.cultivator.level > 10, 60);
+    expect(won.trial).toEqual({ auto: true, losses: 0, lostAt: 0, lostDamage: 0, lostMaxHp: 0 });
+    expect(trialSetAside(won)).toBe(false);
+  });
+
+  it('clears the loss count on a win before the limit too', () => {
+    const s = loseTrial(held());
+    const at = s.enemies.findIndex((e) => e.kind === 'tribulation');
+    s.enemies[at]!.hp = 1;
+    const won = until(s, (x) => x.cultivator.level > 10);
+    expect(won.trial.losses).toBe(0);
+  });
+
+  describe(`the stronger trigger (${TRIAL_STRONGER * 100}%)`, () => {
+    const aside = (): GameState => loseTimes(held(), TRIAL_LOSS_LIMIT);
+
+    it('fires on damage at exactly the threshold and not just under it', () => {
+      const s = aside();
+      const d = derive(s.cultivator);
+      s.trial.lostDamage = d.damage / (1 + TRIAL_STRONGER) + 1e-6;
+      expect(trialRetryDue(s)).toBe(false);
+      s.trial.lostDamage = d.damage / (1 + TRIAL_STRONGER) - 1e-6;
+      expect(trialRetryDue(s)).toBe(true);
+    });
+
+    it('fires on max HP at exactly the threshold and not just under it', () => {
+      const s = aside();
+      const d = derive(s.cultivator);
+      s.trial.lostMaxHp = d.maxHp / (1 + TRIAL_STRONGER) + 1e-6;
+      expect(trialRetryDue(s)).toBe(false);
+      s.trial.lostMaxHp = d.maxHp / (1 + TRIAL_STRONGER) - 1e-6;
+      expect(trialRetryDue(s)).toBe(true);
+    });
+
+    it('queues the retry at the next kill once stat points make the cultivator stronger', () => {
+      const s = aside();
+      expect(trialRetryDue(s)).toBe(false);
+      // The Path's primary stat drives damage.
+      s.cultivator.stats[PATHS.sword.primary] += 20;
+      expect(derive(s.cultivator).damage).toBeGreaterThanOrEqual(
+        s.trial.lostDamage * (1 + TRIAL_STRONGER),
+      );
+      expect(trialRetryDue(s)).toBe(true);
+      const queued = until(s, hasTribulation, 60);
+      expect(queued.time).toBeLessThan(s.trial.lostAt + TRIAL_RETRY_SECONDS);
+    });
+
+    it('queues the retry once body makes max HP 5% higher', () => {
+      const s = aside();
+      s.cultivator.stats.body += 10;
+      expect(derive(s.cultivator).maxHp).toBeGreaterThanOrEqual(
+        s.trial.lostMaxHp * (1 + TRIAL_STRONGER),
+      );
+      expect(hasTribulation(until(s, hasTribulation, 60))).toBe(true);
+    });
+  });
+
+  describe('Auto-Tribulation off', () => {
+    it('takes a queued Tribulation off the floor and never queues it, nor passes the floor', () => {
+      const s = setAutoTribulation(held(), false);
+      expect(s.trial.auto).toBe(false);
+      expect(hasTribulation(s)).toBe(false);
+      const later = tick(s, 1800);
+      expect(hasTribulation(later)).toBe(false);
+      expect(later.floor).toBe(s.floor);
+      expect(later.highestFloor).toBe(s.highestFloor);
+      expect(later.cultivator.level).toBe(10);
+      expect(characterStatus(later).kind).toBe('tribulationDue');
+    });
+
+    it('leaves a Tribulation being fought where it is', () => {
+      const s = setAutoTribulation(faceTribulation(held()), false);
+      expect(s.enemies[0]?.kind).toBe('tribulation');
+    });
+
+    it('still lets Face it start one, and counts its losses', () => {
+      let s = setAutoTribulation(held(), false);
+      expect(canFaceTribulation(s)).toBe(true);
+      s = loseTrial(s);
+      expect(s.trial.losses).toBe(1);
+      expect(hasTribulation(s)).toBe(false);
+      s = loseTimes(s, TRIAL_LOSS_LIMIT - 1);
+      expect(trialSetAside(s)).toBe(true);
+      // No automatic tries with the switch off, however long it waits.
+      expect(trialRetryIn(s)).toBeNull();
+      expect(hasTribulation(tick(s, TRIAL_RETRY_SECONDS * 2))).toBe(false);
+    });
+
+    it('queues it again when turned back on, by the same rules', () => {
+      const off = setAutoTribulation(held(), false);
+      expect(hasTribulation(setAutoTribulation(off, true))).toBe(true);
+      const aside = setAutoTribulation(loseTimes(off, TRIAL_LOSS_LIMIT), true);
+      expect(hasTribulation(aside)).toBe(false);
+    });
+
+    it('leaves the input state untouched', () => {
+      const s = held();
+      const copy = structuredClone(s);
+      setAutoTribulation(s, false);
+      expect(s).toEqual(copy);
+    });
+  });
+
+  it('keeps the switch through Early Retirement, with no losses', () => {
+    let s = setAutoTribulation(loseTimes(held(), TRIAL_LOSS_LIMIT), false);
+    s = { ...s, highestFloor: 30, floor: 30 };
+    const next = retire(s);
+    expect(next.trial).toEqual({ auto: false, losses: 0, lostAt: 0, lostDamage: 0, lostMaxHp: 0 });
+  });
+
+  it('gives the same result for one big step as many small ones across a time retry', () => {
+    const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
+    expect(run(s, TRIAL_RETRY_SECONDS + 300, 0.5)).toEqual(tick(s, TRIAL_RETRY_SECONDS + 300));
+  });
 });

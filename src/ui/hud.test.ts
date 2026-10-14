@@ -49,6 +49,12 @@ describe('tabTitle', () => {
     expect(tabTitle(12, 0, true)).toBe('F12 · Tribulation due');
     expect(tabTitle(12, 3, true)).toBe('F12 · Tribulation due · 3 drops');
   });
+
+  it('says a set-aside Tribulation is paused', () => {
+    expect(tabTitle(12, 0, true, true)).toBe('F12 · Tribulation paused');
+    // Paused only means something while one is due.
+    expect(tabTitle(12, 0, false, true)).toBe('F12 · Office Immortal');
+  });
 });
 
 describe('miniStatus', () => {
@@ -66,6 +72,15 @@ describe('miniStatus', () => {
     expect(miniStatus(9, 'Qi Condensation · Intern', 0, true)).toBe('F9 · Tribulation due');
     expect(miniStatus(9, 'Qi Condensation · Intern', 2, true)).toBe(
       'F9 · Tribulation due · 2 drops',
+    );
+  });
+
+  it('says Tribulation paused while it is set aside', () => {
+    expect(miniStatus(9, 'Qi Condensation · Intern', 0, true, true)).toBe(
+      'F9 · Tribulation paused',
+    );
+    expect(miniStatus(9, 'Qi Condensation · Intern', 2, true, true)).toBe(
+      'F9 · Tribulation paused · 2 drops',
     );
   });
 });

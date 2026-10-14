@@ -10,7 +10,15 @@ import {
 } from '../core/cultivator.ts';
 import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE, refineCost, rerollCost } from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
-import { equip, faceTribulation, newGame, tick, type GameState } from '../core/sim.ts';
+import {
+  equip,
+  faceTribulation,
+  newGame,
+  setAutoTribulation,
+  tick,
+  TRIAL_RETRY_SECONDS,
+  type GameState,
+} from '../core/sim.ts';
 import { OFFER_IDS, syncStore, type OfferId } from '../core/store.ts';
 import {
   arraySetUp,
@@ -80,6 +88,7 @@ import {
   statRows,
   tribulationBanner,
   tribulationCall,
+  trialPause,
   tribulationFellDue,
   discreetRows,
   waveLabel,
@@ -582,6 +591,14 @@ describe('discreetRows', () => {
     }
     expect(rows[6]?.[1]).toBe('Đến hạn duyệt');
   });
+
+  it('says Review postponed while the Tribulation is set aside', () => {
+    expect(discreetRows(pausedAt(10), null, true)[6]?.[1]).toBe('Review postponed');
+    setLang('vi');
+    const vi = discreetRows(pausedAt(10), null, true)[6]?.[1];
+    setLang(DEFAULT_LANG);
+    expect(vi).toBe('Hoãn duyệt');
+  });
 });
 
 describe('summaryIcon', () => {
@@ -767,6 +784,8 @@ describe('characterStatusLabel', () => {
     const due = dueAt(10);
     expect(characterStatusLabel(due)).toBe('Tribulation due');
     expect(characterStatusLabel(faceTribulation(due))).toBe('Facing Tribulation');
+    expect(characterStatusLabel(pausedAt(10))).toBe('Tribulation paused');
+    expect(characterStatusLabel(faceTribulation(pausedAt(10)))).toBe('Facing Tribulation');
   });
 
   it('follows the language', () => {
@@ -2121,5 +2140,55 @@ describe('versionDetails', () => {
 
   it('calls a dev build local and leaves out a time that is not a date', () => {
     expect(versionDetails('dev', 'not a date')).toEqual(['Local build']);
+  });
+});
+
+/** Held at `level` with its Tribulation set aside after three losses, `ago` seconds back. */
+function pausedAt(level: number, ago = 60): GameState {
+  const s = dueAt(level);
+  s.enemies.pop();
+  s.time = 5000;
+  s.trial = { auto: true, losses: 3, lostAt: s.time - ago, lostDamage: 1e9, lostMaxHp: 1e9 };
+  return s;
+}
+
+describe('trialPause', () => {
+  it('is null while the Tribulation is due and not set aside, or not due', () => {
+    expect(trialPause(dueAt(10))).toBeNull();
+    expect(trialPause(newGame(1, 'sword'))).toBeNull();
+  });
+
+  it('says it is paused, the losses so far and when the next try comes', () => {
+    expect(trialPause(pausedAt(10, 60))).toEqual({
+      head: 'Tribulation paused after 3 losses: get stronger',
+      detail: '3 losses · retry in 9 min',
+    });
+  });
+
+  it('says the retry comes at the end of the floor once it is due', () => {
+    const s = pausedAt(10, TRIAL_RETRY_SECONDS);
+    expect(trialPause(s)?.detail).toBe('3 losses · retry at floor end');
+    s.trial.lostAt = s.time - 60;
+    s.enemies.push(makeTribulation(1, realmOf(10)));
+    expect(trialPause(s)?.detail).toBe('3 losses · retry at floor end');
+  });
+
+  it('says automatic tries are off with the switch off', () => {
+    const s = setAutoTribulation(pausedAt(10), false);
+    expect(trialPause(s)?.detail).toBe('3 losses · auto off');
+  });
+
+  it('is null while the Tribulation is being fought', () => {
+    expect(trialPause(faceTribulation(pausedAt(10)))).toBeNull();
+  });
+
+  it('is translated', () => {
+    setLang('vi');
+    const pause = trialPause(pausedAt(10, 60));
+    setLang(DEFAULT_LANG);
+    expect(pause).toEqual({
+      head: 'Tạm hoãn Độ Thiên Kiếp sau 3 lần thua: hãy mạnh hơn',
+      detail: 'Thua 3 lần · thử lại sau 9 phút',
+    });
   });
 });

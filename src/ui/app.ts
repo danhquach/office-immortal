@@ -76,6 +76,8 @@ import {
   equip,
   unequip,
   faceTribulation,
+  setAutoTribulation,
+  trialSetAside,
   newGame,
   retire,
   tick,
@@ -262,6 +264,7 @@ import {
   stripEvents,
   tribulationBanner,
   tribulationCall,
+  trialPause,
   tribulationFellDue,
   discreetRows,
   waveLabel,
@@ -1792,9 +1795,11 @@ function play(
   const trialCall = el('button', 'trial-call');
   trialCall.type = 'button';
   trialCall.hidden = true;
-  const trialHead = elt('strong', '', 'trial.due');
+  // Set aside after losses, it says so and the click is a single Try again.
+  const trialHead = el('strong');
   const trialText = el('span');
-  trialCall.append(trialHead, trialText);
+  const trialRetry = elt('span', 'trial-retry', 'trial.retry');
+  trialCall.append(trialHead, trialText, trialRetry);
   trialCall.addEventListener('click', () => {
     if (!canFaceTribulation(state)) return;
     const prev = state;
@@ -2583,9 +2588,13 @@ function play(
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);
-  const noticeBtn = button('', '', () => {
+  const noticeBtn = button('', 'toggle', () => {
     void notices.toggle().then(() => drawTools());
   });
+  // Auto-Tribulation (docs/design.md §4): on, a due Tribulation joins the end of the floor.
+  const autoTrialBtn = button('', 'toggle', () =>
+    act(setAutoTribulation(state, !state.trial.auto)),
+  );
   // Pop out offers Mini or Discreet (docs/design.md §14); while one is open it closes it.
   const popBtn = button('', '', () => (pip ? pip.close() : popList.toggle()));
   const popList = pickList(
@@ -2714,11 +2723,12 @@ function play(
     navigator.clipboard.writeText(code).then(() => showCode(() => t('menu.exported')), manual);
   });
   const importField = el('label', 'field');
-  const importCaption = document.createTextNode('');
-  say(() => (importCaption.data = t('menu.importField')));
+  // Named for screen readers; the field shows the same words as its placeholder.
+  const importCaption = elt('span', 'sr-only', 'menu.importField');
   // The pasted code is never echoed: not in a message, the title or a log.
   const importBox = el('textarea', 'code');
-  importBox.rows = 3;
+  importBox.rows = 2;
+  attr(importBox, 'placeholder', 'menu.importField');
   importBox.autocomplete = 'off';
   // Off, so no spell or grammar checker sends a code anywhere.
   for (const box of [importBox, exportBox]) {
@@ -2805,6 +2815,31 @@ function play(
       buttonT('menu.close', '', () => dialog.close()),
     );
     const settings = el('div', 'settings');
+    /** One section of Settings, set off from the next by a rule. */
+    const section = (...nodes: HTMLElement[]): HTMLElement => {
+      const box = el('section');
+      box.append(...nodes);
+      return box;
+    };
+    /**
+     * A setting with one control: its name and a hint on the left, the
+     * control at a fixed width on the right. A select or toggle is named by
+     * the heading; a toggle's On / Off is its aria-pressed state.
+     */
+    const row = (id: string, title: MessageKey, hint: MessageKey | null, control: HTMLElement) => {
+      const h3 = elt('h3', '', title);
+      h3.id = id;
+      const text = el('div');
+      text.append(h3, ...(hint ? [elt('p', 'muted hint', hint)] : []));
+      const line = el('div', 'setting-row');
+      // A plain button keeps its own words as its name.
+      if (control.classList.contains('toggle') || !(control instanceof HTMLButtonElement)) {
+        control.id ||= `${id}-control`;
+        control.setAttribute('aria-labelledby', id);
+      }
+      line.append(text, control);
+      return section(line);
+    };
     const themePick = choice('menu.theme', [
       ['dark', () => t('menu.dark')],
       ['light', () => t('menu.light')],
@@ -2817,30 +2852,28 @@ function play(
       writeTheme(storage, theme);
       applyTheme();
     });
-    settings.append(themePick.box);
+    settings.append(row('menu-theme', 'menu.theme', null, themePick.select));
     if (notices.state() !== 'unsupported') {
-      settings.append(elt('h3', '', 'menu.notifications'), noticeBtn);
+      settings.append(row('menu-notify', 'menu.notifications', 'menu.notify', noticeBtn));
     }
-    if (cloudUi) settings.append(...cloudUi.menu);
+    settings.append(row('menu-trial', 'menu.autoTrial', 'menu.autoTrialHint', autoTrialBtn));
+    if (cloudUi) settings.append(section(...cloudUi.menu));
+    // Paste, then Import; Export beside it shows the code to copy under the row.
     const codeRow = el('div', 'cloud-row');
-    codeRow.append(exportBtn);
-    const importRow = el('div', 'cloud-row');
-    importRow.append(importBtn);
+    codeRow.append(importBtn, exportBtn);
+    const reset = row('menu-reset', 'menu.reset', 'menu.resetHint', resetAsk);
+    reset.append(resetBox);
     settings.append(
-      elt('h3', '', 'menu.backup'),
-      elt('p', 'muted hint', 'menu.backupHint'),
-      codeRow,
-      exportBox,
-      importField,
-      importRow,
-      importConfirm,
-      codeMsg,
-    );
-    settings.append(
-      elt('h3', '', 'menu.reset'),
-      elt('p', 'muted hint', 'menu.resetHint'),
-      resetAsk,
-      resetBox,
+      section(
+        elt('h3', '', 'menu.backup'),
+        elt('p', 'muted hint', 'menu.backupHint'),
+        importField,
+        codeRow,
+        exportBox,
+        importConfirm,
+        codeMsg,
+      ),
+      reset,
     );
     const help = el('ul', 'lines help');
     for (const line of HELP_LINES) help.append(elt('li', '', line));
@@ -2963,9 +2996,15 @@ function play(
     }
     useSheet(you, `path-${c.path}`, SPRITE_SIZE.path);
     const call = tribulationCall(state);
+    const pause = trialPause(state);
     trialCall.hidden = !call;
-    const callText = call ? t('trial.call', call) : '';
-    if (trialText.textContent !== callText) trialText.textContent = callText;
+    trialCall.classList.toggle('paused', pause !== null);
+    trialRetry.hidden = pause === null;
+    setText(trialHead, pause ? pause.head : t('trial.due'));
+    setText(trialText, pause ? pause.detail : call ? t('trial.call', call) : '');
+    // The one-line strip may cut the text short; the whole of it shows on hover.
+    const whole = call ? `${trialHead.textContent ?? ''} ${trialText.textContent ?? ''}` : '';
+    if (trialCall.title !== whole) trialCall.title = whole;
     strip.classList.toggle('trial', enemy?.kind === 'tribulation');
     if (prev) {
       banner(tribulationBanner(prev, state));
@@ -3780,7 +3819,8 @@ function play(
 
   function drawTools(): void {
     const n = notices.state();
-    setButton(noticeBtn, t(n === 'blocked' ? 'menu.blocked' : 'menu.notify'), n === 'blocked');
+    const notify = n === 'blocked' ? 'menu.blocked' : n === 'on' ? 'menu.on' : 'menu.off';
+    setButton(noticeBtn, t(notify), n === 'blocked');
     noticeBtn.setAttribute('aria-pressed', String(n === 'on'));
     if (n === 'blocked') noticeBtn.title = t('menu.blockedHint');
     else noticeBtn.removeAttribute('title');
@@ -3849,9 +3889,14 @@ function play(
   function drawHud(): void {
     const c = state.cultivator;
     const due = tribulationCall(state) !== null;
+    const paused = due && trialSetAside(state);
+    // Drawn here, so a save loaded from elsewhere shows its own switch.
+    setText(autoTrialBtn, t(state.trial.auto ? 'menu.on' : 'menu.off'));
+    if (autoTrialBtn.getAttribute('aria-pressed') !== String(state.trial.auto))
+      autoTrialBtn.setAttribute('aria-pressed', String(state.trial.auto));
     const plain = isDiscreet();
     // Discreet: a dull file name and a still sheet icon, never the floor, drops or game name.
-    const title = plain ? t('discreet.file') : tabTitle(state.floor, unseen.count, due);
+    const title = plain ? t('discreet.file') : tabTitle(state.floor, unseen.count, due, paused);
     if (document.title !== title) document.title = title;
     if (plain) setFavicon(document, sheetFaviconHref());
     else {
@@ -3874,7 +3919,13 @@ function play(
       const file = t('discreet.file');
       if (pip.document.title !== file) pip.document.title = file;
     } else if (pip) {
-      miniLine.textContent = miniStatus(state.floor, realmLabel(c.level), unseen.count, due);
+      miniLine.textContent = miniStatus(
+        state.floor,
+        realmLabel(c.level),
+        unseen.count,
+        due,
+        paused,
+      );
       miniLine.classList.toggle('due', due);
       if (pip.document.title !== title) pip.document.title = title;
     }

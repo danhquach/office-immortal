@@ -102,6 +102,25 @@ The realm name is primary; the job title is shown beside it.
 - **Losing** to a Tribulation costs nothing: the floor is played again, with
   the Tribulation at its end. Gear is what beats it; a cultivator who stays
   stuck can start over through Reincarnation.
+- **Auto-Tribulation** (Menu, Settings; on by default, kept through Early
+  Retirement): on, a due Tribulation joins the end of the floor as above;
+  off, only the alert's click starts one. Either way a floor can't be passed
+  while a Tribulation is due: cleared without it, the floor is played again.
+- **Retry limit:** after 3 Tribulation losses in a row it is set aside. It
+  leaves the floor and the cultivator farms that floor (loot keeps coming,
+  the floor is not passed). The alert reads "Tribulation paused after 3
+  losses: get stronger" with the losses so far, when the next try comes
+  ("3 losses · retry in 9 min") and a **Try again** chip; a click is a single
+  try. With Auto-Tribulation on it gets one automatic try, joining the end of
+  the floor at the next kill, once either holds: the cultivator's damage or
+  max HP is at least 5% above what it was at the last loss (the Stats tab's
+  damage and max HP, from anything that raises them: gear, stat points,
+  realm bonuses; Soul Banner souls and a Killing Array's hits don't count),
+  or 10 minutes of sim time have passed since the
+  last loss, live or offline (§10 replays the same rules). A lost try sets it
+  aside again and restarts the 10 minutes; a win breaks through as usual and
+  clears the count. While set aside, the status bar and Mini say "Tribulation
+  paused" and Discreet's Status says "Review postponed".
 - **Tribulations:** Probation Review, Annual Appraisal, Restructuring, Hostile
   Takeover, Shareholder Revolt, Board Inquiry, Regulatory Probe, Market Crash,
   Heavenly Audit. Each is 8× a demon's HP and 2.5× its damage on the floor it
@@ -630,6 +649,17 @@ on every autosave, and is always the copy the game plays from.
   enemy's (0 to its kind's pool, so a demon's is always 0) and the next qi
   regen step (`qiNextAt`, at most a second off). Older saves load with no qi
   and the next step a second away; the fields in an older save are rejected.
+- **Version 14** adds the Tribulation retry record (§4): the Auto-Tribulation
+  switch, the loss count, the last loss's sim time and the damage and max HP
+  at it. (Version 12 is held by other work and never reused.)
+  Each field is allow-listed (a boolean; whole counts; a time no later than
+  the save's clock; finite, non-negative strength within the safe-integer
+  range; exact keys, so `__proto__` and the like are refused). Unlike the
+  rest of the save, a bad or missing record does not reject the save: it
+  falls back to the defaults, switch on and no losses, which at worst puts
+  the Tribulation back on the floor. Older saves load with those defaults; a
+  Tribulation already due stays due. A held floor may now be saved with its
+  Tribulation off it (set aside, or the switch off).
 
 ### Updates
 
@@ -915,8 +945,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   combat strip sits in it like an embedded chart, with its own header bar.
 - **Status bar:** at its left a live line saying what the cultivator is
   doing, then "Ready" and the one sheet tab. The live line shows the first
-  that applies: fighting a Tribulation ("Facing Tribulation"), one due
-  ("Tribulation due"), the floor's boss ("Fighting floor 12 boss"), an elite
+  that applies: fighting a Tribulation ("Facing Tribulation"), one set
+  aside ("Tribulation paused", §4), one due ("Tribulation due"), the floor's
+  boss ("Fighting floor 12 boss"), an elite
   ("Fighting an elite · floor 12"), else "Cultivating · floor 12". It follows
   the game every frame and the language on a switch, and is not a live
   region, so screen readers do not announce each change.
@@ -1067,12 +1098,17 @@ Grade is also written as text, never shown by colour alone.
 |---|---|---|
 | **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
-| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`) and the latest-drop toast |
-| **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, or Review due while a Tribulation is due). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |
+| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`; `Tribulation due` or `Tribulation paused` in place of the realm, §4) and the latest-drop toast |
+| **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, Review due while a Tribulation is due, or Review postponed while it is set aside, §4). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |
 
 - The title bar's language button (globe and code) sits beside **Menu**.
-- The title bar's **Menu** holds Settings (notifications, Reset progress,
-  which asks first and then deletes the save) and Help (how to play).
+- The title bar's **Menu** holds Settings and Help (how to play). Settings is
+  one section per setting, set off by a rule: a bold name with a one-line
+  hint, and its control. Theme, Notifications, Auto-Tribulation and Reset
+  progress sit on one row each, the control at one fixed width at the right
+  (toggles read On / Off); Cloud save and Save code stack their controls
+  under the hint, every button that same width. Reset progress asks first
+  and then deletes the save.
 - The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
   tab wears a colour on its border (Bag the accent, Auto filter the Salvage
   colour, Store the Spirit Stones colour), tinted while open. The Store groups

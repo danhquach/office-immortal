@@ -33,6 +33,7 @@ import {
   faceTribulation,
   newGame,
   QI_TICK,
+  newTrial,
   retire,
   tick,
   type GameState,
@@ -97,8 +98,15 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 
+/** The save as versions before 14 wrote it: no Auto-Tribulation switch or retry record. */
+function beforeTrial(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.trial;
+  return save;
+}
+
 /** The save as versions before 13 wrote it: no qi and no qi timer. */
 function beforeQi(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  beforeTrial(save);
   delete save.state.qiNextAt;
   delete (save.state.cultivator as Record<string, unknown>).qi;
   for (const e of save.state.enemies as Record<string, unknown>[]) delete e.qi;
@@ -1302,7 +1310,7 @@ describe('rejects', () => {
     it('loads a v11 save with no qi and the next step a second away', () => {
       const old = beforeQi(raw());
       old.v = 11;
-      expect(load(old)?.state).toEqual(STATE_NO_QI);
+      expect(load(old)?.state).toEqual({ ...STATE_NO_QI, trial: newTrial() });
     });
 
     it.each([
@@ -1474,7 +1482,11 @@ describe('rejects', () => {
       const save = raw();
       save.v = 5;
       expect(load(save)).toBeNull();
-      expect(load(beforeBanners(save))?.state).toEqual({ ...STATE_NO_QI, souls: 0 });
+      expect(load(beforeBanners(save))?.state).toEqual({
+        ...STATE_NO_QI,
+        souls: 0,
+        trial: newTrial(),
+      });
     });
   });
 
@@ -1611,6 +1623,7 @@ describe('rejects', () => {
       const loaded = decodeSave(v1());
       expect(loaded?.state).toEqual({
         ...STATE_NO_QI,
+        trial: newTrial(),
         bagSize: 40,
         stones: 0,
         essence: 0,
@@ -1684,6 +1697,7 @@ describe('Dao Insight and passives', () => {
     const loaded = decodeSave(JSON.stringify({ ...withPants(save), v: 2 }));
     expect(loaded?.state).toEqual({
       ...STATE_NO_QI,
+      trial: newTrial(),
       insight: 0,
       passives: noPassives(),
       retirements: 0,
@@ -1883,8 +1897,20 @@ describe('realm caps and the Tribulation', () => {
     }
   });
 
-  it('rejects a held cultivator whose Tribulation is missing', () => {
-    expect(decodeChanged(heldRaw(), (x) => void (x.state.enemies as J[]).pop())).toBeNull();
+  it('loads a held cultivator whose Tribulation is off the floor: set aside, or Auto-Tribulation off', () => {
+    const save = heldRaw();
+    (save.state.enemies as J[]).pop();
+    const loaded = decodeSave(JSON.stringify(save));
+    expect(loaded?.state.enemies.some((e) => e.kind === 'tribulation')).toBe(false);
+    expect(loaded && readyForTribulation(loaded.state.cultivator)).toBe(true);
+  });
+
+  it('rejects a held floor one enemy too long once its Tribulation is off it', () => {
+    const extra = (x: ReturnType<typeof raw>): void => {
+      const list = x.state.enemies as J[];
+      list[list.length - 1] = { ...list[0] };
+    };
+    expect(decodeChanged(heldRaw(), extra)).toBeNull();
   });
 
   it('rejects a Tribulation past the last cap', () => {
@@ -2178,7 +2204,7 @@ describe('refine level (v8)', () => {
   it('loads a v7 save with no refine levels, and rejects one that has them', () => {
     const save = beforeStore(raw());
     save.v = 7;
-    expect(load(save)?.state).toEqual(STATE_NO_QI);
+    expect(load(save)?.state).toEqual({ ...STATE_NO_QI, trial: newTrial() });
     const old = beforeStore(withRefines(3));
     old.v = 7;
     expect(load(old)).toBeNull();
@@ -2685,14 +2711,22 @@ describe('the store (v10)', () => {
   });
 
   it('loads a v9 save with no stock and no boosts, and rejects one that has them', () => {
-    const save = beforeStore(raw());
+    // A run below its first cap, so the v9 ladder reads it as it is.
+    const early = (): ReturnType<typeof raw> =>
+      JSON.parse(encodeSave(tick(newGame(11, 'sword'), 120), SAVED_AT));
+    const save = beforeStore(early());
     save.v = 9;
     const loaded = decodeSave(JSON.stringify(save))?.state;
     expect(loaded?.store).toEqual({ rotation: -1, offers: [], sold: [] });
     expect(loaded?.boosts).toEqual({ xp: 0, treasure: 0, stones: 0 });
-    const old = raw();
+    const old = early();
     old.v = 9;
     expect(decodeSave(JSON.stringify(old))).toBeNull();
+    // The v14 trial record alone is enough to reject a v9 save.
+    const trial = beforeStore(early());
+    trial.state.trial = newTrial();
+    trial.v = 9;
+    expect(decodeSave(JSON.stringify(trial))).toBeNull();
   });
 
   it.each([
@@ -2757,5 +2791,162 @@ describe('the store (v10)', () => {
       expect(decodeSave(json)).toBeNull();
       expect(({} as J).polluted).toBeUndefined();
     }
+  });
+});
+
+describe('the Tribulation retry record (v14)', () => {
+  /** A run held at a cap and set aside after three losses. */
+  function aside(): GameState {
+    let s = newGame(7, 'sword');
+    for (let i = 0; i < 3600 && !s.enemies.some((e) => e.kind === 'tribulation'); i++)
+      s = tick(s, 1);
+    while (s.trial.losses < 3) {
+      const losses = s.trial.losses;
+      s = s.enemies[0]?.kind === 'tribulation' ? structuredClone(s) : faceTribulation(s);
+      s.enemies[0]!.damage = 1e9;
+      while (s.trial.losses === losses) s = tick(s, 1);
+    }
+    return s;
+  }
+  const ASIDE = aside();
+  const asideRaw = (): ReturnType<typeof raw> => JSON.parse(encodeSave(ASIDE, SAVED_AT));
+  const withTrial = (change: (t: J) => void): GameState | undefined => {
+    const save = asideRaw();
+    change(save.state.trial as J);
+    return decodeSave(JSON.stringify(save))?.state;
+  };
+
+  it('writes version 14, never the 12 other work holds', () => {
+    expect(SAVE_VERSION).toBe(14);
+  });
+
+  it('loads a v13 save (qi, no retry record) with the switch on and no losses', () => {
+    const save = asideRaw();
+    delete save.state.trial;
+    save.v = 13;
+    const loaded = decodeSave(JSON.stringify(save))?.state;
+    expect(loaded).toEqual({ ...ASIDE, trial: newTrial() });
+    // Its qi survives the load.
+    expect(loaded?.cultivator.qi).toBe(ASIDE.cultivator.qi);
+  });
+
+  it('rejects a v13 save that carries the v14 record', () => {
+    const save = asideRaw();
+    save.v = 13;
+    expect(decodeSave(JSON.stringify(save))).toBeNull();
+  });
+
+  it('round-trips a set-aside Tribulation, off the floor, and the switch', () => {
+    expect(ASIDE.trial.losses).toBe(3);
+    expect(ASIDE.enemies.some((e) => e.kind === 'tribulation')).toBe(false);
+    expect(decodeSave(encodeSave(ASIDE, SAVED_AT))?.state).toEqual(ASIDE);
+    const off = { ...ASIDE, trial: { ...ASIDE.trial, auto: false } };
+    expect(decodeSave(encodeSave(off, SAVED_AT))?.state.trial.auto).toBe(false);
+  });
+
+  it('loads a v11 save with the switch on and no losses, a due Tribulation still due', () => {
+    const save = heldV11();
+    const loaded = decodeSave(JSON.stringify(save))?.state;
+    expect(loaded?.trial).toEqual(newTrial());
+    expect(loaded && readyForTribulation(loaded.cultivator)).toBe(true);
+    expect(loaded?.enemies.some((e) => e.kind === 'tribulation')).toBe(true);
+  });
+
+  it('rejects a v11 save that carries the v14 record', () => {
+    const save = heldV11();
+    save.state.trial = newTrial();
+    expect(decodeSave(JSON.stringify(save))).toBeNull();
+  });
+
+  /** A v11 save of a run held at a cap with its Tribulation queued. */
+  function heldV11(): ReturnType<typeof raw> {
+    let s = newGame(7, 'sword');
+    for (let i = 0; i < 3600 && !s.enemies.some((e) => e.kind === 'tribulation'); i++)
+      s = tick(s, 1);
+    const save = beforeQi(JSON.parse(encodeSave(s, SAVED_AT)) as ReturnType<typeof raw>);
+    save.v = 11;
+    return save;
+  }
+
+  it('falls back to the defaults when the record is missing from a v14 save', () => {
+    const save = asideRaw();
+    delete save.state.trial;
+    expect(decodeSave(JSON.stringify(save))?.state.trial).toEqual(newTrial());
+  });
+
+  const hostile: [string, (t: J) => void][] = [
+    ['negative losses', (t) => void (t.losses = -1)],
+    ['fractional losses', (t) => void (t.losses = 2.5)],
+    ['huge losses', (t) => void (t.losses = 2 ** 60)],
+    ['losses as text', (t) => void (t.losses = '3')],
+    ['NaN-like losses', (t) => void (t.losses = null)],
+    ['the switch as text', (t) => void (t.auto = 'true')],
+    ['the switch as a number', (t) => void (t.auto = 1)],
+    ['a loss in the future', (t) => void (t.lostAt = ASIDE.time + 1)],
+    ['a negative loss time', (t) => void (t.lostAt = -5)],
+    ['a loss time as text', (t) => void (t.lostAt = '0')],
+    ['negative damage', (t) => void (t.lostDamage = -1)],
+    ['huge damage', (t) => void (t.lostDamage = 1e300)],
+    ['damage as an object', (t) => void (t.lostDamage = {})],
+    ['fractional max HP', (t) => void (t.lostMaxHp = 10.5)],
+    ['huge max HP', (t) => void (t.lostMaxHp = 2 ** 60)],
+    ['losses with no damage recorded', (t) => void (t.lostDamage = 0)],
+    ['losses with no max HP recorded', (t) => void (t.lostMaxHp = 0)],
+    ['a missing key', (t) => void delete t.lostMaxHp],
+    ['an extra key', (t) => void (t.extra = 1)],
+    ['a constructor key', (t) => void ((t as Record<string, unknown>)['constructor'] = 1)],
+  ];
+
+  it.each(hostile)('falls back to the defaults, keeping the save, on %s', (_, change) => {
+    const loaded = withTrial(change);
+    expect(loaded?.trial).toEqual(newTrial());
+    // The rest of the save is kept as it was.
+    expect(loaded?.floor).toBe(ASIDE.floor);
+    expect(loaded?.cultivator).toEqual(ASIDE.cultivator);
+  });
+
+  it.each<[string, unknown]>([
+    ['an array', []],
+    ['null', null],
+    ['text', 'trial'],
+    ['a number', 3],
+  ])('falls back to the defaults when the record is %s', (_, value) => {
+    const save = asideRaw();
+    save.state.trial = value;
+    expect(decodeSave(JSON.stringify(save))?.state.trial).toEqual(newTrial());
+  });
+
+  it('clears losses on a cultivator not held at a cap, keeping the switch', () => {
+    const s = newGame(7, 'sword');
+    s.trial = { auto: false, losses: 5, lostAt: 0, lostDamage: 10, lostMaxHp: 10 };
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state.trial).toEqual(newTrial(false));
+  });
+
+  it('falls back on a __proto__ key and pollutes nothing', () => {
+    const text = encodeSave(ASIDE, SAVED_AT).replace(
+      '"trial":{',
+      '"trial":{"__proto__":{"polluted":true},',
+    );
+    expect(text).toContain('__proto__');
+    expect(decodeSave(text)?.state.trial).toEqual(newTrial());
+    expect(({} as J).polluted).toBeUndefined();
+  });
+
+  it('falls back when the record itself is a __proto__ object', () => {
+    const text = encodeSave(ASIDE, SAVED_AT).replace(
+      /"trial":\{[^}]*\}/,
+      '"trial":{"__proto__":{"auto":false,"losses":3}}',
+    );
+    expect(decodeSave(text)?.state.trial).toEqual(newTrial());
+    expect(({} as J).losses).toBeUndefined();
+  });
+
+  it('keeps a loaded fallback playable: the Tribulation goes back on the floor', () => {
+    const loaded = withTrial((t) => void (t.losses = -1));
+    expect(loaded).toBeDefined();
+    const later = tick(loaded!, 120);
+    expect(later.enemies.some((e) => e.kind === 'tribulation') || later.cultivator.level > 10).toBe(
+      true,
+    );
   });
 });

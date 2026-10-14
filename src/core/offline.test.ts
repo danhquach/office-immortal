@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { catchUp, MAX_OFFLINE_SECONDS, offlineSeconds } from './offline.ts';
-import { newGame, tick, type GameState } from './sim.ts';
+import {
+  faceTribulation,
+  newGame,
+  setAutoTribulation,
+  tick,
+  TRIAL_LOSS_LIMIT,
+  TRIAL_RETRY_SECONDS,
+  trialSetAside,
+  type GameState,
+} from './sim.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -107,5 +116,47 @@ describe('catchUp', () => {
     const copy = structuredClone(start);
     catchUp(start, 600);
     expect(start).toEqual(copy);
+  });
+});
+
+describe('catchUp and the Tribulation retry limit', () => {
+  /** Held at level 10 and set aside after TRIAL_LOSS_LIMIT losses. */
+  function setAside(): GameState {
+    let s = newGame(7, 'sword');
+    for (let i = 0; i < 3600 && !s.enemies.some((e) => e.kind === 'tribulation'); i++)
+      s = tick(s, 1);
+    while (s.trial.losses < TRIAL_LOSS_LIMIT) {
+      const losses = s.trial.losses;
+      s = s.enemies[0]?.kind === 'tribulation' ? structuredClone(s) : faceTribulation(s);
+      s.enemies[0]!.damage = 1e9;
+      while (s.trial.losses === losses) s = tick(s, 1);
+    }
+    return s;
+  }
+
+  it('plays the limit and a time retry that lands while away as an open tab would', () => {
+    const s = setAside();
+    expect(trialSetAside(s)).toBe(true);
+    const away = TRIAL_RETRY_SECONDS + 600;
+    const { state } = catchUp(s, away);
+    const live = tick(s, away);
+    // The retry was fought while away: lost again (and the timer restarted) or won.
+    expect(state.trial.losses > TRIAL_LOSS_LIMIT || state.cultivator.level > 10).toBe(true);
+    // The same retry, at the same time, with the same outcome as an open tab. (Later
+    // fights may part ways: offline drop rolls draw other numbers from the RNG.)
+    expect(state.trial).toEqual(live.trial);
+    expect(state.cultivator.level).toBe(live.cultivator.level);
+    // And the same as many small offline steps.
+    let steps = s;
+    for (let i = 0; i < away; i++) steps = tick(steps, 1, { offline: true });
+    expect(state).toEqual(steps);
+  });
+
+  it('never retries while away with Auto-Tribulation off', () => {
+    const s = setAutoTribulation(setAside(), false);
+    const { state } = catchUp(s, 3 * TRIAL_RETRY_SECONDS);
+    expect(state.trial).toEqual(s.trial);
+    expect(state.floor).toBe(s.floor);
+    expect(state.cultivator.level).toBe(10);
   });
 });

@@ -37,6 +37,7 @@ import {
   newGame,
   restartFloor,
   tick,
+  TRIAL_LOSS_LIMIT,
   unequip,
   type GameState,
 } from '../core/sim.ts';
@@ -194,6 +195,20 @@ export function skipToTribulation(state: GameState): GameState {
   return restartFloor(s);
 }
 
+/** The next realm's Tribulation due and set aside after TRIAL_LOSS_LIMIT losses just now. */
+export function setTribulationAside(state: GameState): GameState {
+  const s = skipToTribulation(state);
+  const d = derive(s.cultivator);
+  s.trial = {
+    ...s.trial,
+    losses: TRIAL_LOSS_LIMIT,
+    lostAt: s.time,
+    lostDamage: d.damage,
+    lostMaxHp: d.maxHp,
+  };
+  return restartFloor(s);
+}
+
 export function freshRun(seed: number, path: PathId): GameState {
   return newGame(seed, path);
 }
@@ -296,6 +311,8 @@ export const SCENARIOS = {
     ),
   /** The next realm's Tribulation due. */
   tribulationDue: skipToTribulation,
+  /** The same, set aside after three losses. */
+  tribulationPaused: setTribulationAside,
 } satisfies Record<string, (s: GameState) => GameState>;
 
 export type ScenarioId = keyof typeof SCENARIOS;

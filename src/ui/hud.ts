@@ -65,11 +65,12 @@ export function noteUnseen(
 
 /**
  * The tab title: `F12 · 3 drops` while drops wait unseen, else `F12 · Office Immortal`;
- * a due Tribulation goes first: `F12 · Tribulation due · 3 drops`.
+ * a due Tribulation goes first: `F12 · Tribulation due · 3 drops` (or
+ * `Tribulation paused` while it is set aside).
  */
-export function tabTitle(floor: number, unseen: number, due = false): string {
+export function tabTitle(floor: number, unseen: number, due = false, paused = false): string {
   const parts = [t('hud.floor', { n: floor })];
-  if (due) parts.push(t('hud.due'));
+  if (due) parts.push(t(paused ? 'hud.paused' : 'hud.due'));
   if (unseen > 0) parts.push(dropsLabel(unseen));
   else if (!due) parts.push(gameTitle());
   return parts.join(' · ');
@@ -78,10 +79,18 @@ export function tabTitle(floor: number, unseen: number, due = false): string {
 /**
  * The pop-out's status line, e.g. `F21 · Golden Core · Manager · 3 drops`, from a
  * realm label (fixed game text); no count when nothing waits. While a
- * Tribulation is due it says so in place of the realm.
+ * Tribulation is due it says so in place of the realm, or that it is paused
+ * while set aside.
  */
-export function miniStatus(floor: number, realm: string, unseen: number, due = false): string {
-  const head = `${t('hud.floor', { n: floor })} · ${due ? t('hud.due') : realm}`;
+export function miniStatus(
+  floor: number,
+  realm: string,
+  unseen: number,
+  due = false,
+  paused = false,
+): string {
+  const trial = due ? t(paused ? 'hud.paused' : 'hud.due') : realm;
+  const head = `${t('hud.floor', { n: floor })} · ${trial}`;
   return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
 }
 

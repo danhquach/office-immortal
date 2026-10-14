@@ -68,6 +68,9 @@ import {
   canFaceTribulation,
   characterStatus,
   requiredRealm,
+  TRIAL_LOSS_LIMIT,
+  trialRetryIn,
+  trialSetAside,
   type GameState,
 } from '../core/sim.ts';
 import {
@@ -677,7 +680,10 @@ export function discreetRows(
           })
         : '–',
     ],
-    [t('discreet.status'), t(due ? 'discreet.due' : 'discreet.ok')],
+    [
+      t('discreet.status'),
+      t(due ? (trialSetAside(state) ? 'discreet.postponed' : 'discreet.due') : 'discreet.ok'),
+    ],
   ];
 }
 
@@ -722,6 +728,23 @@ export function tribulationCall(state: GameState): { name: string; next: string 
   const next = REALMS[realmOf(state.cultivator.level + 1)];
   if (name === undefined || next === undefined) return null;
   return { name: tn('enemy', name), next: tn('realm', next.name) };
+}
+
+/**
+ * The Tribulation alert's paused state, while a due Tribulation is set aside
+ * after TRIAL_LOSS_LIMIT losses: the heading and a line with the losses so far
+ * and when the next automatic try comes. Null otherwise.
+ */
+export function trialPause(state: GameState): { head: string; detail: string } | null {
+  if (!trialSetAside(state) || tribulationCall(state) === null) return null;
+  const n = state.trial.losses;
+  const head = t('trial.paused', { n: TRIAL_LOSS_LIMIT });
+  const retryIn = trialRetryIn(state);
+  if (retryIn === null) return { head, detail: t('trial.pausedOff', { n }) };
+  // A retry that is due joins the floor at the next kill, so it comes at the floor's end.
+  if (retryIn === 0 || state.enemies.some((e) => e.kind === 'tribulation'))
+    return { head, detail: t('trial.pausedSoon', { n }) };
+  return { head, detail: t('trial.pausedIn', { n, time: durationLabel(Math.ceil(retryIn)) }) };
 }
 
 /** The status bar's live line: what the cultivator is doing now, e.g. "Cultivating · floor 12". */
