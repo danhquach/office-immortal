@@ -3,7 +3,7 @@
 -- Everything happens in one transaction that is rolled back at the end.
 
 begin;
-select plan(46);
+select plan(48);
 
 -- Two players, A and B, and a stranger C with no save.
 insert into auth.users (id, is_anonymous) values
@@ -171,6 +171,10 @@ select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t
   'link_code_invalid', 'a cleaned-up code is invalid');
 select throws_ok($$select public.redeem_link_code('ZZZZZZZZZZ')$$,
   'link_code_invalid', 'a code that was never issued is invalid');
+select throws_ok($$select public.redeem_link_code(repeat('A', 100000))$$,
+  'link_code_invalid', 'an oversized code is refused');
+select throws_ok(format('select public.redeem_link_code(%L)', current_setting('t.code3') || repeat(' ', 60)),
+  'link_code_invalid', 'a live code padded past 64 characters is refused');
 select is((public.redeem_link_code(current_setting('t.code3')) ->> 'data'), pg_temp.save_text(3),
   'the newest code still redeems');
 

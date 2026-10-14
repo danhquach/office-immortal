@@ -68,7 +68,8 @@ async function film(stage: Stage, scene: Scene, dir: string, n: number): Promise
     const file = join(dir, `s${n}-${String(frames.length).padStart(5, '0')}.jpg`);
     writeFileSync(file, Buffer.from(data, 'base64'));
     frames.push({ file, at: metadata.timestamp ?? 0 });
-    void cdp.send('Page.screencastFrameAck', { sessionId });
+    // A frame can still arrive as the page closes; its ack then has nowhere to go.
+    cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
   });
   await page.clock.resume();
   await cdp.send('Page.startScreencast', {
