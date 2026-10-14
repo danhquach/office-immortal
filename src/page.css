@@ -1153,6 +1153,31 @@ select {
   border-top-color: transparent;
   border-left-color: var(--strip-elite);
 }
+/* The cultivator's bubble (its costliest skill, as it lands): placed in code
+   clear of both sprites and the enemy's bubble, its left edge on the
+   cultivator's sprite and the tail pointing down at it; beside the sprite,
+   on its right with the tail pointing left, when there is no room above.
+   In the qi colour, so it never reads as the enemy's gold warning. */
+.yell.you {
+  border-color: var(--qi);
+  color: var(--qi);
+}
+.yell.you::after {
+  border-top-color: var(--qi);
+  right: auto;
+  left: calc(var(--tail, 64px) - 6px / var(--z, 1));
+}
+.yell.you.beside::after {
+  top: 50%;
+  translate: 0 -50%;
+  right: auto;
+  left: calc(-6px / var(--z, 1));
+  bottom: auto;
+  border-width: calc(6px / var(--z, 1));
+  border-left: 0;
+  border-top-color: transparent;
+  border-right-color: var(--qi);
+}
 @keyframes yell-pop {
   from {
     scale: 0.6;

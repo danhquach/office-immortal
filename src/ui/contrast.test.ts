@@ -81,6 +81,14 @@ describe('page.css colours', () => {
     }
   });
 
+  it("keeps the cultivator's yell (qi) apart in hue from the enemy's gold yell", () => {
+    const t = themes();
+    for (const vars of [t.light, t.dark]) {
+      const gap = hueGap(hue(vars.get('--qi') as string), hue(vars.get('--strip-elite') as string));
+      expect(gap).toBeGreaterThan(90);
+    }
+  });
+
   it('sets the mixed dash colour in both theme blocks', () => {
     const dark = /:root:not\(\[data-theme='light'\]\)\s*{([^}]*)}/.exec(css)?.[1] ?? '';
     const light = /^:root\s*{([^}]*)}/m.exec(css)?.[1] ?? '';
@@ -263,6 +271,8 @@ describe('page.css colours', () => {
       '--strip-elite',
       '--strip-boss',
       '--strip-tribulation',
+      // The cultivator's yell bubble text.
+      '--qi',
     ])(`${name}: %s on the strip is at least 4.5:1`, (text) => {
       expect(
         contrast(vars.get(text) as string, vars.get('--strip-bg') as string),

@@ -82,6 +82,7 @@ import {
   trialSetAside,
   type GameState,
 } from '../core/sim.ts';
+import { pathSkills } from '../core/path-skills.ts';
 import type { CastNote, EffectNote, Side } from '../core/skills.ts';
 import {
   BOOST_BONUS,
@@ -100,7 +101,7 @@ import {
   type OfferBlock,
   type OfferId,
 } from '../core/store.ts';
-import { lang, t, tn, type MessageKey } from './i18n.ts';
+import { lang, t, tn, yellText, type MessageKey } from './i18n.ts';
 
 /** The Path picker's one-liner: role, primary stat (docs/design.md §3). */
 export function pathBlurb(id: PathId): string {
@@ -1215,11 +1216,16 @@ function newNotes(prev: GameState, next: GameState): readonly CastNote[] {
   return next.combat.log.filter((n) => n.id >= from);
 }
 
-/** A callout over a fighter (docs/design.md §5 Skills); `cast` marks a skill's name. */
+/**
+ * A callout over a fighter (docs/design.md §5 Skills); `cast` marks a skill's
+ * name. `yell` is what the cultivator yells in its bubble instead, for its
+ * costliest skill; null for a plain callout.
+ */
 export interface Callout {
   who: Side;
   text: string;
   cast: boolean;
+  yell: string | null;
 }
 
 /** How long a callout shows; one noted longer ago than this is not shown. */
@@ -1232,17 +1238,30 @@ const EFFECT_CALLOUTS: Readonly<Record<EffectNote, MessageKey>> = {
   interrupted: 'callout.interrupted',
 };
 
+/** The names of the cultivator's costliest skills at its Path and realm (ties all count). */
+export function yelledSkills(c: Cultivator): ReadonlySet<string> {
+  const skills = pathSkills(c.path, realmOf(c.level));
+  const top = Math.max(0, ...skills.map((k) => k.qi));
+  return new Set(skills.filter((k) => k.qi === top).map((k) => k.name));
+}
+
 /**
  * The callouts to float between two states: a skill's name over its caster
  * as it lands, an effect's word over the fighter it hit. An enemy starting a
- * wind-up floats nothing: its yell bubble says it (windUpOf).
+ * wind-up floats nothing: its yell bubble says it (windUpOf). The
+ * cultivator's costliest skill carries its yell (yelledSkills).
  */
 export function castCallouts(prev: GameState, next: GameState): Callout[] {
   // After a long step (a throttled tab), only the latest ones: older ones are over.
   const fresh = newNotes(prev, next).filter((n) => n.at >= next.time - CALLOUT_SECONDS);
+  const yelled = yelledSkills(next.cultivator);
   return fresh.flatMap((n): Callout[] => {
-    if ('effect' in n) return [{ who: n.who, text: t(EFFECT_CALLOUTS[n.effect]), cast: false }];
-    return n.windUp ? [] : [{ who: n.who, text: tn('skill', n.skill), cast: true }];
+    if ('effect' in n) {
+      return [{ who: n.who, text: t(EFFECT_CALLOUTS[n.effect]), cast: false, yell: null }];
+    }
+    if (n.windUp) return [];
+    const yell = n.who === 'you' && yelled.has(n.skill) ? yellText(n.skill) : null;
+    return [{ who: n.who, text: tn('skill', n.skill), cast: true, yell }];
   });
 }
 

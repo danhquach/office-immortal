@@ -107,10 +107,12 @@ import {
   spendPreview,
   statTip,
   castCallouts,
+  yelledSkills,
   windUpOf,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
-import { DEFAULT_LANG, PACKS, setLang, t, tn } from './i18n.ts';
+import { DEFAULT_LANG, PACKS, setLang, t, tn, yellText } from './i18n.ts';
+import { pathSkills } from '../core/path-skills.ts';
 import { setDiscreet } from './discreet.ts';
 import { freshCombat, note } from '../core/skills.ts';
 import { xpToNext } from '../core/cultivator.ts';
@@ -2371,10 +2373,43 @@ describe('skill callouts', () => {
       { at: 1, who: 'foe', effect: 'interrupted' },
     );
     expect(castCallouts(prev, next)).toEqual([
-      { who: 'you', text: 'Flying Sword', cast: true },
-      { who: 'foe', text: 'Stunned', cast: false },
-      { who: 'foe', text: 'Interrupted', cast: false },
+      { who: 'you', text: 'Flying Sword', cast: true, yell: 'Flying Sword!' },
+      { who: 'foe', text: 'Stunned', cast: false, yell: null },
+      { who: 'foe', text: 'Interrupted', cast: false, yell: null },
     ]);
+  });
+
+  it("yells only the cultivator's costliest skill at its Path and realm", () => {
+    const [prev, next] = noted(
+      { at: 1, who: 'you', skill: 'Flying Sword', windUp: false },
+      { at: 1, who: 'you', skill: 'Sword Intent', windUp: false },
+      { at: 1, who: 'foe', skill: 'Flying Sword', windUp: false },
+    );
+    // Foundation Establishment: Sword Intent (45 qi) is now the costliest.
+    next.cultivator.level = realmLevels(1).from;
+    expect(castCallouts(prev, next).map((c) => c.yell)).toEqual([null, 'Sword Intent!', null]);
+  });
+
+  it('yells every skill tied for the highest qi cost, in each language', () => {
+    for (const path of ['sword', 'body', 'talisman'] as const) {
+      for (let realm = 0; realm < REALMS.length; realm += 1) {
+        const c = newGame(1, path).cultivator;
+        c.level = realmLevels(realm).from;
+        const skills = pathSkills(path, realm);
+        const top = Math.max(...skills.map((k) => k.qi));
+        expect([...yelledSkills(c)].sort()).toEqual(
+          skills
+            .filter((k) => k.qi === top)
+            .map((k) => k.name)
+            .sort(),
+        );
+      }
+    }
+    setLang('vi');
+    const [prev, next] = noted({ at: 1, who: 'you', skill: 'Flying Sword', windUp: false });
+    const [call] = castCallouts(prev, next);
+    expect(call?.yell).toBe(yellText('Flying Sword'));
+    expect(call?.yell).not.toBe('Flying Sword!');
   });
 
   it('says every effect in each language', () => {
