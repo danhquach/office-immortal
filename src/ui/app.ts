@@ -163,6 +163,7 @@ import {
   type NamePart,
 } from './i18n.ts';
 import { autosave, runs, type RunScope } from './run.ts';
+import { type Fold, type Folds, readFolds, writeFolds } from './fold.ts';
 import { pickTheme, readTheme, showTheme, type Theme, writeTheme } from './theme.ts';
 import {
   gradeInitial,
@@ -263,6 +264,7 @@ import {
   tintOf,
   SPRITE_SIZE,
   planRatio,
+  planSummary,
   respecView,
   spendPreview,
   statTip,
@@ -1650,6 +1652,8 @@ let pickedReverse: boolean | null = null;
 let pickedLang: string | null = null;
 /** The pop-out style picked this visit: kept across runs even where storage is blocked. */
 let pickedPopStyle: PopStyle | null = null;
+/** The Stats tab's open groups as switched this visit: kept across runs even where storage is blocked. */
+let pickedFolds: Folds | null = null;
 /** The Crafting panel's last mode, kept for the visit. */
 let pickedCraftMode: CraftMode = 'refine';
 
@@ -2085,8 +2089,10 @@ function play(
     box.append(b, slotName);
     slots.append(box);
   }
-  // Stats: base stats with their spend buttons on the same row, the derived
-  // numbers in groups, then Respec (stat reset and Path change).
+  // Stats: two sub-tabs. Stats has the base stats with their spend buttons on
+  // the same row, Auto-assign, then the derived numbers and boosts in groups
+  // that fold; Respec has the stat reset and Path change.
+  const folds = pickedFolds ?? readFolds(storage);
   const base = el('section', 'base');
   const baseHead = el('div', 'head');
   const baseTitle = elt('h3', '', 'stats.base');
@@ -2168,7 +2174,7 @@ function play(
 
   // Auto-assign: the switch, then (while it is on) the plan's three shares
   // for this Path and Apply plan (docs/design.md §3).
-  const plan = el('section', 'plan');
+  const planTitle = el('span');
   const planSwitch = el('button', 'switch');
   planSwitch.type = 'button';
   planSwitch.setAttribute('role', 'switch');
@@ -2199,7 +2205,10 @@ function play(
     if (state.cultivator.unspent > 0) act(applyPlan(state));
   });
   planBody.append(elt('p', 'muted hint', 'plan.hint'), shares, planWhy, applyBtn);
-  plan.append(planSwitch, planBody);
+  const planInner = el('div');
+  planInner.append(planSwitch, planBody);
+  const plan = fold('Plan', planTitle, planInner).box;
+  plan.classList.add('plan');
   /** Saves the typed shares once they make a ratio; until then says why and keeps the saved one. */
   function savePlan(): void {
     const { ratio, why } = planRatio({
@@ -2211,33 +2220,21 @@ function play(
     if (ratio) act(setPlanRatio(state, state.cultivator.path, ratio));
   }
 
-  const derived = el('div', 'derived');
+  const derived: HTMLElement[] = [];
   const derivedLists = {} as Record<StatGroup, HTMLElement>;
+  const derivedCounts = {} as Record<StatGroup, HTMLElement>;
   const derivedValues: HTMLElement[] = [];
   const derivedLabels: HTMLElement[] = [];
   for (const group of STAT_GROUPS) {
-    const head = elt('h3', '', `group.${group}`);
     const list = el('dl');
+    const g = fold(group, elt('span', '', `group.${group}`), list);
+    g.box.classList.add('derived');
     derivedLists[group] = list;
-    derived.append(head, list);
+    derivedCounts[group] = g.count;
+    derived.push(g.box);
   }
 
-  const respec = el('section', 'respec');
-  const respecHead = el('div', 'head');
-  const respecInfo = el('button', 'info', '?');
-  respecInfo.type = 'button';
-  // The name starts with the visible "?", so voice control can say it.
-  attr(respecInfo, 'aria-label', 'respec.info');
-  respecInfo.setAttribute('aria-expanded', 'false');
-  respecInfo.setAttribute('aria-controls', 'respec-info');
-  const respecNote = elt('p', 'muted hint', 'respec.note');
-  respecNote.id = 'respec-info';
-  respecNote.hidden = true;
-  respecInfo.addEventListener('click', () => {
-    respecNote.hidden = !respecNote.hidden;
-    respecInfo.setAttribute('aria-expanded', String(!respecNote.hidden));
-  });
-  respecHead.append(elt('h3', '', 'respec.title'), respecInfo);
+  const respec = el('div', 'respec');
   /** A Respec line: the controls, then the cost and why it is off; the button is described by both. */
   function respecLine(key: string, ...controls: HTMLElement[]) {
     const line = el('div', 'line');
@@ -2262,16 +2259,62 @@ function play(
   });
   pathBtn.setAttribute('aria-describedby', 'path-cost path-why');
   const pathLine = respecLine('path', pathPick, pathBtn);
-  respec.append(respecHead, respecNote, resetLine.line, pathLine.line);
+  respec.append(elt('p', 'muted hint', 'respec.note'), resetLine.line, pathLine.line);
 
   // Store boosts running now, with the time each has left.
-  const boosts = el('section', 'boosts');
   const boostList = el('ul', 'boost-list');
   const noBoosts = elt('p', 'muted hint', 'store.noBoosts');
-  boosts.append(elt('h3', '', 'store.boosts'), boostList, noBoosts);
+  const boostBody = el('div');
+  boostBody.append(boostList, noBoosts);
+  const boosts = fold('Boosts', elt('span', '', 'store.boosts'), boostBody);
+  boosts.box.classList.add('boosts');
 
+  const statMain = el('div', 'statmain');
+  statMain.append(base, plan, ...derived, boosts.box);
+  const statTabs = tabs([
+    { id: 'stats-main', label: 'tab.stats', body: statMain },
+    { id: 'stats-respec', label: 'respec.title', body: respec },
+  ]);
+  statTabs.bar.classList.add('subtabs');
   const statsBody = el('div', 'statstab');
-  statsBody.append(base, plan, derived, boosts, respec);
+  statsBody.append(statTabs.bar, ...statTabs.panels);
+
+  /**
+   * A group of the Stats tab that folds (docs/design.md §14): a heading button
+   * that reports whether it is open, then `body`. The count after the title
+   * shows while folded and is read either way. Which groups are open is kept
+   * on this device.
+   */
+  function fold(
+    id: Fold,
+    title: HTMLElement,
+    body: HTMLElement,
+  ): { box: HTMLElement; count: HTMLElement } {
+    const box = el('section', 'fold');
+    const head = el('h3', 'fold-head');
+    const toggle = el('button', 'fold-toggle');
+    toggle.type = 'button';
+    toggle.setAttribute('aria-controls', `fold-${id}`);
+    const count = el('span', 'count');
+    toggle.append(title, count);
+    head.append(toggle);
+    body.id = `fold-${id}`;
+    const show = (): void => {
+      const open = folds[id];
+      toggle.setAttribute('aria-expanded', String(open));
+      body.hidden = !open;
+      count.className = open ? 'count sr-only' : 'count';
+    };
+    toggle.addEventListener('click', () => {
+      folds[id] = !folds[id];
+      pickedFolds = folds;
+      writeFolds(storage, folds);
+      show();
+    });
+    show();
+    box.append(head, body);
+    return { box, count };
+  }
 
   // Early Retirement: the Dao Insight total, the passive shop (one line per
   // passive, its effect on expand), then the retire box with its confirmation.
@@ -2384,13 +2427,17 @@ function play(
     { id: 'retire', label: 'tab.retire', body: retireBody },
   ]);
   character.box.append(charTabs.bar, ...charTabs.panels);
-  // A dot on the Stats tab while points wait to be placed; its words for screen readers.
-  const statsTab = charTabs.bar.querySelector<HTMLElement>('#tab-stats') as HTMLElement;
-  const statsDot = el('span', 'tab-dot');
-  statsDot.setAttribute('aria-hidden', 'true');
-  const statsDotText = el('span', 'sr-only');
-  // Put back after the tab's own label is rewritten on a language switch.
-  say(() => statsTab.append(statsDot, statsDotText));
+  // A dot on the Stats tab and its Stats sub-tab while points wait to be
+  // placed; its words for screen readers.
+  const unspentDots = ['#tab-stats', '#tab-stats-main'].map((id) => {
+    const tab = character.box.querySelector<HTMLElement>(id) as HTMLElement;
+    const dot = el('span', 'tab-dot');
+    dot.setAttribute('aria-hidden', 'true');
+    const text = el('span', 'sr-only');
+    // Put back after the tab's own label is rewritten on a language switch.
+    say(() => tab.append(dot, text));
+    return { dot, text };
+  });
 
   // Inventory grid
   const inventory = panel('inventory', 'inventory.title');
@@ -2858,6 +2905,7 @@ function play(
     act(answerFreeReset(state, take));
     // The notice is gone: focus goes where the points are placed.
     charTabs.show('stats');
+    statTabs.show('stats-main');
     baseTitle.focus();
   };
   rebalanceRow.append(
@@ -3665,6 +3713,9 @@ function play(
         derivedLists[r.group].append(dt, dd);
         derivedValues.push(dd);
       }
+      for (const group of STAT_GROUPS) {
+        setText(derivedCounts[group], ` (${derivedLists[group].querySelectorAll('dt').length})`);
+      }
     }
     rows.forEach((r, i) => {
       const dd = derivedValues[i];
@@ -3690,6 +3741,7 @@ function play(
       planSwitch.setAttribute('aria-checked', String(auto));
     }
     planBody.hidden = !auto;
+    setText(planTitle, planSummary(auto, state.statPlan.slots[c.path].ratio));
     // A Path change shows that Path's plan afresh.
     const fresh = plan.dataset.path !== c.path;
     if (fresh) {
@@ -4356,8 +4408,10 @@ function play(
     const none = c.unspent === 0;
     if (base.classList.contains('none') !== none) base.classList.toggle('none', none);
     setText(unspentText, none ? t('stats.noUnspent') : t('stats.unspent', { n: c.unspent }));
-    statsDot.hidden = none;
-    setText(statsDotText, none ? '' : ` (${t('tab.statsUnspent', { n: c.unspent })})`);
+    for (const d of unspentDots) {
+      d.dot.hidden = none;
+      setText(d.text, none ? '' : ` (${t('tab.statsUnspent', { n: c.unspent })})`);
+    }
     rebalance.hidden = !state.freeReset;
 
     // The form shows the saved filter; the player's own change already matches it.
@@ -4439,6 +4493,7 @@ function play(
       boostList.replaceChildren(...lines.map((line) => el('li', '', line)));
     }
     noBoosts.hidden = lines.length > 0;
+    setText(boosts.count, ` (${lines.length})`);
   }
 
   /** Title, favicon and the pop-out's status line, refreshed while the tab is in the background too. */

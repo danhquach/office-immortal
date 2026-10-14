@@ -196,6 +196,8 @@ const vi: Pack = {
     'mastery.talisman':
       'Phù Cộng Minh: +1.5 sát thương và +1% sát thương bùng nổ mỗi điểm; mỗi đòn bùng nổ văng 50% sang kẻ địch kế tiếp.',
     'plan.title': 'Tự phân bổ',
+    'plan.off': 'Tự phân bổ: tắt',
+    'plan.on': 'Tự phân bổ: {body} / {agility} / {spirit}',
     'plan.hint': 'Điểm mới theo tỉ lệ này. Điểm chưa dùng sẽ chờ bạn hoặc nút Áp dụng.',
     'plan.share': 'Tỉ lệ {stat}, theo phần trăm',
     'plan.apply': 'Áp dụng',
@@ -222,7 +224,6 @@ const vi: Pack = {
     'bonus.treasureFind': 'Tìm bảo vật',
 
     'respec.title': 'Tẩy điểm',
-    'respec.info': '? Cách tẩy điểm',
     'respec.note':
       'Đặt lại sẽ thu hồi mọi điểm chỉ số để bạn phân bổ lại. Đổi Con Đường cũng trả lại mọi điểm để bạn tự phân bổ.',
     'respec.reset': 'Đặt lại chỉ số',
