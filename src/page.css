@@ -31,6 +31,7 @@
   --strip-tribulation: #c8a2ff;
   --hp-you: #3fb56b;
   --hp-foe: #e0533d;
+  --qi: #4fd1e8;
   --xp-track: #2b2618;
   --xp-track-ink: #f7eccb;
   --xp-fill: #f2c94c;
@@ -793,13 +794,13 @@ select {
   /* The name keeps its own row (two lines kept); HP sits beside the bar. */
   .game .fighter {
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name name' 'bar hp';
+    grid-template-areas: 'name name' 'bar hp' 'qi .';
     align-items: center;
     column-gap: 0.5rem;
   }
   .game .foe {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'name name' 'hp bar';
+    grid-template-areas: 'name name' 'hp bar' '. qi';
   }
   .game .fighter .hp {
     white-space: nowrap;
@@ -833,15 +834,18 @@ select {
   }
   .game .fighter {
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name hp' 'bar bar';
+    grid-template-areas: 'name hp' 'bar bar' 'qi qi';
     row-gap: 0.1rem;
   }
   .game .foe {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'hp name' 'bar bar';
+    grid-template-areas: 'hp name' 'bar bar' 'qi qi';
   }
   .game .fighter .bar {
     height: 5px;
+  }
+  .game .fighter .bar.qi {
+    height: 3px;
   }
   /* The Tribulation alert takes the XP bar's place (full while one is due, and
      saying the same) as one line, so it never makes the strip taller. */
@@ -1233,7 +1237,7 @@ select {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'name' 'bar' 'hp';
+  grid-template-areas: 'name' 'bar' 'qi' 'hp';
   gap: 0.15rem;
 }
 .fighter .hp {
@@ -1241,6 +1245,11 @@ select {
 }
 .fighter .bar {
   grid-area: bar;
+}
+/* Qi: a thin cyan bar under the HP bar (docs/design.md §5). */
+.fighter .bar.qi {
+  grid-area: qi;
+  height: 4px;
 }
 /* 2 lines always reserved, so nothing below moves when the enemy changes: a
    ranked enemy's tier on line 1 and its name on line 2, a demon's name on
@@ -1307,6 +1316,9 @@ select {
 .foe .bar > span {
   background: var(--hp-foe);
   margin-left: auto;
+}
+.fighter .bar.qi > span {
+  background: var(--qi);
 }
 /* Items */
 /* Item cells: the bag grid and the equipment slots. The grade shows three
@@ -2344,6 +2356,10 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 }
 .mini .fighter {
   gap: 0;
+}
+/* No room for qi in the 160 px window: the HP bars only. */
+.mini .fighter .bar.qi {
+  display: none;
 }
 /* The whole stage at 3/8 (208 px tall becomes 78), sprites and background
    together, so it fits the 160 px window. The pop-out is Chromium-only, which

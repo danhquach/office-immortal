@@ -17,6 +17,8 @@ export interface Path {
   /** Every Nth attack is a burst for `burstMultiplier` damage; 0 means never. */
   readonly burstEvery: number;
   readonly burstMultiplier: number;
+  /** The share of MAX_QI_PER_SPIRIT and QI_PER_SPIRIT each Spirit point gives. */
+  readonly qiFromSpirit: number;
 }
 
 export const PATHS: Readonly<Record<PathId, Path>> = {
@@ -27,6 +29,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     lifesteal: 0.05,
     burstEvery: 0,
     burstMultiplier: 1,
+    qiFromSpirit: 0.5,
   },
   body: {
     name: 'Body Refiner',
@@ -35,6 +38,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     lifesteal: 0.15,
     burstEvery: 0,
     burstMultiplier: 1,
+    qiFromSpirit: 0.5,
   },
   talisman: {
     name: 'Talisman Master',
@@ -43,6 +47,7 @@ export const PATHS: Readonly<Record<PathId, Path>> = {
     lifesteal: 0,
     burstEvery: 3,
     burstMultiplier: 5,
+    qiFromSpirit: 1,
   },
 };
 
@@ -54,6 +59,15 @@ export const MAX_CRIT_CHANCE = 0.5;
 export const MAX_LIFESTEAL = 0.5;
 export const MIN_ATTACK_INTERVAL = 0.25;
 
+/** The cultivator's qi pool before Spirit (docs/design.md §5). */
+export const BASE_MAX_QI = 100;
+/** Max qi each Spirit point adds, scaled by the Path's qiFromSpirit. */
+export const MAX_QI_PER_SPIRIT = 0.5;
+/** Qi per second every cultivator regains, before gear and Spirit. */
+export const QI_BASE_REGEN = 1;
+/** Qi per second each Spirit point adds, scaled by the Path's qiFromSpirit. */
+export const QI_PER_SPIRIT = 0.02;
+
 export interface Cultivator {
   path: PathId;
   level: number;
@@ -64,6 +78,8 @@ export interface Cultivator {
   unspent: number;
   equipment: Equipment;
   hp: number;
+  /** Qi held, 0 to the derived maxQi. */
+  qi: number;
   /** Sim time of the next attack, in seconds. */
   nextAttackAt: number;
   /** Attacks made on the current floor; drives the Talisman burst. */
@@ -82,7 +98,9 @@ export interface Derived {
   critMultiplier: number;
   /** Share of damage dealt that heals the cultivator. */
   lifesteal: number;
-  // Carried for the systems that will spend them (qi, Spirit Stones); combat ignores them.
+  /** The qi pool: a base plus Spirit (in full for a Talisman Master, half for the others). */
+  maxQi: number;
+  /** Qi regained per second: the base, the Qi regen stat as a share of max qi, and Spirit (as for maxQi). */
   qiRegen: number;
   stoneFind: number;
   /** Raises the chance that a kill drops an item. */
@@ -91,10 +109,13 @@ export interface Derived {
 
 export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipment'>): Derived {
   const stats = effectiveStats(c);
-  const { body, agility } = stats;
+  const { body, agility, spirit } = stats;
   const path = PATHS[c.path];
   const b = equipmentBonuses(c.equipment);
   const realm = REALM_BONUS * realmOf(c.level);
+  // Spirit gives a Talisman Master its full qi, the other Paths half.
+  const qiSpirit = path.qiFromSpirit * spirit;
+  const maxQi = Math.round(BASE_MAX_QI + MAX_QI_PER_SPIRIT * qiSpirit);
   return {
     maxHp: Math.round((40 + 12 * body + b.maxHp) * (1 + b.maxHpPct + realm)),
     defence: body + b.defence,
@@ -103,7 +124,8 @@ export function derive(c: Pick<Cultivator, 'path' | 'level' | 'stats' | 'equipme
     critChance: Math.min(MAX_CRIT_CHANCE, 0.05 + 0.002 * agility + b.critChance),
     critMultiplier: path.critMultiplier + b.critDamage,
     lifesteal: Math.min(MAX_LIFESTEAL, path.lifesteal + b.lifesteal),
-    qiRegen: b.qiRegen,
+    maxQi,
+    qiRegen: QI_BASE_REGEN + b.qiRegen * maxQi + QI_PER_SPIRIT * qiSpirit,
     stoneFind: b.stoneFind,
     treasureFind: b.treasureFind,
   };
@@ -208,6 +230,7 @@ export function newCultivator(path: PathId, bonusPoints = 0): Cultivator {
     unspent: 0,
     equipment: {},
     hp: 0,
+    qi: 0,
     nextAttackAt: 0,
     attackCount: 0,
   };

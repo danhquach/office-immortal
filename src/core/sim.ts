@@ -25,7 +25,7 @@ import {
   pickUp,
   type LootFilter,
 } from './economy.ts';
-import { makeFloor, makeTribulation, type Enemy } from './floors.ts';
+import { makeFloor, makeTribulation, maxQi, type Enemy } from './floors.ts';
 import {
   bonusPoints,
   canRetire,
@@ -58,6 +58,14 @@ export const DEFENCE_HALVES_AT = 50;
 export const ENEMY_ARRIVAL = 1.2;
 /** Seconds between the hits of a Killing Array. */
 export const ARRAY_TICK = 1;
+/** Seconds between qi regen steps; each adds a second's regen. */
+export const QI_TICK = 1;
+/** Qi the cultivator gains per attack and per hit taken. */
+export const QI_PER_ATTACK = 8;
+export const QI_PER_HIT_TAKEN = 4;
+/** Qi an enemy with a pool gains per attack, and per second. */
+export const ENEMY_QI_PER_ATTACK = 10;
+export const ENEMY_QI_REGEN = 1;
 
 export interface GameState {
   /** Sim clock, in seconds. */
@@ -72,6 +80,8 @@ export interface GameState {
   enemyNextAttackAt: number;
   /** Sim time of a Killing Array's next hit, in seconds; unused without one. */
   arrayNextAt: number;
+  /** Sim time of the next qi regen step, in seconds. */
+  qiNextAt: number;
   /** Souls the equipped Soul Banner holds; 0 without one (docs/design.md §6). */
   souls: number;
   /** Items picked up and not equipped. */
@@ -115,6 +125,7 @@ export function newGame(
     enemies: [],
     enemyNextAttackAt: 0,
     arrayNextAt: 0,
+    qiNextAt: QI_TICK,
     souls: 0,
     inventory: [],
     bagSize: INVENTORY_SIZE,
@@ -152,13 +163,15 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
     // A disc equipped mid-fight hits at once, never in the past.
     const arrayAt =
       equippedArray(c.equipment)?.id === 'killing' ? Math.max(s.time, s.arrayNextAt) : Infinity;
-    // Ties go to the cultivator, then the array, so event order never depends on step size.
-    const next = Math.min(c.nextAttackAt, arrayAt, s.enemyNextAttackAt);
+    // Ties go to the cultivator, then the array, then the enemy, then qi
+    // regen, so event order never depends on step size.
+    const next = Math.min(c.nextAttackAt, arrayAt, s.enemyNextAttackAt, s.qiNextAt);
     if (next > end) break;
     s.time = next;
     if (c.nextAttackAt === next) cultivatorAttacks(s, rng, offline);
     else if (arrayAt === next) arrayHits(s, rng, offline);
-    else enemyAttacks(s, rng);
+    else if (s.enemyNextAttackAt === next) enemyAttacks(s, rng);
+    else regenQi(s);
   }
   s.time = end;
   return s;
@@ -336,8 +349,22 @@ function cultivatorAttacks(s: GameState, rng: Rng, offline: boolean): void {
   const dealt = Math.min(enemy.hp, mitigate(damage, enemy.defence));
   enemy.hp -= dealt;
   c.hp = Math.min(d.maxHp, c.hp + Math.ceil(dealt * d.lifesteal));
+  c.qi = Math.min(d.maxQi, c.qi + QI_PER_ATTACK);
   c.nextAttackAt = s.time + d.attackInterval;
   if (enemy.hp <= 0) defeated(s, rng, offline);
+}
+
+/**
+ * A qi regen step, once a second, between fights too: the cultivator's
+ * regen and, for an enemy with a pool, its trickle.
+ */
+function regenQi(s: GameState): void {
+  const c = s.cultivator;
+  const d = derive(c);
+  c.qi = Math.min(d.maxQi, c.qi + d.qiRegen * QI_TICK);
+  const enemy = currentEnemy(s);
+  enemy.qi = Math.min(maxQi(enemy.kind), enemy.qi + ENEMY_QI_REGEN * QI_TICK);
+  s.qiNextAt = s.time + QI_TICK;
 }
 
 /**
@@ -384,10 +411,13 @@ function enemyAttacks(s: GameState, rng: Rng): void {
   const c = s.cultivator;
   const enemy = currentEnemy(s);
   s.enemyNextAttackAt = s.time + enemy.attackInterval;
+  enemy.qi = Math.min(maxQi(enemy.kind), enemy.qi + ENEMY_QI_PER_ATTACK);
   // Rolled only under an Illusion Array, so other runs draw the same numbers.
   const array = equippedArray(c.equipment);
   if (array?.id === 'illusion' && chance(rng, array.value)) return;
-  c.hp -= mitigate(enemy.damage, derive(c).defence);
+  const d = derive(c);
+  c.hp -= mitigate(enemy.damage, d.defence);
+  c.qi = Math.min(d.maxQi, c.qi + QI_PER_HIT_TAKEN);
   if (c.hp > 0) return;
 
   // Lost: drop back a floor and climb again from there, so a run never gets
@@ -408,12 +438,13 @@ function queueTribulation(s: GameState): void {
   s.enemies.push(makeTribulation(s.floor, realmOf(c.level)));
 }
 
-/** Fresh enemies and full HP, then the first fight. */
+/** Fresh enemies, full HP and no qi, then the first fight. */
 export function startFloor(s: GameState, rng: Rng, delay: number): void {
   const c = s.cultivator;
   s.enemies = makeFloor(rng, s.floor);
   queueTribulation(s);
   c.hp = derive(c).maxHp;
+  c.qi = 0;
   c.attackCount = 0;
   startFight(s, delay);
 }
@@ -422,7 +453,7 @@ export function startFloor(s: GameState, rng: Rng, delay: number): void {
  * A fight against the enemy in front starts `delay` seconds from now: both
  * sides start their attack timers (the cultivator's `interval` after it), and
  * an equipped disc sets up its array (docs/design.md §6). A Binding Array
- * holds back the enemy's first attack.
+ * holds back the enemy's first attack. A Tribulation is faced with full qi.
  */
 function startFight(
   s: GameState,
@@ -432,6 +463,7 @@ function startFight(
   const c = s.cultivator;
   const array = equippedArray(c.equipment);
   const start = s.time + delay;
+  if (currentEnemy(s).kind === 'tribulation') c.qi = derive(c).maxQi;
   c.nextAttackAt = start + interval;
   s.enemyNextAttackAt =
     start + currentEnemy(s).attackInterval + (array?.id === 'binding' ? array.value : 0);

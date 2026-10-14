@@ -53,7 +53,7 @@ import {
   type Item,
   type SlotId,
 } from '../core/loot.ts';
-import { zoneOf } from '../core/floors.ts';
+import { maxQi, zoneOf } from '../core/floors.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
 import {
   BOOST_IDS,
@@ -1110,11 +1110,16 @@ function stageSprite(className: string): StageSprite {
 }
 
 interface Fighter extends StageSprite {
-  /** Name, HP bar and HP text, under the stage. */
+  /** Name, HP bar, qi bar and HP text, under the stage. */
   box: HTMLElement;
   name: HTMLElement;
   bar: HTMLElement;
   hp: HTMLElement;
+  /** The qi bar's track (a progressbar for screen readers) and its fill. */
+  qiTrack: HTMLElement;
+  qi: HTMLElement;
+  /** The qi last read out, so a frame with the same one touches nothing. */
+  qiSaid: string;
   /** The language, kind and name last drawn (see setFighter), so a frame with the same ones touches nothing. */
   nameKey: string;
 }
@@ -1127,8 +1132,16 @@ function fighter(side: 'you' | 'foe'): Fighter {
   const bar = el('span');
   track.append(bar);
   const hp = el('div', 'hp');
-  box.append(name, track, hp);
-  return { box, name, bar, hp, nameKey: '', ...stageSprite(side) };
+  // A fighter with no qi pool (a regular demon) keeps the row, empty and
+  // hidden, so the strip never changes height.
+  const qiTrack = el('div', 'bar qi');
+  qiTrack.setAttribute('role', 'progressbar');
+  attr(qiTrack, 'aria-label', 'strip.qi');
+  qiTrack.setAttribute('aria-valuemin', '0');
+  const qi = el('span');
+  qiTrack.append(qi);
+  box.append(name, track, qiTrack, hp);
+  return { box, name, bar, hp, qiTrack, qi, qiSaid: '', nameKey: '', ...stageSprite(side) };
 }
 
 /** A CSS url() for art, or none when there is no such file (never url(""), which loads the page). */
@@ -2877,6 +2890,8 @@ function play(
     parts: () => readonly NamePart[],
     hp: number,
     maxHp: number,
+    qi: number,
+    maxQi: number,
   ): void {
     if (key !== f.nameKey) {
       f.nameKey = key;
@@ -2895,6 +2910,18 @@ function play(
     }
     f.hp.textContent = t('strip.hp', { hp: Math.max(0, Math.ceil(hp)), max: maxHp });
     f.bar.style.width = `${Math.max(0, Math.min(100, (hp / maxHp) * 100))}%`;
+    const pool = maxQi > 0;
+    f.qiTrack.style.visibility = pool ? '' : 'hidden';
+    f.qi.style.width = pool ? `${Math.max(0, Math.min(100, (qi / maxQi) * 100))}%` : '0%';
+    const shown = Math.floor(qi);
+    const said = `${lang().code}\u0000${shown}\u0000${maxQi}`;
+    // A demon's hidden bar is not read out, so its numbers are left as they were.
+    if (pool && said !== f.qiSaid) {
+      f.qiSaid = said;
+      f.qiTrack.setAttribute('aria-valuemax', String(maxQi));
+      f.qiTrack.setAttribute('aria-valuenow', String(shown));
+      f.qiTrack.setAttribute('aria-valuetext', t('strip.qiValue', { qi: shown, max: maxQi }));
+    }
   }
 
   function drawStrip(prev: GameState | null): void {
@@ -2907,12 +2934,15 @@ function play(
     });
     killText.textContent = t('strip.kills', { n: state.kills });
     const code = lang().code;
+    const d = derive(c);
     setFighter(
       you,
       `${code}\u0000${c.path}`,
       () => [{ text: tn('path', PATHS[c.path].name) }],
       c.hp,
-      derive(c).maxHp,
+      d.maxHp,
+      c.qi,
+      d.maxQi,
     );
     if (enemy) {
       foe.box.dataset.kind = enemy.kind;
@@ -2922,6 +2952,8 @@ function play(
         () => enemyNameParts(enemy.kind, enemy.name),
         enemy.hp,
         enemy.maxHp,
+        enemy.qi,
+        maxQi(enemy.kind),
       );
     }
     const z = zoneOf(state.floor);

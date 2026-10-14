@@ -387,11 +387,18 @@ export const STAT_ROWS: readonly StatRow[] = [
     format: (v) => `${num(v * 100, 1)}%`,
   },
   {
+    label: 'row.maxQi',
+    kind: 'utility',
+    group: 'Defence',
+    value: (d) => d.maxQi,
+    format: (v) => num(v, 0),
+  },
+  {
     label: 'row.qiRegen',
     kind: 'utility',
     group: 'Defence',
     value: (d) => d.qiRegen,
-    format: (v) => `${num(v * 100, 1)}%`,
+    format: (v) => num(v, 1),
   },
   {
     label: 'row.stoneFind',

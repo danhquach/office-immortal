@@ -35,6 +35,7 @@ import {
   DEMONS,
   DEMONS_PER_WAVE,
   makeEnemy,
+  maxQi,
   makeTribulation,
   TRIBULATIONS,
   WAVES_PER_FLOOR,
@@ -65,7 +66,7 @@ import {
 } from '../core/loot.ts';
 import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
-import { ARRAY_TICK, ENEMY_ARRIVAL, startFloor, type GameState } from '../core/sim.ts';
+import { ARRAY_TICK, ENEMY_ARRIVAL, QI_TICK, startFloor, type GameState } from '../core/sim.ts';
 import {
   BOOST_CAP_SECONDS,
   BOOST_IDS,
@@ -83,7 +84,7 @@ import { arr, Bad, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-export const SAVE_VERSION = 11;
+export const SAVE_VERSION = 13;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
@@ -91,9 +92,9 @@ export const SAVE_VERSION = 11;
  * v6 had seven realms, so a due Tribulation may carry another realm's name;
  * v7 came before crafting, so no item has a refine level; v8 had a cap every
  * 10 levels; v9 came before the store and its boosts; v10 had caps at 10, 22,
- * 36 … 162.
+ * 36 … 162; v11 came before qi.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -291,6 +292,8 @@ function readState(v: unknown, version: number): GameState {
   const oldCaps = oldLadder(version);
   // Before v10 there was no store, so no stock and no boosts.
   const before10 = version < 10;
+  // Before v13 there was no qi: everyone starts with none.
+  const before13 = version < 13;
   const items: ItemReader = {
     slot: before4 ? fromPants : (id) => id,
     refines: version >= 8,
@@ -304,6 +307,7 @@ function readState(v: unknown, version: number): GameState {
     'enemies',
     'enemyNextAttackAt',
     ...(before5 ? [] : ['arrayNextAt']),
+    ...(before13 ? [] : ['qiNextAt']),
     ...(before6 ? [] : ['souls']),
     'inventory',
     'kills',
@@ -332,6 +336,7 @@ function readState(v: unknown, version: number): GameState {
     items,
     before4,
     oldCaps,
+    before13,
   );
   const state: GameState = {
     time,
@@ -345,12 +350,14 @@ function readState(v: unknown, version: number): GameState {
       cultivator,
       oldCaps ? heldAtOldCap(cultivator, oldCaps) : readyForTribulation(cultivator),
       oldCaps !== null,
+      before13,
     ),
     enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
     // Left behind while no Killing Array is equipped, so it may be in the past.
     arrayNextAt: before5
       ? time + ARRAY_TICK
       : num(o.arrayNextAt, 0, time + ENEMY_ARRIVAL + ARRAY_TICK),
+    qiNextAt: before13 ? time + QI_TICK : num(o.qiNextAt, time, time + QI_TICK),
     // Only an equipped banner holds souls, and never more than its cap.
     souls: before6 ? 0 : int(o.souls, 0, soulCap(cultivator.equipment)),
     inventory: arr(o.inventory, bagSize).map((i) => readItem(i, highestFloor, items)),
@@ -441,6 +448,7 @@ function readCultivator(
   items: ItemReader,
   before4: boolean,
   oldCaps: readonly number[] | null,
+  before13: boolean,
 ): Cultivator {
   // An older save was priced on the old XP curve; what it held below a cap still counts.
   const price = oldCaps ? oldXpToNext : xpToNext;
@@ -454,6 +462,7 @@ function readCultivator(
     'nextAttackAt',
     'attackCount',
     ...(v1 ? [] : ['unspent']),
+    ...(before13 ? [] : ['qi']),
   ]);
   const path = oneOf(o.path, PATH_IDS);
   const level = int(o.level, 1, MAX_LEVEL);
@@ -489,9 +498,12 @@ function readCultivator(
     unspent,
     equipment,
     hp: 0,
+    qi: 0,
     nextAttackAt: num(o.nextAttackAt, time, time + MAX_INTERVAL),
     attackCount: int(o.attackCount, 0, Number.MAX_SAFE_INTEGER),
   };
+  // Never above the max the stats allow; that max may carry another engine's rounding.
+  if (!before13) c.qi = Math.min(num(o.qi, 0, give(derive(c).maxQi)), derive(c).maxQi);
   if (oldCaps) {
     // The old ladder may have put this level in a higher realm, with a bigger bonus.
     const max = derive(c).maxHp;
@@ -563,6 +575,7 @@ function readEnemies(
   c: Cultivator,
   ready: boolean,
   oldLadder: boolean,
+  before13: boolean,
 ): Enemy[] {
   // A cultivator held at a cap has the realm's Tribulation at the end of the
   // floor (or at its front, once faced), and only then.
@@ -577,7 +590,17 @@ function readEnemies(
     ? ['tribulation', ...FLOOR_KINDS.slice(FLOOR_KINDS.length - (list.length - 1))]
     : order.slice(order.length - list.length);
   return list.map((e, i) => {
-    const o = obj(e, ['name', 'kind', 'maxHp', 'hp', 'damage', 'defence', 'attackInterval', 'xp']);
+    const o = obj(e, [
+      'name',
+      'kind',
+      'maxHp',
+      'hp',
+      ...(before13 ? [] : ['qi']),
+      'damage',
+      'defence',
+      'attackInterval',
+      'xp',
+    ]);
     const kind = kinds[i] as EnemyKind;
     if (o.kind !== kind) fail('enemy order');
     // Rebuilt from the floor, so every number is the sim's own, not the save's.
@@ -597,6 +620,8 @@ function readEnemies(
       if (o[k] !== enemy[k]) fail(`enemy ${k}`);
     }
     enemy.hp = Math.min(num(o.hp, Number.MIN_VALUE, give(enemy.maxHp)), enemy.maxHp);
+    // A demon has no pool, so a saved demon's qi can only be 0.
+    enemy.qi = before13 ? 0 : num(o.qi, 0, maxQi(kind));
     return enemy;
   });
 }
