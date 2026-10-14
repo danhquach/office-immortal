@@ -15,6 +15,7 @@ import {
   type Stats,
   readyForTribulation,
   realmLevels,
+  QI_BASE_REGEN,
   realmOf,
   realmPrimaryShare,
   REALMS,
@@ -77,15 +78,29 @@ import {
   canEquip,
   canFaceTribulation,
   characterStatus,
+  QI_PER_ATTACK,
+  QI_PER_HIT_TAKEN,
   requiredRealm,
   TRIAL_LOSS_LIMIT,
   trialRetryIn,
   trialSetAside,
   type GameState,
 } from '../core/sim.ts';
-import { pathSkills, PATH_SKILL_NAMES, rankedPathSkills } from '../core/path-skills.ts';
 import {
+  INTENT_HP_SHARE,
+  LOW_HP_SHARE,
+  pathSkills,
+  pathStep,
+  PATH_SKILL_NAMES,
+  rankedPathSkills,
+  SEAL_QI_SHARE,
+  SURGE_HP_SHARE,
+  VAJRA_HP_SHARE,
+} from '../core/path-skills.ts';
+import {
+  DEFENSIVE_HP_SHARE,
   enduring,
+  HOLD_WITHIN_QI,
   MAX_BURNS,
   reflectShare,
   shieldLeft,
@@ -970,8 +985,13 @@ export function tribulationBanner(prev: GameState, next: GameState): string | nu
   const before = prev.enemies[0];
   const now = next.enemies[0];
   if (realmOf(next.cultivator.level) > realmOf(prev.cultivator.level)) {
-    const realm = REALMS[realmOf(next.cultivator.level)];
-    return realm ? t('trial.breakthrough', { realm: tn('realm', realm.name) }) : null;
+    const at = realmOf(next.cultivator.level);
+    const realm = REALMS[at];
+    if (!realm) return null;
+    const head = t('trial.breakthrough', { realm: tn('realm', realm.name) });
+    // What the realm brings the Path, on its own line (the banner keeps line breaks).
+    const skill = breakthroughSkill(next.cultivator.path, at);
+    return skill ? `${head}\n${skill}` : head;
   }
   if (before?.kind === 'tribulation' && next.deaths > prev.deaths) {
     return t('trial.lost', { name: tn('enemy', before.name) });
@@ -997,14 +1017,17 @@ export interface RealmRow {
   readonly name: string;
   readonly title: string;
   readonly levels: string;
+  /** What the realm brings the Path: "Sword Intent" or "Flying Sword ↑ Two swords". */
+  readonly unlock: string;
   readonly current: boolean;
 }
 
 /**
  * Every realm in order, for the Realm chip's hover list; the one `level` is in
- * is current. Each realm past the first names the main-stat boost reached there, in all.
+ * is current. Each realm past the first names the main-stat boost reached there, in all,
+ * and each names what it brings `path` (realmUnlock).
  */
-export function realmRows(level: number): RealmRow[] {
+export function realmRows(level: number, path: PathId): RealmRow[] {
   const at = realmOf(level);
   return REALMS.map((realm, i) => {
     const { from, to } = realmLevels(i);
@@ -1016,6 +1039,7 @@ export function realmRows(level: number): RealmRow[] {
         i === 0
           ? levels
           : t('realm.withBonus', { levels, pct: num(realmPrimaryShare(i) * 100, 1) }),
+      unlock: realmUnlock(path, i)?.text ?? '',
       current: i === at,
     };
   });
@@ -1320,6 +1344,11 @@ export interface SkillIcon {
   flash: number | null;
 }
 
+/** A skill level's border colour: green at level 1, azure between, gold at the top. */
+export function skillTier(level: number, maxLevel: number): SkillTier {
+  return level >= maxLevel ? 'max' : level > 1 ? 'mid' : 'base';
+}
+
 /** The skill bar's cell for a skill name: PATH_SKILL_NAMES order, as skills.png is built. */
 export function skillCell(name: string): number {
   return PATH_SKILL_NAMES.indexOf(name);
@@ -1404,7 +1433,7 @@ export function skillBar(state: GameState): SkillIcon[] {
       ring: buffLeft(def, state),
       level: rank,
       maxLevel: maxRank,
-      tier: rank >= maxRank ? 'max' : rank > 1 ? 'mid' : 'base',
+      tier: skillTier(rank, maxRank),
       flash,
     };
   });
@@ -1528,6 +1557,95 @@ export function skillTip(
     cost: t('skill.cost', { qi: icon.qi }),
     effect: def ? skillEffect(def) : '',
   };
+}
+
+/** The numbers the "uses it when" rules name, in percent or qi. */
+const WHEN_NUMBERS = {
+  low: pct(DEFENSIVE_HP_SHARE),
+  hold: HOLD_WITHIN_QI,
+  intent: pct(INTENT_HP_SHARE),
+  enemyLow: pct(LOW_HP_SHARE),
+  surge: pct(SURGE_HP_SHARE),
+  vajra: pct(VAJRA_HP_SHARE),
+  seal: pct(SEAL_QI_SHARE),
+};
+
+/** A Path skill's "uses it when" rule at `rank`, e.g. "When your HP is below 40%." */
+export function skillWhen(id: string, rank: number): string {
+  // Once burns stack (Fire Talisman's second rank) it no longer waits for one to end.
+  const key = id === 'fireTalisman' && rank >= 2 ? 'fireTalismanStack' : id;
+  return t(`skill.when.${key}` as MessageKey, WHEN_NUMBERS);
+}
+
+/** One skill on the Stats tab's Skills list (docs/design.md §5 Qi and skills). */
+export interface SkillRow {
+  id: string;
+  /** In the player's language. */
+  name: string;
+  cell: number;
+  level: number;
+  maxLevel: number;
+  tier: SkillTier;
+  /** "Level 2 / 3", for screen readers beside the pips. */
+  levelText: string;
+  cost: string;
+  effect: string;
+  when: string;
+}
+
+/** The skills a cultivator of `path` knows at `level`, learned order, as the Skills list shows them. */
+export function skillRows(path: PathId, level: number): SkillRow[] {
+  return rankedPathSkills(path, realmOf(level)).map(({ def, rank, maxRank }) => ({
+    id: def.id,
+    name: tn('skill', def.name),
+    cell: skillCell(def.name),
+    level: rank,
+    maxLevel: maxRank,
+    tier: skillTier(rank, maxRank),
+    levelText: t('skill.level', { level: rank, max: maxRank }),
+    cost: t('skill.cost', { qi: def.qi }),
+    effect: skillEffect(def),
+    when: skillWhen(def.id, rank),
+  }));
+}
+
+/**
+ * What realm `realm` (an index into REALMS) brings `path`: a new skill
+ * ("Sword Intent", `learned` true) or an upgrade ("Flying Sword ↑ Two
+ * swords"). An upgrade that renames the skill names its new name. Null for
+ * a realm past the last.
+ */
+export function realmUnlock(
+  path: PathId,
+  realm: number,
+): { text: string; learned: boolean } | null {
+  const step = pathStep(path, realm);
+  if (!step) return null;
+  if (step.rank === 1) return { text: tn('skill', step.name), learned: true };
+  const before = rankedPathSkills(path, realm - 1).find((k) => k.def.id === step.id);
+  const was = before?.def.name ?? step.name;
+  const up =
+    was === step.name ? t(`skillUp.${step.id}.${step.rank}` as MessageKey) : tn('skill', step.name);
+  return { text: t('skill.up', { name: tn('skill', was), up }), learned: false };
+}
+
+/** The Skills list's last line: what the next realm brings, or that none is left. */
+export function nextRealmLine(path: PathId, level: number): string {
+  const next = realmUnlock(path, realmOf(level) + 1);
+  return next ? t('skill.next', { unlock: next.text }) : t('skill.nextNone');
+}
+
+/** The breakthrough banner's skill line: "New skill: Sword Intent" or "Flying Sword ↑ Two swords". */
+export function breakthroughSkill(path: PathId, realm: number): string | null {
+  const unlock = realmUnlock(path, realm);
+  if (!unlock) return null;
+  return unlock.learned ? t('skill.new', { name: unlock.text }) : unlock.text;
+}
+
+/** Help's "Qi and skills" entry, with the sim's own numbers. */
+export function helpQiLines(): string[] {
+  const n = { attack: QI_PER_ATTACK, hit: QI_PER_HIT_TAKEN, base: QI_BASE_REGEN };
+  return (['help.qi.1', 'help.qi.2', 'help.qi.3', 'help.qi.4'] as const).map((k) => t(k, n));
 }
 
 /** Heavenly Lightning strikes landed between two states, for the stage's flash. */

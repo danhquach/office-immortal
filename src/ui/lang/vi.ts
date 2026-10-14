@@ -99,6 +99,49 @@ const vi: Pack = {
     'skill.burst': 'khi vỡ nổ ra {share}% giá trị của nó',
     'skill.drain': 'rút cạn khí của địch',
     'skill.drainSteal': 'cướp toàn bộ khí của địch',
+    'skill.whenLabel': 'Dùng khi',
+    'skill.when.flyingSword':
+      'Hễ sẵn sàng, trừ khi một kỹ năng lớn hơn sắp dùng chỉ còn thiếu {hold} khí.',
+    'skill.when.swordIntent':
+      'Trong giây đầu trận gặp tinh anh trở lên, hoặc khi địch còn trên {intent}% HP.',
+    'skill.when.lightningStep':
+      'Khi địch vận chiêu hoặc HP của bạn từ {low}% trở xuống, không dùng khi còn lượt né.',
+    'skill.when.tenThousandSwords':
+      'Gặp tinh anh dưới {enemyLow}% HP, hoặc gặp trùm hay Độ Thiên Kiếp.',
+    'skill.when.ironSkin':
+      'Khi địch vận chiêu hoặc HP của bạn từ {low}% trở xuống, không dùng khi còn hiệu lực.',
+    'skill.when.mountainFist': 'Để cắt ngang địch vận chiêu, nếu không thì khi khí đầy.',
+    'skill.when.bloodQiSurge': 'Khi HP của bạn dưới {surge}%.',
+    'skill.when.vajraBody':
+      'Khi đòn kế tiếp của địch sẽ đưa HP của bạn xuống dưới {vajra}%, hoặc khi trùm hay Độ Thiên Kiếp vận chiêu.',
+    'skill.when.fireTalisman': 'Khi địch chưa bị thiêu đốt.',
+    'skill.when.fireTalismanStack': 'Hễ sẵn sàng.',
+    'skill.when.thunderTalisman':
+      'Khi đánh tới được từ hai kẻ địch trở lên, hoặc gặp trùm hay Độ Thiên Kiếp.',
+    'skill.when.spiritShield':
+      'Khi địch vận chiêu hoặc HP của bạn từ {low}% trở xuống; dùng lại ngay khi hộ thuẫn trước đã mất.',
+    'skill.when.sealingTalisman': 'Gặp tinh anh trở lên đang giữ trên {seal}% khí của nó.',
+    'skill.new': 'Kỹ năng mới: {name}',
+    'skill.up': '{name} ↑ {up}',
+    'skill.next': 'Cảnh giới tới: {unlock}',
+    'skill.nextNone': 'Đã đạt mọi cảnh giới: không còn kỹ năng để học.',
+    'skill.changeTo': 'Nếu là {path} lúc này:',
+    'skillUp.flyingSword.2': 'Hai thanh kiếm',
+    'skillUp.flyingSword.3': 'Hạ gục thì hoàn nửa khí',
+    'skillUp.swordIntent.2': '+15% tỉ lệ bạo kích',
+    'skillUp.swordIntent.3': 'Kéo dài 10 giây, tốn 35 khí',
+    'skillUp.lightningStep.2': 'Mỗi lần né phản đòn bạo kích',
+    'skillUp.tenThousandSwords.2': '8 đòn',
+    'skillUp.ironSkin.2': 'Phản 25% sát thương phải chịu',
+    'skillUp.ironSkin.3': 'Tốn 20 khí',
+    'skillUp.mountainFist.2': 'Choáng 1.5 giây, thêm 10% HP tối đa',
+    'skillUp.bloodQiSurge.2': 'Nhân đôi hút máu trong 6 giây',
+    'skillUp.vajraBody.2': 'Kéo dài 6 giây',
+    'skillUp.fireTalisman.2': 'Thiêu đốt cộng dồn (tối đa 3)',
+    'skillUp.fireTalisman.3': 'Tốn 20 khí',
+    'skillUp.thunderTalisman.2': 'Đánh thêm 2 kẻ địch sau nó',
+    'skillUp.spiritShield.2': 'Nổ ra khi vỡ',
+    'skillUp.sealingTalisman.2': '8 giây, và cướp khí',
     'strip.wave': 'Đợt {n} / {of}',
     'strip.elite': 'Tinh Anh',
     'strip.boss': 'Trùm',
@@ -173,7 +216,7 @@ const vi: Pack = {
     'row.critDamage': 'Sát thương bạo kích',
     'row.lifesteal': 'Hút máu',
     'row.maxQi': 'Khí tối đa',
-    'row.qiRegen': 'Hồi khí/giây',
+    'row.qiRegen': 'Khí mỗi giây',
     'row.stoneFind': 'Tìm Linh Thạch',
     'row.stoneFindShort': 'Linh Thạch',
     'row.treasureFind': 'Tìm bảo vật',
@@ -211,6 +254,15 @@ const vi: Pack = {
     'rebalance.take': 'Đặt lại miễn phí',
     'rebalance.keep': 'Giữ chỉ số',
     'help.stats': 'Chỉ số',
+    'help.qi': 'Khí và kỹ năng',
+    'help.qi.1':
+      'Khí tích dần khi chiến đấu: +{attack} mỗi đòn đánh, +{hit} mỗi đòn phải chịu. Khí về 0 ở mỗi tầng mới và đầy khi Độ Thiên Kiếp bắt đầu.',
+    'help.qi.2':
+      'Khí mỗi giây: ban đầu là {base}, tăng nhờ Thần Thức và trang bị cộng một phần khí tối đa mỗi giây. Khí vẫn hồi giữa các trận.',
+    'help.qi.3':
+      'Tu sĩ tự dùng kỹ năng: kỹ năng tốn nhiều khí nhất đang sẵn sàng, theo điều kiện "Dùng khi" của nó (tab Chỉ số, Kỹ năng). Mỗi lần đột phá học thêm kỹ năng hoặc nâng cấp.',
+    'help.qi.4':
+      'Tinh anh và trùm vận chiêu trước khi tung kỹ năng, hô tên chiêu và có thanh vận chiêu: gây choáng sẽ cắt ngang, còn kỹ năng phòng thủ sẽ đỡ lại.',
     'help.statsHint': 'Thêm một điểm sẽ làm gì cho bạn lúc này:',
     'bonus.damage': 'Sát thương',
     'bonus.maxHp': 'HP tối đa',
@@ -219,7 +271,7 @@ const vi: Pack = {
     'bonus.critDamage': 'Sát thương bạo kích',
     'bonus.attackSpeed': 'Tốc độ đánh',
     'bonus.lifesteal': 'Hút máu',
-    'bonus.qiRegen': 'Hồi khí',
+    'bonus.qiRegen': 'khí tối đa mỗi giây',
     'bonus.stoneFind': 'Tìm Linh Thạch',
     'bonus.treasureFind': 'Tìm bảo vật',
 

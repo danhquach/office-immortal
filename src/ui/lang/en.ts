@@ -95,6 +95,49 @@ const messages = {
   'skill.burst': 'bursts for {share}% of its value when it breaks',
   'skill.drain': "empties the enemy's qi",
   'skill.drainSteal': "steals all the enemy's qi",
+  'skill.whenLabel': 'Uses it when',
+  'skill.when.flyingSword':
+    'Whenever ready, unless a bigger skill it would cast is within {hold} qi.',
+  'skill.when.swordIntent':
+    'In the first second of a fight against an elite or tougher, or while the enemy is above {intent}% HP.',
+  'skill.when.lightningStep':
+    'When the enemy winds up or your HP is at or below {low}%, not while dodges are left.',
+  'skill.when.tenThousandSwords':
+    'Against an elite below {enemyLow}% HP, or a boss or Tribulation.',
+  'skill.when.ironSkin':
+    'When the enemy winds up or your HP is at or below {low}%, not while it still works.',
+  'skill.when.mountainFist': 'To interrupt a wind-up, otherwise when qi is full.',
+  'skill.when.bloodQiSurge': 'When your HP is below {surge}%.',
+  'skill.when.vajraBody':
+    "When the enemy's next hit would take your HP below {vajra}%, or a boss or Tribulation winds up.",
+  'skill.when.fireTalisman': "When the enemy isn't already burning.",
+  'skill.when.fireTalismanStack': 'Whenever ready.',
+  'skill.when.thunderTalisman':
+    'When it can reach two or more enemies, or against a boss or Tribulation.',
+  'skill.when.spiritShield':
+    'When the enemy winds up or your HP is at or below {low}%; again once the last shield is gone.',
+  'skill.when.sealingTalisman': 'Against an elite or tougher holding over {seal}% of its qi.',
+  'skill.new': 'New skill: {name}',
+  'skill.up': '{name} ↑ {up}',
+  'skill.next': 'Next realm: {unlock}',
+  'skill.nextNone': 'Every realm reached: no skill left to learn.',
+  'skill.changeTo': 'As {path} now:',
+  'skillUp.flyingSword.2': 'Two swords',
+  'skillUp.flyingSword.3': 'A kill gives back half its qi',
+  'skillUp.swordIntent.2': '+15% crit chance',
+  'skillUp.swordIntent.3': 'Lasts 10 s, costs 35 qi',
+  'skillUp.lightningStep.2': 'Each dodge answers with a crit',
+  'skillUp.tenThousandSwords.2': '8 hits',
+  'skillUp.ironSkin.2': 'Reflects 25% of damage taken',
+  'skillUp.ironSkin.3': 'Costs 20 qi',
+  'skillUp.mountainFist.2': 'Stuns 1.5 s, adds 10% of max HP',
+  'skillUp.bloodQiSurge.2': 'Doubles lifesteal for 6 s',
+  'skillUp.vajraBody.2': 'Lasts 6 s',
+  'skillUp.fireTalisman.2': 'Burns stack (up to 3)',
+  'skillUp.fireTalisman.3': 'Costs 20 qi',
+  'skillUp.thunderTalisman.2': 'Also hits the 2 enemies after it',
+  'skillUp.spiritShield.2': 'Bursts when it breaks',
+  'skillUp.sealingTalisman.2': '8 s, and steals the qi',
   'strip.wave': 'Wave {n} / {of}',
   'strip.elite': 'Elite',
   'strip.boss': 'Boss',
@@ -170,7 +213,7 @@ const messages = {
   'row.critDamage': 'Crit damage',
   'row.lifesteal': 'Lifesteal',
   'row.maxQi': 'Max qi',
-  'row.qiRegen': 'Qi regen/s',
+  'row.qiRegen': 'Qi per second',
   'row.stoneFind': 'Spirit stone find',
   'row.stoneFindShort': 'Spirit stones',
   'row.treasureFind': 'Treasure find',
@@ -208,6 +251,15 @@ const messages = {
   'rebalance.take': 'Reset stats free',
   'rebalance.keep': 'Keep my stats',
   'help.stats': 'Stats',
+  'help.qi': 'Qi and skills',
+  'help.qi.1':
+    'Qi builds up in combat: +{attack} per attack, +{hit} per hit taken. It starts at 0 on each new floor and is full when a Tribulation starts.',
+  'help.qi.2':
+    'Qi per second: {base} to start, raised by Spirit and by gear that adds a share of max qi each second. It keeps coming between fights.',
+  'help.qi.3':
+    'Your cultivator casts their skills on their own: the costliest one that is ready, following its "Uses it when" rule (Stats tab, Skills). Each breakthrough brings a new skill or an upgrade.',
+  'help.qi.4':
+    'Elites and bosses wind up a skill before it lands, yelling its name over a filling cast bar: a stun cancels the wind-up, and defensive skills answer it.',
   'help.statsHint': 'What one more point does for you now:',
   'bonus.damage': 'Damage',
   'bonus.maxHp': 'Max HP',
@@ -216,7 +268,7 @@ const messages = {
   'bonus.critDamage': 'Crit damage',
   'bonus.attackSpeed': 'Attack speed',
   'bonus.lifesteal': 'Lifesteal',
-  'bonus.qiRegen': 'Qi regen',
+  'bonus.qiRegen': 'of max qi per second',
   'bonus.stoneFind': 'Spirit stone find',
   'bonus.treasureFind': 'Treasure find',
 

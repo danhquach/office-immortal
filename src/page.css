@@ -382,6 +382,11 @@ select {
   image-rendering: pixelated;
   animation: avatar-frames 0.8s steps(4) infinite;
 }
+/* The Path's four skills under the portrait, across the whole button. */
+.paths .skill-names {
+  grid-column: 1 / -1;
+  margin-top: 0.4rem;
+}
 .paths button:is(:hover, :focus-visible) .avatar {
   background-position-y: -64px;
   animation-duration: 0.4s;
@@ -517,8 +522,11 @@ select {
   padding: 0.2rem 0;
   list-style: none;
   font-size: 0.85rem;
-  /* Columns line up across rows. */
-  grid-template-columns: repeat(3, max-content);
+  /* Columns line up across rows; what a realm brings wraps to keep the
+     list inside the window. */
+  max-width: calc(100vw - 8px);
+  box-sizing: border-box;
+  grid-template-columns: repeat(3, max-content) minmax(8rem, max-content);
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 3px;
@@ -537,19 +545,37 @@ select {
   white-space: nowrap;
 }
 .realm-list .title,
-.realm-list .levels {
+.realm-list .levels,
+.realm-list .unlock {
   color: var(--muted);
 }
 .realm-list .levels {
   text-align: right;
+}
+.realm-list .unlock {
+  white-space: normal;
 }
 .realm-list li.current {
   background: var(--head);
   border-left-color: var(--accent);
   font-weight: 600;
 }
-.realm-list li.current :is(.title, .levels) {
+.realm-list li.current :is(.title, .levels, .unlock) {
   color: inherit;
+}
+/* A phone: each realm's name and title on a line, then its levels, then
+   what it brings, wrapping inside the window. */
+@media (max-width: 559px) {
+  .realm-list {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
+  .realm-list li {
+    white-space: normal;
+  }
+  .realm-list :is(.levels, .unlock) {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
 }
 /* The strip, and beside it the summary chips over Recent drops. */
 .top {
@@ -1368,6 +1394,8 @@ select {
   font-size: 1.25rem;
   font-weight: 700;
   text-align: center;
+  /* A breakthrough's skill goes on its own line. */
+  white-space: pre-line;
   pointer-events: none;
   opacity: 0;
 }
@@ -1668,6 +1696,92 @@ select {
   .skill.flash {
     animation: none;
   }
+}
+/* A skill's icon outside the strip (Stats tab, Path choice, Respec): the
+   same skills.png cell and level border as the skill bar's. */
+.skill-icon {
+  flex: none;
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--skill-art) no-repeat;
+  background-size: 1400% 100%;
+  background-position: calc(var(--cell, 0) / 13 * 100%) 0;
+  box-shadow: 0 0 0 1.5px var(--tier);
+  --tier: var(--skill-base);
+}
+.skill-icon[data-tier='mid'] {
+  --tier: var(--skill-mid);
+}
+.skill-icon[data-tier='max'] {
+  --tier: var(--skill-max);
+}
+/* A row of skills, each its icon and name. */
+.skill-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+}
+.skill-names li {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+/* The Stats tab's Skills list: icon, name, pips and cost on a line, the effect under. */
+.skill-list {
+  margin: 0.4rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.skill-list li {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  column-gap: 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.skill-list li[hidden] {
+  display: none;
+}
+.skill-list .name {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+.skill-list .pips {
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.skill-list .cost {
+  color: var(--muted);
+}
+.skill-list .effect {
+  grid-column: 2 / -1;
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+}
+.next-realm {
+  margin: 0.5rem 0 0;
+}
+.respec .path-skills {
+  margin-top: 0.4rem;
+}
+.respec .path-skills .hint {
+  margin-bottom: 0.25rem;
 }
 /* The tip opens in the top layer but sits in the strip, so it sets its own
    colours and drops the compact strip's text outline. */
@@ -2982,7 +3096,8 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .callout,
     .yell,
     .strike,
-    .bar.qi > .cast
+    .bar.qi > .cast,
+    .skill-icon
   ) {
   display: none;
 }
