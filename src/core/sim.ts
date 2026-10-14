@@ -7,6 +7,7 @@
 
 import {
   breakThrough,
+  defaultRatio,
   derive,
   effectiveStats,
   gainXp,
@@ -14,8 +15,10 @@ import {
   PATHS,
   readyForTribulation,
   realmOf,
+  zeroCarry,
   type Cultivator,
   type PathId,
+  type PlanSlot,
 } from './cultivator.ts';
 import {
   defaultFilter,
@@ -79,7 +82,7 @@ export const DEFENCE_HALVES_AT = 50;
 export const ENEMY_ARRIVAL = 1.2;
 /** Seconds between the hits of a Killing Array. */
 export const ARRAY_TICK = 1;
-/** Seconds between qi regen steps; each adds a second's regen. */
+/** Seconds between regen steps (qi and HP); each adds a second's regen. */
 export const QI_TICK = 1;
 /** Qi the cultivator gains per attack and per hit taken. */
 export const QI_PER_ATTACK = 8;
@@ -125,7 +128,7 @@ export interface GameState {
   enemyNextAttackAt: number;
   /** Sim time of a Killing Array's next hit, in seconds; unused without one. */
   arrayNextAt: number;
-  /** Sim time of the next qi regen step, in seconds. */
+  /** Sim time of the next regen step (qi and HP), in seconds; it runs between fights too. */
   qiNextAt: number;
   /** Souls the equipped Soul Banner holds; 0 without one (docs/design.md §6). */
   souls: number;
@@ -153,17 +156,47 @@ export interface GameState {
   boosts: Boosts;
   /** Auto-Tribulation and the retry limit; the switch is kept through Early Retirement. */
   trial: TrialState;
+  /** The Auto-assign plan, one per Path (docs/design.md §3); kept through Early Retirement. */
+  statPlan: StatPlan;
+  /** A save from before the stat rebalance: one free stat reset is on offer. */
+  freeReset: boolean;
   /** The current fight's skill state; never saved (docs/design.md §5 Skills). */
   combat: Combat;
 }
 
+/** Whether new stat points follow a plan, and each Path's plan. */
+export interface StatPlan {
+  auto: boolean;
+  slots: Record<PathId, PlanSlot>;
+}
+
+/** Auto-assign off; every Path's plan all on its main stat. */
+export function defaultStatPlan(): StatPlan {
+  const slot = (path: PathId): PlanSlot => ({ ratio: defaultRatio(path), carry: zeroCarry() });
+  return {
+    auto: false,
+    slots: { sword: slot('sword'), body: slot('body'), talisman: slot('talisman') },
+  };
+}
+
+/** The plan new points follow now, or null while Auto-assign is off. */
+export function activePlan(s: GameState): PlanSlot | null {
+  return s.statPlan.auto ? s.statPlan.slots[s.cultivator.path] : null;
+}
+
 /** What a run carries into the next one through Early Retirement. */
-export type Kept = Pick<GameState, 'insight' | 'passives' | 'retirements' | 'filter'>;
+export type Kept = Pick<GameState, 'insight' | 'passives' | 'retirements' | 'filter' | 'statPlan'>;
 
 export function newGame(
   seed: number,
   path: PathId,
-  kept: Kept = { insight: 0, passives: noPassives(), retirements: 0, filter: defaultFilter() },
+  kept: Kept = {
+    insight: 0,
+    passives: noPassives(),
+    retirements: 0,
+    filter: defaultFilter(),
+    statPlan: defaultStatPlan(),
+  },
 ): GameState {
   const state: GameState = {
     time: 0,
@@ -191,6 +224,8 @@ export function newGame(
     store: emptyStore(),
     boosts: noBoosts(),
     trial: newTrial(),
+    statPlan: kept.statPlan,
+    freeReset: false,
     combat: freshCombat(),
   };
   startFloor(state, rngFrom(state.rng), 0);
@@ -269,9 +304,9 @@ export function tick(state: GameState, dt: number, opts: TickOptions = {}): Game
 
 /**
  * Early Retirement: a new run at floor 1, level 1 on the same Path, paying Dao
- * Insight for the highest floor reached. Insight, passives and the auto filter
- * are kept; level, floors, items, currencies and bag upgrades are not. Returns
- * the new state; `state` is left untouched.
+ * Insight for the highest floor reached. Insight, passives, the auto filter
+ * and the Auto-assign plan are kept; level, floors, items, currencies and bag
+ * upgrades are not. Returns the new state; `state` is left untouched.
  */
 export function retire(state: GameState): GameState {
   if (!canRetire(state)) throw new RangeError('retire: too little progress to pay any insight');
@@ -283,6 +318,7 @@ export function retire(state: GameState): GameState {
     passives: s.passives,
     retirements: s.retirements + 1,
     filter: s.filter,
+    statPlan: s.statPlan,
   });
   next.trial.auto = s.trial.auto;
   return next;
@@ -462,9 +498,13 @@ export function faceTribulation(state: GameState): GameState {
   return s;
 }
 
-/** Damage after defence: never below 1, always a whole number. */
-export function mitigate(damage: number, defence: number): number {
-  return Math.max(1, Math.round((damage * DEFENCE_HALVES_AT) / (DEFENCE_HALVES_AT + defence)));
+/**
+ * Damage after defence: never below 1, always a whole number. A `pierce` share
+ * of the hit ignores the defence.
+ */
+export function mitigate(damage: number, defence: number, pierce = 0): number {
+  const kept = DEFENCE_HALVES_AT / (DEFENCE_HALVES_AT + defence);
+  return Math.max(1, Math.round(damage * (pierce + (1 - pierce) * kept)));
 }
 
 function currentEnemy(s: GameState): Enemy {
@@ -482,8 +522,16 @@ function cultivatorAttacks(s: GameState, p: Play): void {
   const enemy = currentEnemy(s);
   c.attackCount += 1;
   let damage = d.damage * modFactor(you, 'damage', now);
-  if (path.burstEvery > 0 && c.attackCount % path.burstEvery === 0) damage *= path.burstMultiplier;
+  const burst = path.burstEvery > 0 && c.attackCount % path.burstEvery === 0;
+  if (burst) damage *= d.burstMultiplier;
   if (chance(p.rng, d.critChance + modTotal(you, 'critChance', now))) damage *= d.critMultiplier;
+  // Talisman Resonance: a burst splashes onto the next enemy waiting (never a
+  // Tribulation), leaving it at least 1 HP to be fought in turn.
+  const waiting = s.enemies[1];
+  if (burst && d.splash > 0 && waiting && waiting.kind !== 'tribulation') {
+    const splash = mitigate(damage * d.splash, waiting.defence, d.pierce);
+    waiting.hp -= Math.min(waiting.hp - 1, splash);
+  }
   // A Soul Banner's souls: after crit and burst, so they never crit or burst.
   damage += soulDamage(s.souls, effectiveStats(c).spirit);
   const dealt = strikeFoe(s, 0, damage);
@@ -496,13 +544,16 @@ function cultivatorAttacks(s: GameState, p: Play): void {
 }
 
 /**
- * A qi regen step, once a second, between fights too: the cultivator's
- * regen and, for an enemy with a pool, its trickle.
+ * A regen step, once a second, between fights too: the cultivator's qi and
+ * HP regen (Body, docs/design.md §3), never above their max, and, for an
+ * enemy with a pool, its qi trickle.
  */
 function regenQi(s: GameState): void {
   const c = s.cultivator;
   const d = derive(c);
   c.qi = Math.min(d.maxQi, c.qi + d.qiRegen * QI_TICK);
+  // Healing up to max HP, never lowering HP that is above it.
+  if (c.hp < d.maxHp) c.hp = Math.min(d.maxHp, c.hp + d.hpRegen * QI_TICK);
   const enemy = currentEnemy(s);
   enemy.qi = Math.min(maxQi(enemy.kind), enemy.qi + ENEMY_QI_REGEN * QI_TICK);
   s.qiNextAt = s.time + QI_TICK;
@@ -536,7 +587,9 @@ function strikeFoe(s: GameState, index: number, raw: number, mitigated = true): 
   const status = index === 0 ? s.combat.foe : null;
   const damage = status ? raw * modFactor(status, 'damageTaken', now) : raw;
   const defence = enemy.defence * (status ? modFactor(status, 'defence', now) : 1);
-  let dealt = mitigated ? mitigate(damage, defence) : Math.max(1, Math.round(damage));
+  // Every hit on an enemy is the cultivator's, so its pierce counts (docs/design.md §3).
+  const pierce = derive(s.cultivator).pierce;
+  let dealt = mitigated ? mitigate(damage, defence, pierce) : Math.max(1, Math.round(damage));
   if (status) dealt = shielded(status, dealt, enemy.hp, now);
   dealt = Math.min(enemy.hp, dealt);
   enemy.hp -= dealt;
@@ -568,15 +621,20 @@ function shielded(status: Status, damage: number, hp: number, now: number): numb
   return enduring(status, now) ? Math.min(through, Math.max(0, hp - 1)) : through;
 }
 
-/** `hit` took `taken` damage: its reflect sends a share back, which can end the fight. */
+/**
+ * `hit` took `taken` damage: its reflect (a skill's, plus Iron Body's for the
+ * cultivator) sends a share back past defence, which can end the fight.
+ * Rounded, so a sliver of reflect sends back nothing rather than 1 HP a hit.
+ */
 function reflect(s: GameState, p: Play, hit: Side, taken: number): void {
-  const share = reflectShare(s.combat[hit], s.time);
-  if (share <= 0 || taken <= 0) return;
+  const iron = hit === 'you' ? derive(s.cultivator).reflect : 0;
+  const back = Math.round(taken * (iron + reflectShare(s.combat[hit], s.time)));
+  if (back <= 0) return;
   if (hit === 'you') {
-    strikeFoe(s, 0, taken * share, false);
+    strikeFoe(s, 0, back, false);
     if (currentEnemy(s).hp <= 0) defeated(s, p);
   } else {
-    strikeYou(s, taken * share, false);
+    strikeYou(s, back, false);
     if (s.cultivator.hp <= 0) lost(s, p);
   }
 }
@@ -593,9 +651,10 @@ function defeated(s: GameState, p: Play, index = 0): void {
   s.kills += 1;
   s.souls = Math.min(soulCap(c.equipment), s.souls + 1);
   earn(s, 'stones', killStones(enemy.kind, s.floor, d.stoneFind + boostBonus(s, 'stones')));
-  gainXp(c, Math.round(enemy.xp * (xpMultiplier(s.passives) + boostBonus(s, 'xp'))));
+  const plan = activePlan(s);
+  gainXp(c, Math.round(enemy.xp * (xpMultiplier(s.passives) + boostBonus(s, 'xp'))), plan);
   if (enemy.kind === 'tribulation') {
-    breakThrough(c);
+    breakThrough(c, plan);
     s.trial = newTrial(s.trial.auto);
   }
   const find = d.treasureFind + passiveTreasureFind(s.passives) + boostBonus(s, 'treasure');
@@ -623,14 +682,17 @@ function defeated(s: GameState, p: Play, index = 0): void {
 function enemyAttacks(s: GameState, p: Play): void {
   const c = s.cultivator;
   const enemy = currentEnemy(s);
+  const d = derive(c);
   const { foe } = s.combat;
   s.enemyNextAttackAt = s.time + modInterval(foe, enemy.attackInterval, s.time);
   enemy.qi = Math.min(maxQi(enemy.kind), enemy.qi + ENEMY_QI_PER_ATTACK);
-  // Rolled only under an Illusion Array, so other runs draw the same numbers.
+  // The array's roll only under an Illusion Array, so other runs draw the
+  // same numbers; then the dodge roll, on every enemy attack.
   const array = equippedArray(c.equipment);
   if (array?.id === 'illusion' && chance(p.rng, array.value)) return;
+  if (chance(p.rng, d.dodge)) return;
   const taken = strikeYou(s, enemy.damage * modFactor(foe, 'damage', s.time));
-  c.qi = Math.min(derive(c).maxQi, c.qi + QI_PER_HIT_TAKEN);
+  c.qi = Math.min(d.maxQi, c.qi + QI_PER_HIT_TAKEN);
   if (c.hp <= 0) lost(s, p);
   else reflect(s, p, 'you', taken);
 }
@@ -724,14 +786,6 @@ function skillsOf(s: GameState, p: Play, side: Side): readonly SkillDef[] {
   return list;
 }
 
-/**
- * Agility's cut to the cultivator's skill cooldowns. The stat arrives with the
- * stat rebalance (#149); until then cooldowns run in full.
- */
-function cooldownCut(): number {
-  return 0;
-}
-
 /** What the shared rules and a skill's own rule see for `side`, now. */
 function rules(s: GameState, side: Side): RuleInputs {
   const c = s.cultivator;
@@ -809,7 +863,8 @@ function castNow(s: GameState, p: Play, side: Side): void {
   const loadout = skillsOf(s, p, side);
   const def = loadout.find((k) => k.id === id);
   if (!def || !usable(def, loadout, rules(s, side))) return;
-  const cut = side === 'you' ? cooldownCut() : 0;
+  // Agility's cooldown reduction (docs/design.md §3) cuts the cultivator's cooldowns only.
+  const cut = side === 'you' ? derive(s.cultivator).cooldownReduction : 0;
   if (def.cooldown > 0) status.cooldowns[def.id] = s.time + cooldownFor(def, cut);
   status.uses[def.id] =
     (Object.hasOwn(status.uses, def.id) ? (status.uses[def.id] as number) : 0) + 1;

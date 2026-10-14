@@ -83,6 +83,21 @@ describe('miniStatus', () => {
       'F9 · Tribulation paused · 2 drops',
     );
   });
+
+  it('adds the unspent stat points last, and nothing when there are none', () => {
+    expect(miniStatus(4, 'Qi Condensation · Intern', 2, true, true, 5)).toBe(
+      'F4 · Tribulation paused · 2 drops · +5 pts',
+    );
+    expect(miniStatus(4, 'Qi Condensation · Intern', 0, false, false, 6)).toBe(
+      'F4 · Qi Condensation · Intern · +6 pts',
+    );
+    expect(miniStatus(4, 'Qi Condensation · Intern', 2, true, false, 3)).toBe(
+      'F4 · Tribulation due · 2 drops · +3 pts',
+    );
+    expect(miniStatus(4, 'Qi Condensation · Intern', 0, false, false, 0)).toBe(
+      'F4 · Qi Condensation · Intern',
+    );
+  });
 });
 
 describe('grades', () => {

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { GRADE_IDS, SELL_VALUE } from './economy.ts';
+import { GRADE_IDS, SELL_VALUE, setAutoAssign } from './economy.ts';
 import { GRADES, rollGrade, type GradeId } from './loot.ts';
 import { catchUp } from './offline.ts';
 import { retirePreview } from './prestige.ts';
 import { createRng } from './rng.ts';
 import { newGame, retire, tick, type GameState } from './sim.ts';
+import { setLevel } from '../dev/scenarios.ts';
 import {
   BOOST_BONUS,
   BOOST_CAP_SECONDS,
@@ -30,11 +31,11 @@ import {
 
 /** A synced game with plenty of Spirit Stones, on floor 20 at level 10. */
 function rich(seed = 1): GameState {
-  const s = newGame(seed, 'sword');
+  // Level 10 with its points placed (the dev scenario), so it fights floor 20 as a real run would.
+  const s = setLevel(setAutoAssign(newGame(seed, 'sword'), true), 10);
   s.stones = 1_000_000;
   s.floor = 20;
   s.highestFloor = 20;
-  s.cultivator.level = 10;
   return syncStore(s);
 }
 

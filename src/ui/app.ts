@@ -20,6 +20,8 @@ import {
   bagCost,
   buyBagSpace,
   canResetStats,
+  answerFreeReset,
+  applyPlan,
   changePath,
   disposeItem,
   essenceValue,
@@ -29,6 +31,8 @@ import {
   rerollAffix,
   pathChangeCost,
   resetStats,
+  setAutoAssign,
+  setPlanRatio,
   bulkPreview,
   bagStillShows,
   bulkConfirm,
@@ -257,7 +261,10 @@ import {
   bulkAsk,
   tintOf,
   SPRITE_SIZE,
+  planRatio,
   respecView,
+  spendPreview,
+  statTip,
   STAT_GROUPS,
   statRows,
   type StatGroup,
@@ -1223,6 +1230,18 @@ function kpi(
   return { box, icon, value };
 }
 
+/** A stat tip's parts, one line each; a part with nothing to say is left out. */
+function fillStatTip(
+  box: HTMLElement,
+  tip: { gain: string; mastery: string; share: string; slows: string },
+): void {
+  box.replaceChildren(
+    ...[tip.gain, tip.mastery, tip.share, tip.slows]
+      .filter((text) => text !== '')
+      .map((text) => el('p', '', text)),
+  );
+}
+
 /**
  * Opens `tip` (a popover, placed under `anchor`, or over it near the window's
  * bottom) on hover or keyboard focus, and on a tap through the focus it
@@ -1924,6 +1943,12 @@ function play(
   const boostValues = {} as Record<StatId, HTMLElement>;
   /** Redraws the boost tips that are open, so a breakthrough under one shows at once. */
   const boostTips: (() => void)[] = [];
+  /** The same for the stat name tips, whose numbers move with every point. */
+  const statTips: (() => void)[] = [];
+  /** The spend +1 or All previews while hovered or focused; null when none is. */
+  let previewing: { stat: StatId; n: number } | null = null;
+  /** The Path the derived rows were built for: each Path has its own Mastery rows. */
+  let derivedPath: PathId | null = null;
   for (const id of STAT_IDS) {
     const row = el('li');
     const value = el('b', 'value');
@@ -1948,10 +1973,86 @@ function play(
       one.setAttribute('aria-label', t('stats.plusOne', { stat }));
       all.setAttribute('aria-label', t('stats.allTo', { stat }));
     });
-    row.append(elt('span', 'name', `stat.${id}`), value, boost, tip, one, all);
+    // The stat's name explains a point's worth on hover, focus or tap.
+    // A button, so every screen reader reads the tip it is described by.
+    const name = elt('button', 'name', `stat.${id}`);
+    name.type = 'button';
+    const nameTip = el('div', 'boost-tip stat-tip');
+    nameTip.id = `stat-tip-${id}`;
+    const fillNameTip = (): void => fillStatTip(nameTip, statTip(state.cultivator, id));
+    const named = hoverTip(name, nameTip, fillNameTip);
+    statTips.push(() => {
+      if (named.isOpen()) fillNameTip();
+    });
+    // Hover or focus on +1 or All previews the change in the rows below.
+    for (const [b, count] of [
+      [one, () => 1],
+      [all, () => state.cultivator.unspent],
+    ] as const) {
+      const on = (): void => {
+        previewing = { stat: id, n: count() };
+        drawDerived();
+      };
+      const off = (): void => {
+        previewing = null;
+        drawDerived();
+      };
+      b.addEventListener('pointerenter', on);
+      b.addEventListener('focus', on);
+      b.addEventListener('pointerleave', off);
+      b.addEventListener('blur', off);
+    }
+    row.append(name, value, boost, tip, one, all);
+    nameTip.remove();
+    row.append(nameTip);
     baseList.append(row);
   }
   base.append(baseHead, baseList);
+
+  // Auto-assign: the switch, then (while it is on) the plan's three shares
+  // for this Path and Apply plan (docs/design.md §3).
+  const plan = el('section', 'plan');
+  const planSwitch = el('button', 'switch');
+  planSwitch.type = 'button';
+  planSwitch.setAttribute('role', 'switch');
+  say(() => (planSwitch.textContent = t('plan.title')));
+  planSwitch.addEventListener('click', () => act(setAutoAssign(state, !state.statPlan.auto)));
+  const planBody = el('div', 'plan-body');
+  const shares = el('div', 'shares');
+  const shareInputs = {} as Record<StatId, HTMLInputElement>;
+  for (const id of STAT_IDS) {
+    const box = el('label', 'share');
+    const shareName = elt('span', '', `stat.${id}`);
+    const input = el('input');
+    input.type = 'text';
+    input.inputMode = 'numeric';
+    input.maxLength = 3;
+    input.autocomplete = 'off';
+    input.setAttribute('aria-describedby', 'plan-why');
+    say(() => input.setAttribute('aria-label', t('plan.share', { stat: t(`stat.${id}`) })));
+    input.addEventListener('change', savePlan);
+    shareInputs[id] = input;
+    box.append(shareName, input, el('span', 'muted', '%'));
+    shares.append(box);
+  }
+  const planWhy = el('p', 'why');
+  planWhy.id = 'plan-why';
+  planWhy.setAttribute('aria-live', 'polite');
+  const applyBtn = buttonT('plan.apply', '', () => {
+    if (state.cultivator.unspent > 0) act(applyPlan(state));
+  });
+  planBody.append(elt('p', 'muted hint', 'plan.hint'), shares, planWhy, applyBtn);
+  plan.append(planSwitch, planBody);
+  /** Saves the typed shares once they make a ratio; until then says why and keeps the saved one. */
+  function savePlan(): void {
+    const { ratio, why } = planRatio({
+      body: shareInputs.body.value,
+      agility: shareInputs.agility.value,
+      spirit: shareInputs.spirit.value,
+    });
+    setText(planWhy, why);
+    if (ratio) act(setPlanRatio(state, state.cultivator.path, ratio));
+  }
 
   const derived = el('div', 'derived');
   const derivedLists = {} as Record<StatGroup, HTMLElement>;
@@ -2013,7 +2114,7 @@ function play(
   boosts.append(elt('h3', '', 'store.boosts'), boostList, noBoosts);
 
   const statsBody = el('div', 'statstab');
-  statsBody.append(base, derived, boosts, respec);
+  statsBody.append(base, plan, derived, boosts, respec);
 
   // Early Retirement: the Dao Insight total, the passive shop (one line per
   // passive, its effect on expand), then the retire box with its confirmation.
@@ -2126,6 +2227,13 @@ function play(
     { id: 'retire', label: 'tab.retire', body: retireBody },
   ]);
   character.box.append(charTabs.bar, ...charTabs.panels);
+  // A dot on the Stats tab while points wait to be placed; its words for screen readers.
+  const statsTab = charTabs.bar.querySelector<HTMLElement>('#tab-stats') as HTMLElement;
+  const statsDot = el('span', 'tab-dot');
+  statsDot.setAttribute('aria-hidden', 'true');
+  const statsDotText = el('span', 'sr-only');
+  // Put back after the tab's own label is rewritten on a language switch.
+  say(() => statsTab.append(statsDot, statsDotText));
 
   // Inventory grid
   const inventory = panel('inventory', 'inventory.title');
@@ -2582,6 +2690,27 @@ function play(
   const cloudUi = cloud ? cloudPanels(cloud, scope) : null;
   if (cloudUi) game.append(cloudUi.note, cloudUi.choice);
   game.append(updateNote);
+  // The one-time offer an older save gets after the stat rebalance.
+  const rebalance = el('section', 'panel rebalance');
+  rebalance.setAttribute('aria-labelledby', 'rebalance-title');
+  const rebalanceTitle = elt('h2', '', 'rebalance.title');
+  rebalanceTitle.id = 'rebalance-title';
+  const rebalanceRow = el('div', 'overtime-row');
+  const answerRebalance = (take: boolean): void => {
+    if (!state.freeReset) return;
+    act(answerFreeReset(state, take));
+    // The notice is gone: focus goes where the points are placed.
+    charTabs.show('stats');
+    baseTitle.focus();
+  };
+  rebalanceRow.append(
+    elt('p', '', 'rebalance.text'),
+    buttonT('rebalance.take', 'primary', () => answerRebalance(true)),
+    buttonT('rebalance.keep', '', () => answerRebalance(false)),
+  );
+  rebalance.append(rebalanceTitle, rebalanceRow);
+  rebalance.hidden = !state.freeReset;
+  game.append(rebalance);
   // Beside the strip: the summary chips over Recent drops; the two share a row.
   const beside = el('div', 'beside');
   beside.append(kpis, log.box);
@@ -2814,6 +2943,10 @@ function play(
   /** Shows `theme` on the page and, while it is open, the pop-out. */
   const applyTheme = (): void =>
     showTheme([document.documentElement, pip?.document.documentElement], theme, osDark.matches);
+  /** Help's Stats entry, one line per stat: its name, then the tip's parts. */
+  const helpStatParts = Object.fromEntries(
+    STAT_IDS.map((id) => [id, { name: el('b'), lines: [0, 1, 2, 3].map(() => el('span')) }]),
+  ) as Record<StatId, { name: HTMLElement; lines: HTMLElement[] }>;
   const menu = mainMenu();
 
   function mainMenu(): HTMLDialogElement {
@@ -2887,8 +3020,23 @@ function play(
       ),
       reset,
     );
-    const help = el('ul', 'lines help');
-    for (const line of HELP_LINES) help.append(elt('li', '', line));
+    const help = el('div', 'help');
+    const helpLines = el('ul', 'lines');
+    for (const line of HELP_LINES) helpLines.append(elt('li', '', line));
+    // Stats: each stat's tip, filled in for this cultivator while the menu is open.
+    const statList = el('ul', 'lines help-stats');
+    for (const id of STAT_IDS) {
+      const li = el('li');
+      const parts = helpStatParts[id];
+      li.append(parts.name, ...parts.lines);
+      statList.append(li);
+    }
+    help.append(
+      helpLines,
+      elt('h3', '', 'help.stats'),
+      elt('p', 'muted hint', 'help.statsHint'),
+      statList,
+    );
     const menuTabs = tabs([
       { id: 'settings', label: 'tab.settings', body: settings },
       { id: 'help', label: 'tab.help', body: help },
@@ -3046,7 +3194,7 @@ function play(
       } else if (e.foeHit) playAction(foe, 'hit', now);
       else if (e.foeAttack) playAction(foe, 'attack', now);
       // HP lost, net of lifesteal; the killing blow shows what was left.
-      if (e.youHit) damageNumber(you, prev.cultivator.hp - c.hp);
+      if (e.youHit) damageNumber(you, e.youTook);
       if (e.youDied) damageNumber(you, prev.cultivator.hp);
       if (before && (e.foeHit || e.foeDied)) {
         damageNumber(foe, before.hp - (e.foeDied ? 0 : (enemy?.hp ?? 0)));
@@ -3182,12 +3330,34 @@ function play(
       boostValues[id].hidden = boost === '';
     }
     for (const refresh of boostTips) refresh();
-    const rows = statRows(c, state.passives, {
+    for (const refresh of statTips) refresh();
+    drawDerived();
+    drawPlan();
+    if (menu.open) drawHelpStats();
+  }
+
+  /**
+   * The derived rows; while +1 or All is hovered or focused, the values
+   * spending would give, gains green and losses red.
+   */
+  function drawDerived(): void {
+    const c = state.cultivator;
+    const found = {
       stoneFind: boostBonus(state, 'stones'),
       treasureFind: boostBonus(state, 'treasure'),
-    });
-    // Built once, then only the values change, so selecting text doesn't flicker.
-    if (derivedValues.length === 0) {
+    };
+    const rows = statRows(c, state.passives, found);
+    if (previewing && (previewing.n < 1 || previewing.n > c.unspent)) previewing = null;
+    const preview = previewing
+      ? spendPreview(c, previewing.stat, previewing.n, state.passives, found)
+      : null;
+    // Built once per Path's set of rows, then only the values change, so
+    // selecting text doesn't flicker.
+    if (derivedPath !== c.path || derivedValues.length !== rows.length) {
+      derivedPath = c.path;
+      derivedValues.length = 0;
+      derivedLabels.length = 0;
+      for (const list of Object.values(derivedLists)) list.replaceChildren();
       for (const r of rows) {
         const dd = el('dd', '', r.value);
         const dt = el('dt', '', r.short);
@@ -3200,13 +3370,58 @@ function play(
     }
     rows.forEach((r, i) => {
       const dd = derivedValues[i];
-      if (dd) setText(dd, r.value);
+      if (dd) {
+        const p = preview?.[i];
+        setText(dd, p?.value ?? r.value);
+        const change = p?.change ?? '';
+        if ((dd.dataset.change ?? '') !== change) dd.dataset.change = change;
+      }
       const dt = derivedLabels[i];
       if (dt) {
         setText(dt, r.short);
         if (r.short !== r.label && dt.title !== r.label) dt.title = r.label;
       }
     });
+  }
+
+  /** The Auto-assign switch and, while it is on, this Path's shares and Apply plan. */
+  function drawPlan(): void {
+    const c = state.cultivator;
+    const auto = state.statPlan.auto;
+    if (planSwitch.getAttribute('aria-checked') !== String(auto)) {
+      planSwitch.setAttribute('aria-checked', String(auto));
+    }
+    planBody.hidden = !auto;
+    // A Path change shows that Path's plan afresh.
+    const fresh = plan.dataset.path !== c.path;
+    if (fresh) {
+      plan.dataset.path = c.path;
+      setText(planWhy, '');
+    }
+    // The saved shares, unless the player is typing or what they typed was refused.
+    const typing = STAT_IDS.some((id) => shareInputs[id] === document.activeElement);
+    if (fresh || (!typing && planWhy.textContent === '')) {
+      const ratio = state.statPlan.slots[c.path].ratio;
+      for (const id of STAT_IDS) {
+        const v = String(ratio[id]);
+        if (shareInputs[id].value !== v) shareInputs[id].value = v;
+      }
+    }
+    setButton(applyBtn, t('plan.apply'), c.unspent === 0);
+  }
+
+  /** Help's Stats entry: each stat's tip, for this cultivator now. */
+  function drawHelpStats(): void {
+    for (const id of STAT_IDS) {
+      const tip = statTip(state.cultivator, id);
+      const parts = helpStatParts[id];
+      setText(parts.name, t(`stat.${id}`));
+      [tip.gain, tip.mastery, tip.share, tip.slows].forEach((text, i) => {
+        const part = parts.lines[i] as HTMLElement;
+        setText(part, text);
+        part.hidden = text === '';
+      });
+    }
   }
 
   function selectedItem(): Item | undefined {
@@ -3843,6 +4058,9 @@ function play(
     const none = c.unspent === 0;
     if (base.classList.contains('none') !== none) base.classList.toggle('none', none);
     setText(unspentText, none ? t('stats.noUnspent') : t('stats.unspent', { n: c.unspent }));
+    statsDot.hidden = none;
+    setText(statsDotText, none ? '' : ` (${t('tab.statsUnspent', { n: c.unspent })})`);
+    rebalance.hidden = !state.freeReset;
 
     // The form shows the saved filter; the player's own change already matches it.
     const f = state.filter;
@@ -3965,6 +4183,7 @@ function play(
         unseen.count,
         due,
         paused,
+        c.unspent,
       );
       miniLine.classList.toggle('due', due);
       if (pip.document.title !== title) pip.document.title = title;

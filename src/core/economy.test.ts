@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { BASE_STAT, derive, PATHS, STARTING_PRIMARY_BONUS } from './cultivator.ts';
 import {
+  BASE_STAT,
+  defaultRatio,
+  derive,
+  nextPlanStat,
+  STARTING_PRIMARY_BONUS,
+  zeroCarry,
+  type PathId,
+} from './cultivator.ts';
+import {
+  answerFreeReset,
+  applyPlan,
+  setAutoAssign,
+  setPlanRatio,
   BAG_COST,
   ESSENCE_VALUE,
   GRADE_IDS,
@@ -607,20 +619,28 @@ describe('spending Spirit Stones', () => {
     expect(s.inventory).toHaveLength(INVENTORY_SIZE + 1);
   });
 
-  it('changes Path, putting every stat point into the new primary stat', () => {
-    const start = tick(newGame(3, 'sword'), 3600);
+  it('changes Path, giving every stat point back unspent', () => {
+    const start = applyPlan(tick(newGame(3, 'sword'), 3600));
     const s = changePath({ ...start, stones: pathChangeCost(start.cultivator) }, 'body');
     const c = s.cultivator;
     expect(c.path).toBe('body');
     expect(s.stones).toBe(0);
-    const extra = STARTING_PRIMARY_BONUS + 3 * (c.level - 1);
-    expect(c.stats).toEqual({ body: BASE_STAT + extra, agility: BASE_STAT, spirit: BASE_STAT });
+    expect(c.unspent).toBe(STARTING_PRIMARY_BONUS + 3 * (c.level - 1));
+    expect(c.stats).toEqual({ body: BASE_STAT, agility: BASE_STAT, spirit: BASE_STAT });
     expect(c.hp).toBeLessThanOrEqual(derive(c).maxHp);
     expect(() => changePath({ ...s, stones: 1e9 }, 'body')).toThrow(RangeError);
   });
 
+  it('keeps unspent points unspent through a Path change, even with Auto-assign on', () => {
+    let s = setAutoAssign(tick(newGame(3, 'sword'), 600), true);
+    const held = s.cultivator.unspent;
+    expect(held).toBeGreaterThan(0);
+    s = changePath({ ...s, stones: 1e9 }, 'talisman');
+    expect(s.cultivator.unspent).toBe(held + STARTING_PRIMARY_BONUS);
+  });
+
   it('resets stat points to spend by choice, and spends them', () => {
-    const start = tick(newGame(3, 'talisman'), 3600);
+    const start = applyPlan(tick(newGame(3, 'talisman'), 3600));
     const points = start.cultivator.stats.spirit - BASE_STAT;
     let s = resetStats({ ...start, stones: statResetCost(start.cultivator) });
     expect(s.stones).toBe(0);
@@ -679,13 +699,147 @@ describe('spending Spirit Stones', () => {
     expect(() => changePath(s, 'ninja' as 'body')).toThrow(RangeError);
   });
 
-  it('level-ups still go to the primary stat while points are unspent', () => {
-    const start = resetStats({ ...newGame(3, 'sword'), stones: 1e9 });
+  it('never spends level-up points while Auto-assign is off', () => {
+    const start = newGame(3, 'sword');
     const s = tick(start, 1800);
     expect(s.cultivator.level).toBeGreaterThan(1);
-    expect(s.cultivator.unspent).toBe(start.cultivator.unspent);
-    expect(s.cultivator.stats.agility).toBe(BASE_STAT + 3 * (s.cultivator.level - 1));
-    expect(PATHS[s.cultivator.path].primary).toBe('agility');
+    expect(s.cultivator.stats).toEqual(start.cultivator.stats);
+    expect(s.cultivator.unspent).toBe(3 * (s.cultivator.level - 1));
+  });
+
+  it('spends new points by the plan with Auto-assign on, leaving older unspent points alone', () => {
+    let s = tick(newGame(3, 'sword'), 300);
+    const held = s.cultivator.unspent;
+    const level = s.cultivator.level;
+    const stats = { ...s.cultivator.stats };
+    s = setAutoAssign(setPlanRatio(s, 'sword', { body: 50, agility: 0, spirit: 50 }), true);
+    s = tick(s, 1800);
+    const gained = 3 * (s.cultivator.level - level);
+    expect(gained).toBeGreaterThan(0);
+    expect(s.cultivator.unspent).toBe(held);
+    expect(s.cultivator.stats.agility).toBe(stats.agility);
+    const body = s.cultivator.stats.body - stats.body;
+    expect(body + s.cultivator.stats.spirit - stats.spirit).toBe(gained);
+    expect(Math.abs(body - gained / 2)).toBeLessThan(1);
+  });
+
+  it('follows the plan the same live and offline', () => {
+    const start = setAutoAssign(
+      setPlanRatio(newGame(9, 'body'), 'body', { body: 30, agility: 33, spirit: 37 }),
+      true,
+    );
+    let live = start;
+    for (let i = 0; i < 120; i++) live = tick(live, 30);
+    const offline = tick(start, 3600, { offline: true });
+    for (const s of [live, offline]) {
+      // Whatever level each reaches, its split is exactly the plan's for that many points.
+      const plan = { ratio: { body: 30, agility: 33, spirit: 37 }, carry: zeroCarry() };
+      const want = { ...start.cultivator.stats };
+      for (let n = 0; n < 3 * (s.cultivator.level - 1); n++) want[nextPlanStat(plan)] += 1;
+      expect(s.cultivator.stats).toEqual(want);
+      expect(s.statPlan.slots.body.carry).toEqual(plan.carry);
+    }
+  });
+
+  it('keeps a plan per Path, and a new ratio restarts its rounding', () => {
+    let s = setPlanRatio(newGame(3, 'sword'), 'talisman', { body: 10, agility: 10, spirit: 80 });
+    expect(s.statPlan.slots.talisman.ratio).toEqual({ body: 10, agility: 10, spirit: 80 });
+    expect(s.statPlan.slots.sword.ratio).toEqual({ body: 0, agility: 100, spirit: 0 });
+    s.statPlan.slots.talisman.carry = { body: 5, agility: -10, spirit: 5 };
+    s = setPlanRatio(s, 'talisman', { body: 20, agility: 0, spirit: 80 });
+    expect(s.statPlan.slots.talisman.carry).toEqual(zeroCarry());
+  });
+
+  it('splits exactly 300 points (100 levels) to the ratio, carry back at zero', () => {
+    let s = tick(newGame(3, 'sword'), 1);
+    s.cultivator.unspent = 300;
+    const before = { ...s.cultivator.stats };
+    s = applyPlan(setPlanRatio(s, 'sword', { body: 30, agility: 33, spirit: 37 }));
+    const c = s.cultivator;
+    expect({
+      body: c.stats.body - before.body,
+      agility: c.stats.agility - before.agility,
+      spirit: c.stats.spirit - before.spirit,
+    }).toEqual({ body: 90, agility: 99, spirit: 111 });
+    expect(s.statPlan.slots.sword.carry).toEqual(zeroCarry());
+  });
+
+  it('applies the plan to every unspent point at once', () => {
+    let s = tick(newGame(3, 'sword'), 600);
+    const n = s.cultivator.unspent;
+    const before = { ...s.cultivator.stats };
+    s = applyPlan(setPlanRatio(s, 'sword', { body: 100, agility: 0, spirit: 0 }));
+    expect(s.cultivator.unspent).toBe(0);
+    expect(s.cultivator.stats).toEqual({ ...before, body: before.body + n });
+    expect(s.cultivator.hp).toBeLessThanOrEqual(derive(s.cultivator).maxHp);
+    expect(() => applyPlan(s)).toThrow(RangeError);
+  });
+
+  it('refuses a hostile ratio or Path, so nothing bad is ever saved', () => {
+    const s = newGame(3, 'sword');
+    const bad: unknown[] = [
+      { body: -1, agility: 101, spirit: 0 },
+      { body: 0.5, agility: 99.5, spirit: 0 },
+      { body: 1e300, agility: 0, spirit: 0 },
+      { body: '100', agility: 0, spirit: 0 },
+      { body: 100, agility: 0, spirit: 0, qi: 0 },
+      JSON.parse('{"body":100,"agility":0,"spirit":0,"__proto__":{"polluted":1}}'),
+      null,
+      [100, 0, 0],
+    ];
+    for (const r of bad) expect(() => setPlanRatio(s, 'sword', r)).toThrow(RangeError);
+    for (const p of ['ninja', '__proto__', 'toString']) {
+      expect(() => setPlanRatio(s, p as PathId, defaultRatio('sword'))).toThrow(RangeError);
+    }
+    expect(() => setAutoAssign(s, 'yes' as unknown as boolean)).toThrow(RangeError);
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
+  it('copies a ratio rather than keeping the object it was given', () => {
+    const ratio = { body: 50, agility: 50, spirit: 0 };
+    const s = setPlanRatio(newGame(3, 'sword'), 'sword', ratio);
+    ratio.body = 1e9;
+    expect(s.statPlan.slots.sword.ratio.body).toBe(50);
+  });
+
+  describe('the free reset an older save is offered', () => {
+    const offered = (): GameState => ({
+      ...applyPlan(tick(newGame(3, 'sword'), 600)),
+      stones: 0,
+      freeReset: true,
+    });
+
+    it('resets for free when taken, then is gone', () => {
+      const s = answerFreeReset(offered(), true);
+      expect(s.freeReset).toBe(false);
+      expect(s.stones).toBe(0);
+      expect(s.cultivator.stats).toEqual({
+        body: BASE_STAT,
+        agility: BASE_STAT,
+        spirit: BASE_STAT,
+      });
+      expect(() => answerFreeReset(s, true)).toThrow(RangeError);
+    });
+
+    it('keeps the stats when declined, and is gone too', () => {
+      const start = offered();
+      const s = answerFreeReset(start, false);
+      expect(s.freeReset).toBe(false);
+      expect(s.cultivator.stats).toEqual(start.cultivator.stats);
+      expect(() => answerFreeReset(s, false)).toThrow(RangeError);
+    });
+
+    it('is used up by a paid reset', () => {
+      expect(resetStats({ ...offered(), stones: 1e9 }).freeReset).toBe(false);
+    });
+
+    it('is used up by a Path change, which gives every point back too', () => {
+      expect(changePath({ ...offered(), stones: 1e9 }, 'body').freeReset).toBe(false);
+    });
+
+    it('is never offered on a new run', () => {
+      expect(newGame(1, 'body').freeReset).toBe(false);
+    });
   });
 });
 

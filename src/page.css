@@ -492,6 +492,17 @@ select {
 .overtime-row button {
   margin-left: auto;
 }
+.rebalance[hidden] {
+  display: none;
+}
+.rebalance p {
+  flex: 1 1 18rem;
+  margin: 0;
+  font-size: 0.85rem;
+}
+.rebalance .overtime-row button + button {
+  margin-left: 0;
+}
 /* The Realm chip's hover list: every realm, the current one highlighted. */
 .realm-list {
   position: fixed;
@@ -2288,6 +2299,100 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   padding: 0 0.45rem;
   font-size: 0.85rem;
 }
+/* A stat's name explains what a point does, on hover, focus or tap: a
+   button for screen readers, drawn as plain text. */
+.base-list .name {
+  justify-self: start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 0.2em;
+}
+.stat-tip p {
+  margin: 0;
+}
+.stat-tip p + p {
+  margin-top: 0.25rem;
+  color: var(--muted);
+}
+/* The Stats tab's dot while points wait to be placed. */
+.tab-dot {
+  display: inline-block;
+  width: 0.45rem;
+  height: 0.45rem;
+  margin-left: 0.3rem;
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: middle;
+}
+.tab-dot[hidden] {
+  display: none;
+}
+/* Auto-assign: a switch, then the plan's shares while it is on. */
+.plan {
+  margin-top: 0.5rem;
+}
+.plan .switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+.plan .switch::before {
+  content: '';
+  flex: none;
+  width: 1.7rem;
+  height: 0.95rem;
+  border: 1px solid var(--muted);
+  border-radius: 999px;
+  background: radial-gradient(circle at 0.45rem 50%, var(--muted) 0.3rem, transparent 0.32rem);
+}
+.plan .switch[aria-checked='true']::before {
+  border-color: var(--accent);
+  background: radial-gradient(
+    circle at calc(100% - 0.45rem) 50%,
+    var(--accent) 0.3rem,
+    transparent 0.32rem
+  );
+}
+.plan-body[hidden] {
+  display: none;
+}
+.plan .hint {
+  margin: 0.25rem 0;
+}
+.shares {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.6rem;
+  font-size: 0.85rem;
+}
+.share {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.share input {
+  width: 2.6rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.plan .why {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  color: var(--down);
+}
+.plan .why:empty {
+  display: none;
+}
+.plan-body > button {
+  margin-top: 0.3rem;
+}
 /* No points: the buttons leave the tab order but keep their space. */
 .base.none .spend {
   visibility: hidden;
@@ -2316,6 +2421,15 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   overflow-wrap: anywhere;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+/* Previewing +1 or All: what the spend would change, gains green, losses red. */
+.derived dd[data-change='up'] {
+  color: var(--up);
+  font-weight: 600;
+}
+.derived dd[data-change='down'] {
+  color: var(--down);
+  font-weight: 600;
 }
 .respec {
   border: 1px solid var(--line);
@@ -2750,11 +2864,25 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 .cloud-panel p {
   margin: 0 0 0.5rem;
 }
-.help {
+.help > ul {
   margin: 0;
   padding-left: 1.1rem;
   display: grid;
   gap: 0.35rem;
+}
+.help > h3 {
+  margin: 0.8rem 0 0.1rem;
+  font-size: 0.9rem;
+}
+.help > .hint {
+  margin: 0 0 0.3rem;
+}
+/* Help's Stats entry: each stat's name, then its tip's parts on their own lines. */
+.help-stats span {
+  display: block;
+}
+.help-stats span[hidden] {
+  display: none;
 }
 /* Save code: the export code to copy by hand, and the paste field. */
 .settings textarea.code {

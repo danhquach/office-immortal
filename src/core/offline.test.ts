@@ -10,6 +10,7 @@ import {
   trialSetAside,
   type GameState,
 } from './sim.ts';
+import { skipToTribulation } from '../dev/scenarios.ts';
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -122,9 +123,8 @@ describe('catchUp', () => {
 describe('catchUp and the Tribulation retry limit', () => {
   /** Held at level 10 and set aside after TRIAL_LOSS_LIMIT losses. */
   function setAside(): GameState {
-    let s = newGame(7, 'sword');
-    for (let i = 0; i < 3600 && !s.enemies.some((e) => e.kind === 'tribulation'); i++)
-      s = tick(s, 1);
+    // Straight to the level 10 cap with its Tribulation queued (the dev scenario).
+    let s = skipToTribulation(newGame(7, 'sword'));
     while (s.trial.losses < TRIAL_LOSS_LIMIT) {
       const losses = s.trial.losses;
       s = s.enemies[0]?.kind === 'tribulation' ? structuredClone(s) : faceTribulation(s);

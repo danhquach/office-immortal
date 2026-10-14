@@ -3,7 +3,6 @@
 // passives that last across every run. Every number here is a starting point
 // for balancing.
 
-import { derive, PATHS } from './cultivator.ts';
 import { INVENTORY_SIZE } from './economy.ts';
 import type { GameState } from './sim.ts';
 import { BOOST_IDS, boostLeft } from './store.ts';
@@ -87,8 +86,8 @@ export function passiveCost(p: Passives, id: PassiveId): number | null {
 
 /**
  * Buys one rank of `id` with Dao Insight; `state` is left untouched. Passives
- * apply at once: a Head Start rank also adds its stat points to this run, to
- * the Path's primary stat as a level-up does.
+ * apply at once: a Head Start rank also adds its stat points to this run,
+ * unspent, as a level-up does.
  */
 export function buyPassive(state: GameState, id: PassiveId): GameState {
   if (!PASSIVE_IDS.includes(id)) throw new RangeError(`buyPassive: no passive ${id}`);
@@ -98,12 +97,7 @@ export function buyPassive(state: GameState, id: PassiveId): GameState {
   const s = structuredClone(state);
   s.insight -= cost;
   s.passives[id] += 1;
-  if (id === 'points') {
-    const c = s.cultivator;
-    const before = derive(c).maxHp;
-    c.stats[PATHS[c.path].primary] += POINTS_PER_RANK;
-    c.hp += Math.max(0, derive(c).maxHp - before);
-  }
+  if (id === 'points') s.cultivator.unspent += POINTS_PER_RANK;
   return s;
 }
 

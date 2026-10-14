@@ -10,6 +10,7 @@ import {
   readyForTribulation,
   xpToNext,
   type PathId,
+  type Stats,
 } from './cultivator.ts';
 import {
   ENEMY_MAX_QI,
@@ -31,7 +32,8 @@ import {
   type GradeId,
   type Item,
 } from './loot.ts';
-import { INVENTORY_SIZE, sellPrice } from './economy.ts';
+import { INVENTORY_SIZE, sellPrice, setAutoAssign, setPlanRatio } from './economy.ts';
+import { DODGE_CURVE, curve, REFLECT_CURVE } from './cultivator.ts';
 import {
   ARRAY_TICK,
   canEquip,
@@ -62,6 +64,8 @@ import {
   type GameState,
   type TickOptions,
 } from './sim.ts';
+import type { Enemy } from './floors.ts';
+import { skipToTribulation } from '../dev/scenarios.ts';
 
 /**
  * Per-test time limit for the long simulations below (hours of sim time, or
@@ -600,7 +604,7 @@ describe('Tribulation', () => {
   });
 
   it('plays the same through a breakthrough in one big step as in small ones', () => {
-    const start = newGame(7, 'body');
+    const start = setAutoAssign(newGame(7, 'body'), true);
     const big = tick(start, 900);
     expect(big.cultivator.level).toBeGreaterThan(10);
     expect(big).toEqual(run(start, 900, 1));
@@ -792,6 +796,8 @@ describe('Formation Disc arrays', () => {
     const x = structuredClone(s);
     (x.enemies[0] as { hp: number }).hp = 1e12;
     x.cultivator.hp = 1e12;
+    // No regen step either: HP regen would cap the HP at the max.
+    x.qiNextAt = 1e15;
     if (!cultivatorAttacks) x.cultivator.nextAttackAt = 1e15;
     return x;
   }
@@ -841,9 +847,13 @@ describe('Formation Disc arrays', () => {
       return 1 - hits / attacks;
     }
 
-    it('makes enemy attacks miss at about its strength', () => {
-      expect(missShare(null, 20_000)).toBe(0);
-      const share = missShare(disc('illusion'), 20_000);
+    it('makes enemy attacks miss at about its strength, on top of dodge', () => {
+      // Without a disc, only Agility's dodge makes attacks miss.
+      const dodge = derive(wearing(null).cultivator).dodge;
+      const base = missShare(null, 20_000);
+      expect(Math.abs(base - dodge)).toBeLessThan(0.01);
+      // The array's share of the hits that dodge leaves.
+      const share = 1 - (1 - missShare(disc('illusion'), 20_000)) / (1 - base);
       expect(share).toBeGreaterThan(0.16);
       expect(share).toBeLessThan(0.2);
     });
@@ -1045,6 +1055,9 @@ describe('qi', () => {
     const x = structuredClone(state);
     x.cultivator.hp = 1e12;
     (x.enemies[0] as { hp: number }).hp = 1e12;
+    // Hits of 1: an attack's lifesteal brings HP back to the max, and the
+    // cultivator must still outlast a long run of blows.
+    (x.enemies[0] as { damage: number }).damage = 0;
     if (!on.you) x.cultivator.nextAttackAt = 1e15;
     if (!on.foe) x.enemyNextAttackAt = 1e15;
     if (!on.regen) x.qiNextAt = 1e15;
@@ -1256,7 +1269,8 @@ describe('Path balance', () => {
    * of damage every second, an Illusion Array cuts the hits taken, and a
    * Binding Array skips about delay / 2 s of a fight's enemy attacks (fights
    * run about ten seconds). A Soul Banner counts as full: it fills within a
-   * floor or two.
+   * floor or two. Pierce counts as half its share more damage (enemy defence
+   * roughly halves a hit), dodge and reflect as hits not taken.
    */
   function power(state: GameState): number {
     const c = state.cultivator;
@@ -1264,17 +1278,31 @@ describe('Path balance', () => {
     const array = equippedArray(c.equipment);
     const share = (id: string) => (array?.id === id ? array.value : 0);
     const dps =
-      (d.damage / d.attackInterval) * (1 + d.critChance * (d.critMultiplier - 1)) +
+      (d.damage / d.attackInterval) *
+        (1 + d.critChance * (d.critMultiplier - 1)) *
+        (1 + d.pierce / 2) +
       (d.damage / d.attackInterval) * share('killing') +
       soulDamage(soulCap(c.equipment), c.stats.spirit) / d.attackInterval;
     const toughness =
-      (d.maxHp * (1 + d.defence / 50) * (1 + share('binding') / 10)) / (1 - share('illusion'));
+      (d.maxHp * (1 + d.defence / 50) * (1 + share('binding') / 10) * (1 + d.reflect)) /
+      (1 - share('illusion')) /
+      (1 - d.dodge);
     return (dps * toughness) / (1 - d.lifesteal);
   }
 
+  /**
+   * Each Path's fixed reference build: its Auto-assign plan, mostly the main
+   * stat with some Body for every Path, so the test plays the stat trade-offs.
+   */
+  const REFERENCE: Readonly<Record<PathId, Stats>> = {
+    sword: { body: 30, agility: 60, spirit: 10 },
+    body: { body: 70, agility: 20, spirit: 10 },
+    talisman: { body: 30, agility: 10, spirit: 60 },
+  };
+
   /** A player who checks in every minute, equips every upgrade and empties the bag. */
   function play(seed: number, path: PathId, minutes: number): GameState {
-    let s = newGame(seed, path);
+    let s = setAutoAssign(setPlanRatio(newGame(seed, path), path, REFERENCE[path]), true);
     for (let m = 0; m < minutes; m++) {
       s = tick(s, 60);
       for (let i = 0; i < s.inventory.length; i++) {
@@ -1316,7 +1344,8 @@ describe('Path balance', () => {
 
 describe('Tribulation retry limit', () => {
   /** Held at level 10 with the Tribulation queued at the end of the floor. */
-  const held = (): GameState => until(newGame(7, 'sword'), hasTribulation);
+  // Straight to the level 10 cap with its Tribulation at the end of a fresh floor.
+  const held = (): GameState => skipToTribulation(newGame(7, 'sword'));
 
   /** Faces the Tribulation (unless it is already in front) and loses to it. */
   function loseTrial(state: GameState): GameState {
@@ -1520,4 +1549,170 @@ describe('Tribulation retry limit', () => {
     const s = loseTimes(held(), TRIAL_LOSS_LIMIT);
     expect(run(s, TRIAL_RETRY_SECONDS + 300, 0.5)).toEqual(tick(s, TRIAL_RETRY_SECONDS + 300));
   });
+});
+
+describe('stats in combat (docs/design.md §3)', () => {
+  /** A level 1 cultivator of `path` with `stats` set, on floor 1. */
+  function built(path: PathId, stats: Partial<Stats>, seed = 4): GameState {
+    const s = newGame(seed, path);
+    Object.assign(s.cultivator.stats, stats);
+    s.cultivator.hp = derive(s.cultivator).maxHp;
+    return s;
+  }
+
+  /** An endless fight: neither side falls, and the cultivator only attacks if asked. */
+  function standoff(s: GameState, attacks = false): GameState {
+    const x = structuredClone(s);
+    (x.enemies[0] as { hp: number }).hp = 1e12;
+    x.cultivator.hp = 1e12;
+    // No regen step either: HP regen would cap the HP at the max.
+    x.qiNextAt = 1e15;
+    if (!attacks) x.cultivator.nextAttackAt = 1e15;
+    return x;
+  }
+
+  it('lets a pierce share of each hit ignore defence', () => {
+    expect(mitigate(100, 50)).toBe(50);
+    expect(mitigate(100, 50, 0.3)).toBe(65);
+    expect(mitigate(100, 50, 1)).toBe(100);
+    expect(mitigate(100, 0, 0.3)).toBe(100);
+    expect(mitigate(0.1, 1e9, 0.5)).toBe(1);
+  });
+
+  it('dodges enemy attacks at about the dodge chance', () => {
+    const s = standoff(built('sword', { agility: 1000 }));
+    const enemy = s.enemies[0] as { damage: number; attackInterval: number };
+    const hit = mitigate(enemy.damage, derive(s.cultivator).defence);
+    const seconds = 20_000;
+    const attacks = Math.floor((s.time + seconds - s.enemyNextAttackAt) / enemy.attackInterval) + 1;
+    const end = tick(s, seconds);
+    const missed = 1 - (s.cultivator.hp - end.cultivator.hp) / hit / attacks;
+    expect(Math.abs(missed - curve(DODGE_CURVE, 1000))).toBeLessThan(0.01);
+  });
+
+  it('Iron Body reflects its share of every hit taken back onto the attacker', () => {
+    const s = standoff(built('body', { body: 300, agility: 0 }));
+    const enemy = s.enemies[0] as { hp: number; damage: number; attackInterval: number };
+    const d = derive(s.cultivator);
+    const hit = mitigate(enemy.damage, d.defence);
+    const end = tick(s, enemy.attackInterval * 50);
+    const taken = s.cultivator.hp - end.cultivator.hp;
+    const reflected = enemy.hp - (end.enemies[0] as { hp: number }).hp;
+    expect(taken).toBeGreaterThan(0);
+    expect(reflected).toBe((taken / hit) * Math.round(hit * curve(REFLECT_CURVE, 300)));
+  });
+
+  it('Iron Body sends back nothing when its reflect is too small to round to 1 HP', () => {
+    const s = standoff(built('body', { body: 8, agility: 0 }));
+    const enemy = s.enemies[0] as { hp: number; attackInterval: number };
+    const end = tick(s, enemy.attackInterval * 20);
+    expect(end.cultivator.hp).toBeLessThan(s.cultivator.hp);
+    expect((end.enemies[0] as { hp: number }).hp).toBe(enemy.hp);
+  });
+
+  it('Iron Body can finish an enemy with reflected damage, which counts as a kill', () => {
+    const s = built('body', { body: 300 });
+    s.cultivator.nextAttackAt = 1e15;
+    // A hit big enough that its reflected share rounds to at least 1 HP.
+    (s.enemies[0] as { hp: number; damage: number }).damage = 100;
+    (s.enemies[0] as { hp: number }).hp = 1;
+    // Just past the enemy's first attack, which is the only blow struck.
+    const end = tick(s, s.enemyNextAttackAt - s.time + 0.01);
+    expect(end.kills).toBe(s.kills + 1);
+  });
+
+  /** The cultivator attacks an enemy that never falls and never strikes back. */
+  function punchingBag(s: GameState): GameState {
+    (s.enemies[0] as Enemy).hp = 1e12;
+    s.enemyNextAttackAt = 1e15;
+    return s;
+  }
+
+  it('Talisman Resonance splashes each burst onto the next enemy, never felling it', () => {
+    let s = punchingBag(built('talisman', { spirit: 300 }));
+    const next = s.enemies[1] as { hp: number; maxHp: number };
+    expect(next.hp).toBe(next.maxHp);
+    const every = PATHS.talisman.burstEvery;
+    // Up to just before the first burst: nothing splashes.
+    while (s.cultivator.attackCount < every - 1) s = tick(s, 0.05);
+    expect((s.enemies[1] as { hp: number }).hp).toBe(next.maxHp);
+    while (s.cultivator.attackCount < every) s = tick(s, 0.05);
+    const after = (s.enemies[1] as { hp: number }).hp;
+    expect(after).toBeLessThan(next.maxHp);
+    expect(after).toBeGreaterThanOrEqual(1);
+    // Many bursts later it is held at 1 HP, still waiting its turn.
+    const waiting = s.enemies.length;
+    s = tick(s, 600);
+    expect((s.enemies[1] as { hp: number }).hp).toBe(1);
+    expect(s.enemies).toHaveLength(waiting);
+  });
+
+  it('never splashes onto a waiting Tribulation, and no other Path splashes', () => {
+    let s = punchingBag(built('talisman', { spirit: 300 }));
+    s.enemies = [s.enemies[0] as Enemy, makeTribulation(1, 0)];
+    const trial = (s.enemies[1] as Enemy).hp;
+    s = tick(s, 300);
+    expect((s.enemies[1] as Enemy).hp).toBe(trial);
+    let sword = punchingBag(built('sword', { spirit: 300 }));
+    const waiting = (sword.enemies[1] as Enemy).hp;
+    sword = tick(sword, 300);
+    expect((sword.enemies[1] as Enemy).hp).toBe(waiting);
+  });
+
+  it('heals HP regen once a second, never past max HP', () => {
+    const s = built('body', { body: 100 });
+    s.cultivator.nextAttackAt = 1e15;
+    s.enemyNextAttackAt = 1e15;
+    s.cultivator.hp = 1;
+    const d = derive(s.cultivator);
+    expect(d.hpRegen).toBeCloseTo(10, 9);
+    const at = (seconds: number) => tick(s, seconds).cultivator.hp;
+    // Steps land on whole seconds from the start of the run.
+    expect(at(s.qiNextAt - s.time - 0.001)).toBe(1);
+    expect(at(s.qiNextAt - s.time + 4)).toBeCloseTo(1 + 5 * d.hpRegen, 9);
+    expect(at(3600)).toBe(d.maxHp);
+  });
+
+  it('never lowers HP that sits above the max', () => {
+    const s = built('body', { body: 100 });
+    s.cultivator.nextAttackAt = 1e15;
+    s.enemyNextAttackAt = 1e15;
+    s.cultivator.hp = 1e6;
+    expect(tick(s, 10).cultivator.hp).toBe(1e6);
+  });
+
+  it('heals between fights too, in the pause after a kill', () => {
+    let s = built('body', { body: 100 });
+    s.cultivator.hp = 50;
+    (s.enemies[0] as Enemy).hp = 1;
+    // To the kill, then through the pause before the next enemy strikes.
+    while (s.kills === 0) s = tick(s, 0.01);
+    const hp = s.cultivator.hp;
+    const pause = tick(s, ENEMY_ARRIVAL - 0.01);
+    expect(pause.cultivator.hp).toBeGreaterThan(hp);
+  });
+
+  it('gives Body HP regen at half for the other Paths', () => {
+    for (const path of ['sword', 'talisman'] as const) {
+      expect(derive(built(path, { body: 100 }).cultivator).hpRegen).toBeCloseTo(5, 9);
+    }
+  });
+
+  it('heals the same offline in one step as in many', () => {
+    const start = built('body', { body: 200 }, 21);
+    const opts = { offline: true };
+    expect(tick(start, 1800, opts)).toEqual(run(start, 1800, 1, opts));
+  });
+
+  it.each(PATH_IDS)(
+    'plays %s the same in one big step as in small ones with every stat raised',
+    (path) => {
+      const start = setAutoAssign(
+        setPlanRatio(newGame(13, path), path, { body: 40, agility: 30, spirit: 30 }),
+        true,
+      );
+      Object.assign(start.cultivator.stats, { body: 200, agility: 200, spirit: 200 });
+      expect(tick(start, 1200)).toEqual(run(start, 1200, 0.5));
+    },
+  );
 });

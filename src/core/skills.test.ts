@@ -68,6 +68,8 @@ function arena(
   enemy.maxHp = enemy.hp = 1e6;
   enemy.qi = 60;
   s.enemies = [enemy, makeEnemy(1, 'demon', 'Waiting Demon')];
+  // No Agility: no dodge rolls and no cooldown cut, unless a test sets them.
+  s.cultivator.stats.agility = 0;
   s.cultivator.hp = derive(s.cultivator).maxHp;
   s.cultivator.qi = derive(s.cultivator).maxQi;
   if (!on.you) s.cultivator.nextAttackAt = OFF;
@@ -243,6 +245,22 @@ describe('casting', () => {
     expect(after.cultivator.qi).toBe(d.maxQi - 25 + d.qiRegen);
     expect(after.combat.you.cooldowns.test).toBe((cast?.at ?? 0) + 4);
     expect(after.combat.you.uses.test).toBe(1);
+  });
+
+  it("cuts the cultivator's cooldown by Agility's cooldown reduction", () => {
+    const s = arena();
+    s.cultivator.stats.agility = 300;
+    const cut = derive(s.cultivator).cooldownReduction;
+    expect(cut).toBeGreaterThan(0.1);
+    const after = tick(s, 2, book([skill({ cooldown: 10 })]));
+    const [cast] = casts(after);
+    expect(after.combat.you.cooldowns.test).toBeCloseTo((cast?.at ?? 0) + 10 * (1 - cut));
+  });
+
+  it("runs an enemy's cooldown in full", () => {
+    const after = tick(arena(), 1.9, book([], [skill({ qi: 30, cooldown: 10 })]));
+    const w = after.combat.foe.windUp;
+    expect(after.combat.foe.cooldowns.test).toBeCloseTo((w?.start ?? 0) + 10);
   });
 
   it('drops a chosen cast whose rule no longer holds when the pause ends', () => {
@@ -512,6 +530,8 @@ describe('effects', () => {
         1.9,
       );
       const before = weak.cultivator.hp;
+      // No regen steps from here, so HP moves by whole hits only.
+      weak.qiNextAt = OFF;
       const later = tick(weak, front(s).attackInterval * 2, book([]));
       const per = mitigate(front(s).damage * 0.5, derive(s.cultivator).defence);
       expect((before - later.cultivator.hp) % per).toBe(0);
@@ -550,8 +570,10 @@ describe('effects', () => {
     const s = arena();
     const max = derive(s.cultivator).maxHp;
     s.cultivator.hp = 10;
+    // Against the same run with an empty skill: same pause, same HP regen.
+    const without = cast([], s).cultivator.hp;
     expect(cast([{ type: 'heal', share: 0.25 }], s).cultivator.hp).toBe(
-      10 + Math.round(max * 0.25),
+      without + Math.round(max * 0.25),
     );
     s.cultivator.hp = max - 1;
     expect(cast([{ type: 'heal', share: 0.25 }], s).cultivator.hp).toBe(max);
@@ -609,6 +631,7 @@ describe('effects', () => {
     const s = arena('elite', { foe: true, regen: true });
     front(s).damage = 1e9;
     const after = cast([{ type: 'endure', duration: 30 }], s, 1.9);
+    after.qiNextAt = OFF;
     const later = tick(after, front(s).attackInterval * 3, book([]));
     expect(later.cultivator.hp).toBe(1);
     expect(later.deaths).toBe(0);

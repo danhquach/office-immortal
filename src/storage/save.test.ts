@@ -7,13 +7,16 @@ import {
   rerollAffix,
   type ItemAt,
   resetStats,
+  setAutoAssign,
   setFilter,
+  setPlanRatio,
   spendPoints,
 } from '../core/economy.ts';
 import { makeEnemy, makeFloor, makeTribulation, type Enemy } from '../core/floors.ts';
 import { charmLine, itemPath, type EquipSlotId, type Item } from '../core/loot.ts';
 import { createRng, int } from '../core/rng.ts';
 import {
+  defaultRatio,
   derive,
   isRealmCap,
   LAST_CAP,
@@ -22,12 +25,16 @@ import {
   realmOf,
   REALM_BONUS,
   xpToNext,
+  zeroCarry,
 } from '../core/cultivator.ts';
 import { buyPassive, noPassives } from '../core/prestige.ts';
 import { syncStore } from '../core/store.ts';
 import {
   ARRAY_TICK,
+  canEquip,
   canFaceTribulation,
+  restartFloor,
+  defaultStatPlan,
   ENEMY_ARRIVAL,
   equip,
   faceTribulation,
@@ -62,16 +69,32 @@ const SAVED_AT = 1_800_000_000_000;
 
 /** A run a few hours in, with gear on and items in the bag, so every field is exercised. */
 function played(): GameState {
-  let s = tick(newGame(11, 'sword'), 3 * 60 * 60);
-  for (let i = 0; i < 4 && s.inventory.length > 0; i++) s = equip(s, 0);
+  // Points spread by a plan, so the stats and the plan fields are all exercised.
+  let s = newGame(11, 'sword');
+  s = setAutoAssign(setPlanRatio(s, 'sword', { body: 20, agility: 70, spirit: 10 }), true);
+  // Equips what it can as it goes, so it climbs past the early caps.
+  for (let m = 0; m < 18; m++) {
+    s = tick(s, 600);
+    for (let k = 0; k < 4; k++) {
+      const i = s.inventory.findIndex((item) => canEquip(s.cultivator, item));
+      if (i < 0) break;
+      s = equip(s, i);
+    }
+  }
   return s;
 }
 
 const STATE = played();
+/** STATE as loaded from a save older than v15: the default plan, and a free reset on offer. */
+const OLD_STATE: GameState = { ...STATE, statPlan: defaultStatPlan(), freeReset: true };
 
-/** STATE as a save from before qi (v13) loads it: no qi, the regen step a second off. */
+/**
+ * STATE as a save from before qi (v13) loads it: no qi, the regen step a
+ * second off, and (from before v14) no Tribulation losses on record.
+ */
 const STATE_NO_QI: GameState = {
-  ...STATE,
+  ...OLD_STATE,
+  trial: newTrial(),
   qiNextAt: STATE.time + QI_TICK,
   cultivator: { ...STATE.cultivator, qi: 0 },
   enemies: STATE.enemies.map((e) => ({ ...e, qi: 0 })),
@@ -106,6 +129,14 @@ const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 /** The save as versions before 14 wrote it: no Auto-Tribulation switch or retry record. */
 function beforeTrial(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
   delete save.state.trial;
+  beforePlan(save);
+  return save;
+}
+
+/** The save as versions before 15 wrote it: no Auto-assign plan, no free reset. */
+function beforePlan(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.statPlan;
+  delete save.state.freeReset;
   return save;
 }
 
@@ -203,7 +234,8 @@ describe('round trip', () => {
       for (let i = 0; i < 40; i++) {
         s = tick(s, 900);
         // Equip from the back of the bag, so positions fill out of display order.
-        if (s.inventory.length > 0) s = equip(s, s.inventory.length - 1);
+        const last = s.inventory[s.inventory.length - 1];
+        if (last && canEquip(s.cultivator, last)) s = equip(s, s.inventory.length - 1);
         expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
       }
     }
@@ -1286,9 +1318,12 @@ describe('rejects', () => {
     const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
     const maxQi = derive(STATE.cultivator).maxQi;
     const foes = (s: ReturnType<typeof raw>) => s.state.enemies as J[];
+    // STATE on a fresh floor, so demons and an elite are always there to check.
+    const FRESH = restartFloor(STATE);
+    const fresh = (): ReturnType<typeof raw> => JSON.parse(encodeSave(FRESH, SAVED_AT));
     /** The save with an elite in front, so an enemy with a pool is checked too. */
     function withElite(): ReturnType<typeof raw> {
-      const save = raw();
+      const save = fresh();
       const kinds = foes(save).map((e) => e.kind);
       save.state.enemies = foes(save).slice(kinds.indexOf('elite'));
       return save;
@@ -1301,7 +1336,7 @@ describe('rejects', () => {
       const loaded = load(save)?.state;
       expect(loaded?.cultivator.qi).toBe(maxQi);
       expect(loaded?.enemies[0]?.qi).toBe(60);
-      expect(loaded?.qiNextAt).toBe(STATE.qiNextAt);
+      expect(loaded?.qiNextAt).toBe(FRESH.qiNextAt);
     });
 
     it.each([
@@ -1319,7 +1354,7 @@ describe('rejects', () => {
       const elite = withElite();
       (foes(elite)[0] as J).qi = 61;
       expect(load(elite)).toBeNull();
-      const demon = raw();
+      const demon = fresh();
       expect(foes(demon)[0]?.kind).toBe('demon');
       (foes(demon)[0] as J).qi = 0.5;
       expect(load(demon)).toBeNull();
@@ -1823,6 +1858,8 @@ describe('realm caps and the Tribulation', () => {
   function held(fought = 0): GameState {
     let s = newGame(7, 'sword');
     while (s.enemies[0]?.kind !== 'tribulation') s = tick(s, 1);
+    // Enough held XP to be at the cap on the old XP curve too, as an older save would be.
+    s.cultivator.xp = Math.max(s.cultivator.xp, Math.round(50 * 1.2 ** 9));
     (s.enemies[0] as Enemy).damage = 1e9;
     const { deaths } = s;
     while (s.deaths === deaths) s = tick(s, 1);
@@ -2850,22 +2887,23 @@ describe('the Tribulation retry record (v14)', () => {
     return decodeSave(JSON.stringify(save))?.state;
   };
 
-  it('writes version 14, never the 12 other work holds', () => {
-    expect(SAVE_VERSION).toBe(14);
+  it('writes version 15 (the stat rebalance came after), never 12', () => {
+    expect(SAVE_VERSION).toBe(15);
   });
 
   it('loads a v13 save (qi, no retry record) with the switch on and no losses', () => {
-    const save = asideRaw();
-    delete save.state.trial;
+    const save = beforeTrial(asideRaw());
     save.v = 13;
     const loaded = decodeSave(JSON.stringify(save))?.state;
-    expect(loaded).toEqual({ ...ASIDE, trial: newTrial() });
+    // Before the rebalance too: the default plan; nothing was spent past the
+    // start, so no free reset is on offer.
+    expect(loaded).toEqual({ ...ASIDE, trial: newTrial(), freeReset: false });
     // Its qi survives the load.
     expect(loaded?.cultivator.qi).toBe(ASIDE.cultivator.qi);
   });
 
   it('rejects a v13 save that carries the v14 record', () => {
-    const save = asideRaw();
+    const save = beforePlan(asideRaw());
     save.v = 13;
     expect(decodeSave(JSON.stringify(save))).toBeNull();
   });
@@ -2902,7 +2940,7 @@ describe('the Tribulation retry record (v14)', () => {
     return save;
   }
 
-  it('falls back to the defaults when the record is missing from a v14 save', () => {
+  it('falls back to the defaults when the record is missing from a current save', () => {
     const save = asideRaw();
     delete save.state.trial;
     expect(decodeSave(JSON.stringify(save))?.state.trial).toEqual(newTrial());
@@ -2982,5 +3020,156 @@ describe('the Tribulation retry record (v14)', () => {
     expect(later.enemies.some((e) => e.kind === 'tribulation') || later.cultivator.level > 10).toBe(
       true,
     );
+  });
+});
+
+describe('the stat rebalance (v15)', () => {
+  /** A save as v14 (qi and the retry record, before the rebalance) wrote it: no plan and no free reset. */
+  const v14 = (state: GameState = STATE): ReturnType<typeof raw> => {
+    const save = beforePlan(JSON.parse(encodeSave(state, SAVED_AT)) as ReturnType<typeof raw>);
+    save.v = 14;
+    return save;
+  };
+  const load = (save: unknown) => decodeSave(JSON.stringify(save));
+
+  it('round-trips the plan and the free reset', () => {
+    expect(STATE.statPlan.auto).toBe(true);
+    const s = structuredClone(STATE);
+    s.freeReset = true;
+    s.statPlan.slots.talisman = {
+      ratio: { body: 10, agility: 20, spirit: 70 },
+      carry: { body: 10, agility: -30, spirit: 20 },
+    };
+    expect(decodeSave(encodeSave(s, SAVED_AT))?.state).toEqual(s);
+  });
+
+  it('loads a v14 save (from before the rebalance) with its points, qi, the default plan and a free reset', () => {
+    const st = load(v14())?.state;
+    expect(st).toEqual(OLD_STATE);
+    expect(st?.cultivator.stats).toEqual(STATE.cultivator.stats);
+    expect(st?.cultivator.qi).toBe(STATE.cultivator.qi);
+  });
+
+  it('loads a v11 save (before qi and the rebalance) with no qi and the default plan', () => {
+    const old = beforeQi(raw());
+    old.v = 11;
+    expect(load(old)?.state).toEqual(STATE_NO_QI);
+  });
+
+  it('refuses version 12, which no release ever wrote', () => {
+    const save = v14();
+    save.v = 12;
+    expect(load(save)).toBeNull();
+  });
+
+  it('offers no free reset to a v14 save with nothing spent past its start', () => {
+    // A new run: only the Path's starting bonus on its main stat.
+    expect(load(v14(newGame(2, 'body')))?.state.freeReset).toBe(false);
+    // One point spent past the start is enough.
+    const spent = newGame(2, 'body');
+    spent.cultivator.level = 2;
+    spent.cultivator.stats.spirit += 3;
+    expect(load(v14(spent))?.state.freeReset).toBe(true);
+  });
+
+  it("cuts a v14 save's HP to the new max, where Body gave more", () => {
+    const save = v14();
+    const max = derive(STATE.cultivator).maxHp;
+    cult(save).hp = max * 1.2;
+    expect(load(save)?.state.cultivator.hp).toBe(max);
+    // A current save above the max is still refused.
+    const now = raw();
+    cult(now).hp = max * 1.2;
+    expect(load(now)).toBeNull();
+  });
+
+  it('refuses a v14 save that carries v15 fields', () => {
+    const save = v14();
+    save.state.freeReset = true;
+    expect(load(save)).toBeNull();
+  });
+
+  it.each([
+    ['missing', (st: J) => void delete st.freeReset],
+    ['text', (st: J) => void (st.freeReset = 'true')],
+    ['a number', (st: J) => void (st.freeReset = 1)],
+    ['missing plan', (st: J) => void delete st.statPlan],
+  ])('refuses a free reset flag that is %s', (_, change) => {
+    const save = raw();
+    change(save.state);
+    expect(load(save)).toBeNull();
+  });
+
+  /** STATE with its saved plan replaced by `plan`, loaded. */
+  const withPlan = (plan: unknown) => {
+    const save = raw();
+    save.state.statPlan = plan;
+    return load(save)?.state;
+  };
+  const slot = (ratio: unknown, carry: unknown = { body: 0, agility: 0, spirit: 0 }) => ({
+    auto: true,
+    slots: { ...STATE.statPlan.slots, sword: { ratio, carry } },
+  });
+
+  it.each([
+    ['a negative share', { body: -10, agility: 100, spirit: 10 }],
+    ['a fractional share', { body: 0.5, agility: 99.5, spirit: 0 }],
+    ['a huge share', { body: 1e308, agility: 0, spirit: 0 }],
+    ['shares not adding to 100', { body: 10, agility: 10, spirit: 10 }],
+    ['a share as text', { body: '100', agility: 0, spirit: 0 }],
+    ['an extra key', { body: 100, agility: 0, spirit: 0, qi: 0 }],
+    ['a missing key', { body: 100, agility: 0 }],
+    ['an array', [100, 0, 0]],
+    ['null', null],
+  ])('falls back to the default ratio for %s, and the save still loads', (_, ratio) => {
+    const st = withPlan(slot(ratio));
+    expect(st).toBeDefined();
+    expect(st?.statPlan.slots.sword).toEqual({ ratio: defaultRatio('sword'), carry: zeroCarry() });
+    // The other Paths keep theirs, and the switch stays on.
+    expect(st?.statPlan.auto).toBe(true);
+  });
+
+  it('starts the rounding afresh for a carry the plan could not have reached', () => {
+    const ratio = { body: 30, agility: 50, spirit: 20 };
+    for (const carry of [
+      { body: 500, agility: -500, spirit: 0 },
+      { body: 1, agility: 0, spirit: 0 },
+      { body: 0.5, agility: -0.5, spirit: 0 },
+      'none',
+    ]) {
+      expect(withPlan(slot(ratio, carry))?.statPlan.slots.sword).toEqual({
+        ratio,
+        carry: zeroCarry(),
+      });
+    }
+  });
+
+  it.each([
+    ['not an object', 'auto'],
+    ['an array', []],
+    ['null', null],
+    ['no slots', { auto: true }],
+    ['slots as text', { auto: true, slots: 'x' }],
+  ])('falls back to the default plan when it is %s', (_, plan) => {
+    const st = withPlan(plan);
+    expect(st).toBeDefined();
+    expect(st?.statPlan.slots).toEqual(defaultStatPlan().slots);
+  });
+
+  it('only turns Auto-assign on for exactly true', () => {
+    for (const auto of ['true', 1, {}, null]) {
+      expect(withPlan({ ...STATE.statPlan, auto })?.statPlan.auto).toBe(false);
+    }
+  });
+
+  it('never copies prototype keys from a saved plan', () => {
+    const text = encodeSave(STATE, SAVED_AT)
+      .replace('"statPlan":{', '"statPlan":{"__proto__":{"polluted":1},')
+      .replace('"slots":{', '"slots":{"__proto__":{"polluted":2},"constructor":{"x":1},');
+    const st = decodeSave(text)?.state;
+    expect(st).toBeDefined();
+    expect(Object.keys(st?.statPlan.slots ?? {})).toEqual(['sword', 'body', 'talisman']);
+    expect(Object.getPrototypeOf(st?.statPlan)).toBe(Object.prototype);
+    expect(({} as J).polluted).toBeUndefined();
   });
 });
