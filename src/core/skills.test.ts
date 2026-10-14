@@ -295,6 +295,20 @@ describe('casting', () => {
     expect(tick(s, 30, { loadout: noSkills })).toEqual(tick(s, 30));
   });
 
+  it("counts the cultivator's pierce when a damage skill holds for a killing hit", () => {
+    const s = arena();
+    s.cultivator.stats.spirit = 300;
+    s.cultivator.stats.agility = 300;
+    const d = derive(s.cultivator);
+    expect(d.pierce).toBeGreaterThan(0.1);
+    front(s).defence = 200;
+    // The normal hit kills only with its pierce.
+    front(s).hp = mitigate(d.damage, 200, d.pierce);
+    expect(mitigate(d.damage, 200)).toBeLessThan(front(s).hp);
+    const strike = skill({ kind: 'damage', effects: [{ type: 'hit', mult: 3 }] });
+    expect(casts(tick(s, 2, book([strike])))).toEqual([]);
+  });
+
   it('rejects a skill with neither a qi cost nor a cooldown', () => {
     expect(() => tick(arena(), 2, book([skill({ qi: 0, cooldown: 0 })]))).toThrow(RangeError);
   });

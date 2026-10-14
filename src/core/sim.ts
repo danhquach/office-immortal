@@ -810,12 +810,15 @@ function rules(s: GameState, side: Side): RuleInputs {
     windingUp: foe.windUp !== null,
     fightTime,
   };
-  // The next normal hit, without crit or burst: what rule 2 reads.
+  // The next normal hit, without crit or burst, through defence (and the
+  // cultivator's pierce) as strikeFoe/strikeYou take it: what rule 2 reads. A
+  // shield or "can't drop below 1 HP" on the target is left out.
   const nextHitKills =
     side === 'you'
       ? mitigate(
           d.damage * modFactor(you, 'damage', now) * modFactor(foe, 'damageTaken', now),
           enemy.defence * modFactor(foe, 'defence', now),
+          d.pierce,
         ) >= enemy.hp
       : mitigate(
           enemy.damage * modFactor(foe, 'damage', now) * modFactor(you, 'damageTaken', now),
