@@ -7,10 +7,11 @@
 import {
   derive,
   newCultivator,
-  PATHS,
   REALM_CAPS,
+  spendByPlan,
   STAT_POINTS_PER_LEVEL,
   xpToNext,
+  zeroCarry,
   type PathId,
 } from '../core/cultivator.ts';
 import { BAG_ROW, earn, INVENTORY_SIZE, MAX_BAG_SIZE, pickUp } from '../core/economy.ts';
@@ -32,6 +33,7 @@ import {
 import { bonusPoints } from '../core/prestige.ts';
 import { rngFrom } from '../core/rng.ts';
 import {
+  activePlan,
   canEquip,
   equip,
   newGame,
@@ -116,20 +118,28 @@ export function setBagSize(state: GameState, size: number): GameState {
 }
 
 /**
- * The cultivator at `level` with no XP, every level's stat points on the
- * Path's primary stat as levelling puts them, gear kept; the floor starts
- * again so its Tribulation matches the new level.
+ * The cultivator at `level` with no XP, every level's stat points placed as
+ * levelling places them (by the Auto-assign plan when it is on, else left
+ * unspent), gear kept; the floor starts again so its Tribulation matches the
+ * new level.
  */
 export function setLevel(state: GameState, level: number): GameState {
   whole(level, 1, MAX_DEBUG_LEVEL, 'level');
   const s = structuredClone(state);
   const c = s.cultivator;
   const fresh = newCultivator(c.path, bonusPoints(s.passives));
-  fresh.stats[PATHS[c.path].primary] += STAT_POINTS_PER_LEVEL * (level - 1);
   c.stats = fresh.stats;
-  c.unspent = 0;
+  c.unspent = fresh.unspent;
+  // At the new level first, so a plan's spend heals with that level's realm bonus.
   c.level = level;
   c.xp = 0;
+  const points = STAT_POINTS_PER_LEVEL * (level - 1);
+  const plan = activePlan(s);
+  if (plan) {
+    // A fresh spend of every level's points: the plan's rounding starts afresh.
+    plan.carry = zeroCarry();
+    spendByPlan(c, plan, points);
+  } else c.unspent += points;
   for (const at of EQUIP_IDS) {
     const item = c.equipment[at];
     if (item && !canEquip(c, item)) {

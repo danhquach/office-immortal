@@ -80,7 +80,7 @@ export function tabTitle(floor: number, unseen: number, due = false, paused = fa
  * The pop-out's status line, e.g. `F21 · Golden Core · Manager · 3 drops`, from a
  * realm label (fixed game text); no count when nothing waits. While a
  * Tribulation is due it says so in place of the realm, or that it is paused
- * while set aside.
+ * while set aside. Unspent stat points add "+N pts".
  */
 export function miniStatus(
   floor: number,
@@ -88,10 +88,13 @@ export function miniStatus(
   unseen: number,
   due = false,
   paused = false,
+  unspent = 0,
 ): string {
   const trial = due ? t(paused ? 'hud.paused' : 'hud.due') : realm;
-  const head = `${t('hud.floor', { n: floor })} · ${trial}`;
-  return unseen > 0 ? `${head} · ${dropsLabel(unseen)}` : head;
+  let line = `${t('hud.floor', { n: floor })} · ${trial}`;
+  if (unseen > 0) line += ` · ${dropsLabel(unseen)}`;
+  // Stat points waiting to be placed (docs/design.md §3).
+  return unspent > 0 ? `${line} · ${t('hud.points', { n: unspent })}` : line;
 }
 
 /** The pop-out's latest-drop toast, e.g. `Jade Serpent Blade · Earth · Quality 87%`. Shown on the page only, never in the title. */

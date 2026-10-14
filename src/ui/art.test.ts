@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import manifestText from '../../tools/art/manifest.json?raw';
 import { renders } from '../../tools/art/render-weapons.mjs';
 import { FAMILIES, GRADES } from '../../tools/art/weapons.mjs';
-import { PATHS, type PathId } from '../core/cultivator.ts';
+import { derive, PATHS, type PathId } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, makeFloor, TRIBULATIONS, ZONES, type Enemy } from '../core/floors.ts';
 import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
 import { createRng } from '../core/rng.ts';
@@ -373,10 +373,37 @@ describe('stripEvents', () => {
       youAttack: false,
       foeAttack: false,
       youHit: false,
+      youTook: 0,
       foeHit: false,
       youDied: true,
       foeDied: null,
     });
+  });
+
+  it('still sees a hit, and its full size, when a regen step heals in the same frame', () => {
+    const prev = base();
+    prev.cultivator.hp -= 20;
+    const next = structuredClone(prev);
+    const regen = derive(next.cultivator).hpRegen;
+    expect(regen).toBeGreaterThan(0);
+    next.enemyNextAttackAt += 2;
+    next.qiNextAt += 1;
+    // A hit of exactly the regen: the HP did not move at all.
+    next.cultivator.hp = prev.cultivator.hp;
+    expect(stripEvents(prev, next)).toMatchObject({ youHit: true });
+    expect(stripEvents(prev, next).youTook).toBeCloseTo(regen, 9);
+  });
+
+  it('sees no hit from a regen step alone, healed or capped at max HP', () => {
+    const prev = base();
+    const healed = structuredClone(prev);
+    healed.qiNextAt += 1;
+    expect(stripEvents(prev, healed).youHit).toBe(false);
+    prev.cultivator.hp -= 0.1;
+    const capped = structuredClone(prev);
+    capped.qiNextAt += 1;
+    capped.cultivator.hp = derive(capped.cultivator).maxHp;
+    expect(stripEvents(prev, capped).youHit).toBe(false);
   });
 
   it('sees nothing when nothing happened', () => {

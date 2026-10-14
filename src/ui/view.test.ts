@@ -7,8 +7,16 @@ import {
   realmOf,
   REALMS,
   type Cultivator,
+  type PathId,
 } from '../core/cultivator.ts';
-import { BAG_ROW, INVENTORY_SIZE, MAX_BAG_SIZE, refineCost, rerollCost } from '../core/economy.ts';
+import {
+  BAG_ROW,
+  INVENTORY_SIZE,
+  MAX_BAG_SIZE,
+  refineCost,
+  rerollCost,
+  spendPoints,
+} from '../core/economy.ts';
 import type { EquipSlotId, Item } from '../core/loot.ts';
 import {
   equip,
@@ -93,6 +101,11 @@ import {
   discreetRows,
   waveLabel,
   xpBar,
+  parseShare,
+  planRatio,
+  slowPoint,
+  spendPreview,
+  statTip,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
 import { DEFAULT_LANG, PACKS, setLang, t, tn } from './i18n.ts';
@@ -363,9 +376,12 @@ describe('statRows', () => {
     const rows = Object.fromEntries(
       statRows(newCultivator('sword')).map((r) => [r.label, r.value]),
     );
-    expect(rows['Max HP']).toBe('100');
-    expect(rows['Crit chance']).toBe('6.6%');
-    expect(rows['Crit damage']).toBe('×2');
+    // Body is another Path's stat for a Sword Cultivator: +5 max HP a point.
+    expect(rows['Max HP']).toBe('65');
+    expect(rows['Crit chance']).toBe('7.3%');
+    // Flowing Sword: +0.5% crit damage a point of Agility (8 at the start).
+    expect(rows['Crit damage']).toBe('×2.04');
+    expect(rows['HP regen']).toBe('0.25/s');
   });
 
   it('adds treasure find from passives to the gear’s', () => {
@@ -380,8 +396,16 @@ describe('statRows', () => {
   it('puts every row in a group, in group order, with short labels under Find', () => {
     const rows = statRows(newCultivator('sword'));
     const by = (g: string) => rows.filter((r) => r.group === g).map((r) => r.short);
-    expect(by('Offence')).toEqual(['Damage', 'Attacks/s', 'Crit chance', 'Crit damage']);
-    expect(by('Defence')).toEqual(['Max HP', 'Defence', 'Lifesteal', 'Max qi', 'Qi regen/s']);
+    expect(by('Offence')).toEqual(['Damage', 'Attacks/s', 'Crit chance', 'Crit damage', 'Pierce']);
+    expect(by('Defence')).toEqual([
+      'Max HP',
+      'Defence',
+      'Lifesteal',
+      'HP regen',
+      'Dodge',
+      'Max qi',
+      'Qi regen/s',
+    ]);
     expect(by('Find')).toEqual(['Spirit stones', 'Treasure']);
     expect(rows.every((r) => (STAT_GROUPS as readonly string[]).includes(r.group))).toBe(true);
     expect(rows.find((r) => r.short === 'Treasure')?.label).toBe('Treasure find');
@@ -2190,5 +2214,138 @@ describe('trialPause', () => {
       head: 'Tạm hoãn Độ Thiên Kiếp sau 3 lần thua: hãy mạnh hơn',
       detail: 'Thua 3 lần · thử lại sau 9 phút',
     });
+  });
+});
+
+describe('Mastery rows', () => {
+  const labels = (path: PathId) => statRows(newCultivator(path)).map((r) => r.label);
+  it('shows Reflect for a Body Refiner and Burst damage for a Talisman Master only', () => {
+    expect(labels('body')).toContain('Reflect');
+    expect(labels('body')).not.toContain('Burst damage');
+    expect(labels('talisman')).toContain('Burst damage');
+    expect(labels('talisman')).not.toContain('Reflect');
+    expect(labels('sword')).not.toContain('Reflect');
+    expect(labels('sword')).not.toContain('Burst damage');
+  });
+});
+
+describe('statTip', () => {
+  it('says what one more point does, in real numbers, with the Mastery for the main stat', () => {
+    const c = newCultivator('sword');
+    c.stats.agility = 100;
+    const tip = statTip(c, 'agility');
+    expect(tip.gain).toMatch(
+      /^\+1 Agility: Damage .* → .*, Attacks\/s 1\.75 → 1\.76, Crit chance 23% → 23\.11%/,
+    );
+    expect(tip.gain).toContain('Crit damage ×2.5 → ×2.505');
+    expect(tip.gain).toContain('Dodge 5% → 5.04%');
+    expect(tip.mastery).toMatch(/^Flowing Sword/);
+    expect(tip.share).toBe('Your Path’s stat: full effect.');
+    expect(tip.slows).toBe('Gains slow above 62.');
+  });
+
+  it('says another Path’s stat adds no damage and works at half', () => {
+    const c = newCultivator('sword');
+    const tip = statTip(c, 'body');
+    expect(tip.gain).toBe('+1 Body: Max HP 65 → 70, Defence 1.3 → 1.5, HP regen 0.25/s → 0.3/s');
+    expect(tip.mastery).toBe('Not your Path’s stat: no damage.');
+    expect(tip.share).toBe('Other Path: half effect.');
+    // Body is a straight line but for Iron Body.
+    expect(tip.slows).toBe('');
+  });
+
+  it('shows the small qi regen gain a Spirit point gives', () => {
+    expect(statTip(newCultivator('talisman'), 'spirit').gain).toMatch(
+      /Qi regen\/s 1\.\d+ → 1\.\d+/,
+    );
+  });
+
+  it('says gains slow only once the curve has flattened', () => {
+    const c = newCultivator('talisman');
+    expect(statTip(c, 'spirit').slows).toBe('');
+    c.stats.spirit = slowPoint('talisman', 'spirit') as number;
+    expect(statTip(c, 'spirit').slows).toBe(`Gains slow above ${c.stats.spirit}.`);
+    expect(slowPoint('body', 'body')).toBeGreaterThan(0);
+    expect(slowPoint('sword', 'body')).toBeNull();
+  });
+
+  it('reads the same in Vietnamese, as text only', () => {
+    setLang('vi');
+    try {
+      const tip = statTip(newCultivator('body'), 'body');
+      expect(tip.gain.startsWith('+1 Thể Chất: ')).toBe(true);
+      expect(tip.mastery.startsWith('Thiết Thân')).toBe(true);
+    } finally {
+      setLang(DEFAULT_LANG);
+    }
+  });
+});
+
+describe('spendPreview', () => {
+  it('matches what spending actually does, row for row', () => {
+    for (const path of ['sword', 'body', 'talisman'] as const) {
+      const s = tick(newGame(5, path), 900);
+      expect(s.cultivator.unspent).toBeGreaterThan(0);
+      for (const stat of ['body', 'agility', 'spirit'] as const) {
+        for (const n of [1, s.cultivator.unspent]) {
+          const preview = spendPreview(s.cultivator, stat, n, s.passives);
+          const after = statRows(spendPoints(s, stat, n).cultivator, s.passives);
+          expect(preview.map((r) => r.value)).toEqual(after.map((r) => r.value));
+        }
+      }
+    }
+  });
+
+  it('marks gains up and leaves untouched rows alone', () => {
+    const c = newCultivator('body');
+    const rows = statRows(c);
+    const preview = spendPreview(c, 'body', 1);
+    const at = (label: string) => preview[rows.findIndex((r) => r.label === label)];
+    expect(at('Max HP')?.change).toBe('up');
+    expect(at('Attacks/s')?.change).toBe('');
+    expect(preview.some((r) => r.change === 'down')).toBe(false);
+  });
+});
+
+describe('plan ratio input', () => {
+  it('takes whole numbers from 0 to 100 only', () => {
+    expect(parseShare('0')).toBe(0);
+    expect(parseShare(' 100 ')).toBe(100);
+    for (const bad of [
+      '',
+      '-1',
+      '101',
+      '1e2',
+      '50.5',
+      '0x10',
+      '½',
+      '٣',
+      '１０',
+      '10\u200b',
+      'NaN',
+      '__proto__',
+    ]) {
+      expect(parseShare(bad)).toBeNull();
+    }
+  });
+
+  it('refuses a bidi override and oversized text', () => {
+    expect(parseShare('1\u202e0')).toBeNull();
+    expect(parseShare('\u202d50')).toBeNull();
+    expect(parseShare('1'.repeat(1_000_000))).toBeNull();
+  });
+
+  it('needs all three to add up to 100', () => {
+    expect(planRatio({ body: '30', agility: '60', spirit: '10' })).toEqual({
+      ratio: { body: 30, agility: 60, spirit: 10 },
+      why: '',
+    });
+    expect(planRatio({ body: '30', agility: '60', spirit: '0' })).toEqual({
+      ratio: null,
+      why: 'Shares add up to 90%; they must make 100%.',
+    });
+    expect(planRatio({ body: '-10', agility: '100', spirit: '10' }).why).toBe(
+      'Shares must be whole numbers from 0 to 100.',
+    );
   });
 });
