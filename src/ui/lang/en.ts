@@ -193,6 +193,8 @@ const messages = {
   'mastery.talisman':
     'Talisman Resonance: +1.5 damage and +1% burst damage per point; each burst splashes 50% onto the next enemy.',
   'plan.title': 'Auto-assign',
+  'plan.off': 'Auto-assign: off',
+  'plan.on': 'Auto-assign: {body} / {agility} / {spirit}',
   'plan.hint': 'New points follow these shares. Points already unspent wait for you or Apply plan.',
   'plan.share': '{stat} share, in percent',
   'plan.apply': 'Apply plan',
@@ -219,7 +221,6 @@ const messages = {
   'bonus.treasureFind': 'Treasure find',
 
   'respec.title': 'Respec',
-  'respec.info': '? How Respec works',
   'respec.note':
     'Reset takes back every stat point to spend as you choose. A Path change gives them all back unspent too.',
   'respec.reset': 'Reset stats',

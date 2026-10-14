@@ -105,6 +105,7 @@ import {
   xpBar,
   parseShare,
   planRatio,
+  planSummary,
   slowPoint,
   spendPreview,
   statTip,
@@ -2361,6 +2362,25 @@ describe('plan ratio input', () => {
     expect(planRatio({ body: '-10', agility: '100', spirit: '10' }).why).toBe(
       'Shares must be whole numbers from 0 to 100.',
     );
+  });
+});
+
+describe('planSummary', () => {
+  const ratio = { body: 40, agility: 40, spirit: 20 };
+
+  it('says off, or the shares in stat order while on', () => {
+    expect(planSummary(false, ratio)).toBe('Auto-assign: off');
+    expect(planSummary(true, ratio)).toBe('Auto-assign: 40 / 40 / 20');
+  });
+
+  it('reads in Vietnamese', () => {
+    setLang('vi');
+    try {
+      expect(planSummary(false, ratio)).toBe('Tự phân bổ: tắt');
+      expect(planSummary(true, ratio)).toBe('Tự phân bổ: 40 / 40 / 20');
+    } finally {
+      setLang(DEFAULT_LANG);
+    }
   });
 });
 

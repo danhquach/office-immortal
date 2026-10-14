@@ -79,10 +79,11 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
     splashes 50% onto the next enemy waiting (after its defence, never a
     Tribulation), leaving it at least 1 HP.
 - **Stat points:** each level-up adds 3 **unspent** points; nothing is spent
-  by itself unless Auto-assign is on. While points wait, the Stats tab shows
-  a dot, Base stats says "N unspent" and the Mini view's status line adds
-  "+N pts". +1 or All on a stat's row spends them.
-- **Auto-assign** (a switch on the Stats tab, off by default): a ratio across
+  by itself unless Auto-assign is on. While points wait, the Stats tab and
+  its Stats sub-tab show a dot, Base stats says "N unspent" and the Mini
+  view's status line adds "+N pts". +1 or All on a stat's row spends them.
+- **Auto-assign** (a switch on the Stats tab, off by default, folded into
+  one line, "Auto-assign: off" or "Auto-assign: 40 / 40 / 20"): a ratio across
   Body, Agility and Spirit in whole percent, 0 to 100 each, adding up to 100;
   it starts at 100% on the main stat. New points follow it exactly over time:
   a smooth weighted round robin carries the rounding from point to point, so
@@ -1463,11 +1464,26 @@ Grade is also written as text, never shown by colour alone.
   under the hint, every button that same width. Reset progress asks first
   and then deletes the save. Help ends with a Stats entry: each stat's tip
   for the cultivator now (§3).
-- The Character panel's **Stats** tab: Base stats (each stat's tip on its
-  name, +1 and All), the Auto-assign switch and plan, the derived rows by
-  group (Offence, Defence, Find; Reflect shows for a Body Refiner only, Burst
-  damage for a Talisman Master only), running boosts, then Respec. The tab
-  carries a dot while points wait; it scrolls inside the panel.
+- The Character panel's **Stats** tab has two sub-tabs (tabs pattern: arrow
+  keys move between them), whose bar stays in view while the sub-tab under it
+  scrolls; from 940 × 600 px only that sub-tab scrolls, never the page.
+  - **Stats** (a dot while points wait, "Stats (N unspent points)" for
+    screen readers): Base stats (each stat's tip on its name, +1 and All),
+    Auto-assign folded into its summary line (opening it shows the switch and,
+    while on, the shares and Apply plan), then the derived numbers one per row
+    (label left, value right, in every view) in groups that fold: Offence,
+    Defence, Find (Reflect shows for a Body Refiner only, Burst damage for a
+    Talisman Master only) and Boosts running. A group's heading is a button
+    that reports whether it is open, with its count ("Boosts (2)") shown while
+    folded and read either way. Offence and Defence start open; Auto-assign,
+    Find and Boosts start folded. Which are open is a display preference kept
+    on this device only, like the theme (`office-immortal.folds`): read
+    against the allow-list of groups, each "open" or "closed", and anything
+    else (unknown names, wrong types, oversized or broken values, no storage)
+    keeps the default.
+  - **Respec:** the "How Respec works" note as text, then Reset stats and
+    Change Path, each with its cost and the reason it is off.
+  - A Skills sub-tab (a follow-up, §5 Qi and skills) goes between them.
 - The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
   tab wears a colour on its border (Bag the accent, Auto filter the Salvage
   colour, Store the Spirit Stones colour), tinted while open. The Store groups

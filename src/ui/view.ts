@@ -630,6 +630,11 @@ export function parseShare(text: string): number | null {
   return n <= 100 ? n : null;
 }
 
+/** The folded Auto-assign line: "Auto-assign: off", or the plan's shares while it is on. */
+export function planSummary(auto: boolean, ratio: Readonly<Stats>): string {
+  return auto ? t('plan.on', { ...ratio }) : t('plan.off');
+}
+
 /**
  * The plan's three typed shares as a ratio, or why they can't be one: each a
  * whole number from 0 to 100, all three adding up to 100.
