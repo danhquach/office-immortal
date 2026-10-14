@@ -34,19 +34,67 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 - **Solo.** One character. No party in v1.
 - **Paths (classes):** pick one at the start; change it later for a cost.
 
-| Path | Role | Primary stat |
-|---|---|---|
-| Sword Cultivator | Fast hits, crit, a little lifesteal (5%) | Agility |
-| Body Refiner | Tanky, lifesteal | Body |
-| Talisman Master | Burst, area damage | Spirit |
+| Path | Role | Primary stat | Path Mastery |
+|---|---|---|---|
+| Sword Cultivator | Fast hits, crit, a little lifesteal (5%) | Agility | Flowing Sword |
+| Body Refiner | Tanky, lifesteal (15%) | Body | Iron Body |
+| Talisman Master | Burst (every 5th attack ×5), area damage | Spirit | Talisman Resonance |
 
-- **Balance:** no Path is much stronger than the others; a test keeps each
-  within 15% of the others on the floor reached.
-- **Stats:** Body (HP, defence), Agility (attack speed, crit), Spirit (skill
-  damage, max qi and qi regen: in full for a Talisman Master, half for the
-  other Paths, §5 Qi and skills). Each level grants stat points, assigned
-  automatically to the Path's primary stat by default; the player can reset
-  and re-spend them.
+- **Balance:** no Path is much stronger than the others; a test plays each
+  Path with a fixed reference build (its Auto-assign plan: Sword 30 / 60 / 10,
+  Body 70 / 20 / 10, Talisman 30 / 10 / 60 Body / Agility / Spirit) and keeps
+  each within 15% of the others on the floor reached, at 10 and 60 minutes.
+- **Stats: every stat helps every Path.** Each stat's effects are full for
+  the Path whose main stat it is and **half** for the other two (the Path
+  share). The numbers below are the full share:
+  - **Body:** +10 max HP, +0.5 defence and +0.1 HP regen a second per point.
+    HP regen heals on the regen step, once a second, in fights and between
+    them (the same step as qi regen).
+  - **Agility:** attacks a second on a log curve with no limit of its own,
+    1 + 1.08 · ln(1 + Agility / 100): 1.75 at 100, 2.5 at 300, about 3.1 at
+    600 (off-Path, half the gain over 1). Crit chance 5% + 45% · A / (A + 150):
+    23% at 100, 35% at 300 (off-Path, half the part above 5%). Dodge
+    27.5% · A / (A + 450): 5% at 100, 11% at 300; a dodged attack misses.
+    Skill cooldown reduction 50% · A / (A + 250): 14% at 100, 27% at 300
+    (skills, a later ticket, use it).
+  - **Spirit:** defence pierce 48.5% · S / (S + 185): 17% at 100, 30% at 300;
+    that share of each hit ignores the enemy's defence. Max qi and qi regen
+    (§5 Qi and skills) follow the same Path share. A Soul Banner works as
+    before.
+  - **The Path's main stat** also adds +1.5 damage a point, so a point spent
+    elsewhere is a real trade-off.
+  - Curves gain less as they grow but never stop; the only limit is attack
+    speed: 4 a second, 5 with Flowing Sword. A crit chance can't pass 100%.
+- **Path Mastery** (the main stat's own effect, always full):
+  - **Flowing Sword:** +0.5% crit damage per Agility point; attacks up to 5 a
+    second.
+  - **Iron Body:** reflects 40% · B / (B + 345) of each hit taken back on the
+    attacker, past its defence and rounded (9% at 100 Body), which can
+    finish it; +0.1% lifesteal per Body point (lifesteal stays capped at 50%).
+  - **Talisman Resonance:** +1% burst damage per Spirit point; each burst
+    splashes 50% onto the next enemy waiting (after its defence, never a
+    Tribulation), leaving it at least 1 HP.
+- **Stat points:** each level-up adds 3 **unspent** points; nothing is spent
+  by itself unless Auto-assign is on. While points wait, the Stats tab shows
+  a dot, Base stats says "N unspent" and the Mini view's status line adds
+  "+N pts". +1 or All on a stat's row spends them.
+- **Auto-assign** (a switch on the Stats tab, off by default): a ratio across
+  Body, Agility and Spirit in whole percent, 0 to 100 each, adding up to 100;
+  it starts at 100% on the main stat. New points follow it exactly over time:
+  a smooth weighted round robin carries the rounding from point to point, so
+  every 100 points match the ratio exactly and no stat strays a point between
+  (live and offline alike). Each Path keeps its own plan; a Path change
+  switches to that Path's. Points already unspent wait for the player or
+  **Apply plan**. Typed shares that break the rules are refused with a note
+  and not saved; a saved plan that breaks them loads as the default.
+- **Explaining a point before it is spent:** hovering, focusing or tapping a
+  stat's name opens a tip: what one more point does now, in real numbers
+  ("+1 Agility: Attacks/s 1.75 → 1.76, Crit chance 23% → 23.11%, Dodge 5% →
+  5.04%"); the Mastery line for the main stat, or "Not your Path's stat: no
+  damage"; "Your Path's stat: full effect" or "Other Path: half effect"; and
+  "Gains slow above N" once its curve has slowed to half its first gains.
+  Hovering or focusing +1 or All shows the derived rows as they would be,
+  gains green and losses red. Help has a Stats entry with the same parts.
 
 ## 4. Realms and levels
 
@@ -513,9 +561,14 @@ from the game's seeded stream (`state.rng`), like every other roll.
 | Spirit Essence | Salvage | Crafting (§7): refining the base roll, rerolling one affix |
 | Dao Insight | Reincarnation | Permanent passives (§9) |
 
-- **Path change** puts every stat point into the new Path's primary stat.
-- **Stat reset** takes back every point above the base to spend by hand;
-  level-ups keep going to the primary stat.
+- **Path change** gives every stat point above the base back unspent; its
+  cost is unchanged. The new Path's Auto-assign plan applies from then on.
+- **Stat reset** takes back every point above the base to spend by hand.
+- **Stats were rebalanced:** a save from before the rebalance keeps its points
+  where they were and, on its first load (if any point is spent), shows a
+  one-time notice over the game offering one free stat reset. Taking it or
+  keeping the stats closes it for good; a paid reset or a Path change uses
+  it up too.
 - **Inventory space** adds a row of 8 cells, each row dearer, up to 80 (on a
   second inventory page).
 
@@ -594,7 +647,7 @@ treasure find, a higher offline cap, more starting stat points.
 | Seniority | +10% XP from kills | 2 | 20 |
 | Expense Account | +5% treasure find | 2 | 20 |
 | Flexible Hours | +1 h Overtime Cultivation cap | 3 | 8 |
-| Head Start | +2 stat points (primary stat), this run and every run after | 3 | 20 |
+| Head Start | +2 stat points (unspent), this run and every run after | 3 | 20 |
 
 ## 10. Offline and background play
 
@@ -651,7 +704,7 @@ on every autosave, and is always the copy the game plays from.
   and the next step a second away; the fields in an older save are rejected.
 - **Version 14** adds the Tribulation retry record (§4): the Auto-Tribulation
   switch, the loss count, the last loss's sim time and the damage and max HP
-  at it. (Version 12 is held by other work and never reused.)
+  at it. (There is no version 12.)
   Each field is allow-listed (a boolean; whole counts; a time no later than
   the save's clock; finite, non-negative strength within the safe-integer
   range; exact keys, so `__proto__` and the like are refused). Unlike the
@@ -660,6 +713,14 @@ on every autosave, and is always the copy the game plays from.
   the Tribulation back on the floor. Older saves load with those defaults; a
   Tribulation already due stays due. A held floor may now be saved with its
   Tribulation off it (set aside, or the switch off).
+- **Version 15** has the stat rebalance (§3): `statPlan` (the Auto-assign
+  switch and each Path's ratio and rounding carry) and `freeReset` (the
+  one-time free reset is on offer). A plan that breaks the rules (a ratio not
+  of whole numbers 0–100 adding to 100, a carry the round robin can't reach,
+  stray or prototype keys) falls back to that Path's default instead of
+  refusing the save. Older saves load with Auto-assign off, their points where
+  they were, HP cut to the new max, and the free reset on offer if any point
+  is spent. Version 12 was kept for the rebalance and never written.
 
 ### Updates
 
@@ -1098,7 +1159,7 @@ Grade is also written as text, never shown by colour alone.
 |---|---|---|
 | **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character, Inventory and Details side by side (under 940 px wide the strip spans the page and Details goes under Inventory). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
-| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`; `Tribulation due` or `Tribulation paused` in place of the realm, §4) and the latest-drop toast |
+| **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`; `Tribulation due` or `Tribulation paused` in place of the realm, §4; then `· +6 pts` while stat points wait) and the latest-drop toast |
 | **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, Review due while a Tribulation is due, or Review postponed while it is set aside, §4). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |
 
 - The title bar's language button (globe and code) sits beside **Menu**.
@@ -1108,7 +1169,13 @@ Grade is also written as text, never shown by colour alone.
   progress sit on one row each, the control at one fixed width at the right
   (toggles read On / Off); Cloud save and Save code stack their controls
   under the hint, every button that same width. Reset progress asks first
-  and then deletes the save.
+  and then deletes the save. Help ends with a Stats entry: each stat's tip
+  for the cultivator now (§3).
+- The Character panel's **Stats** tab: Base stats (each stat's tip on its
+  name, +1 and All), the Auto-assign switch and plan, the derived rows by
+  group (Offence, Defence, Find; Reflect shows for a Body Refiner only, Burst
+  damage for a Talisman Master only), running boosts, then Respec. The tab
+  carries a dot while points wait; it scrolls inside the panel.
 - The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
   tab wears a colour on its border (Bag the accent, Auto filter the Salvage
   colour, Store the Spirit Stones colour), tinted while open. The Store groups

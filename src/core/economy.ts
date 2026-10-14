@@ -11,7 +11,12 @@
 import {
   BASE_STAT,
   derive,
+  isRatio,
+  PATH_IDS,
   PATHS,
+  spendByPlan,
+  STAT_IDS,
+  zeroCarry,
   type Cultivator,
   type PathId,
   type StatId,
@@ -81,7 +86,6 @@ export const REFINE_WEIGHT_TOTAL = 10_000;
 
 export const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 export const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
-const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
 /** What happens to drops the filter does not keep. */
 export type FilterAction = 'sell' | 'salvage';
@@ -361,7 +365,7 @@ function clampPools(c: Cultivator): void {
   c.qi = Math.min(c.qi, d.maxQi);
 }
 
-/** Switches Path; every stat point is re-spent on the new primary stat. */
+/** Switches Path; every stat point above the base comes back unspent, as a reset does. */
 export function changePath(state: GameState, path: PathId): GameState {
   if (!Object.hasOwn(PATHS, path)) throw new RangeError(`changePath: no Path ${path}`);
   if (path === state.cultivator.path) throw new RangeError('changePath: already on that Path');
@@ -369,9 +373,9 @@ export function changePath(state: GameState, path: PathId): GameState {
   const c = s.cultivator;
   c.path = path;
   unassign(c);
-  c.stats[PATHS[path].primary] += c.unspent;
-  c.unspent = 0;
   clampPools(c);
+  // Every point came back, as a reset gives them: the free one is used up.
+  s.freeReset = false;
   return s;
 }
 
@@ -386,6 +390,58 @@ export function resetStats(state: GameState): GameState {
   const s = pay(state, 'stones', statResetCost(state.cultivator), 'resetStats');
   unassign(s.cultivator);
   clampPools(s.cultivator);
+  // A paid reset uses up the free one an older save was offered.
+  s.freeReset = false;
+  return s;
+}
+
+/**
+ * Answers the one-time "Stats were rebalanced" offer an older save gets: `take`
+ * resets the stats for free (when anything is spent), and either way the offer
+ * is gone for good.
+ */
+export function answerFreeReset(state: GameState, take: boolean): GameState {
+  if (!state.freeReset) throw new RangeError('answerFreeReset: no free reset on offer');
+  const s = structuredClone(state);
+  s.freeReset = false;
+  if (take && canResetStats(s.cultivator)) {
+    unassign(s.cultivator);
+    clampPools(s.cultivator);
+  }
+  return s;
+}
+
+/** Turns Auto-assign on or off; points already unspent stay unspent. */
+export function setAutoAssign(state: GameState, on: boolean): GameState {
+  if (typeof on !== 'boolean') throw new RangeError('setAutoAssign: not a boolean');
+  const s = structuredClone(state);
+  s.statPlan.auto = on;
+  return s;
+}
+
+/**
+ * Sets `path`'s plan ratio. Anything but whole numbers from 0 to 100 for the
+ * three stats, adding up to 100, is refused, so it never gets saved. A new
+ * ratio starts its rounding afresh.
+ */
+export function setPlanRatio(state: GameState, path: PathId, ratio: unknown): GameState {
+  if (!PATH_IDS.includes(path)) throw new RangeError(`setPlanRatio: no Path ${String(path)}`);
+  if (!isRatio(ratio)) throw new RangeError('setPlanRatio: bad ratio');
+  const s = structuredClone(state);
+  s.statPlan.slots[path] = {
+    ratio: { body: ratio.body, agility: ratio.agility, spirit: ratio.spirit },
+    carry: zeroCarry(),
+  };
+  return s;
+}
+
+/** Spends every unspent point by the current Path's plan ("Apply plan"). */
+export function applyPlan(state: GameState): GameState {
+  if (state.cultivator.unspent < 1) throw new RangeError('applyPlan: no unspent points');
+  const s = structuredClone(state);
+  const c = s.cultivator;
+  spendByPlan(c, s.statPlan.slots[c.path], c.unspent);
+  c.unspent = 0;
   return s;
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { derive, PATHS, STARTING_PRIMARY_BONUS, BASE_STAT } from './cultivator.ts';
-import { INVENTORY_SIZE, setFilter } from './economy.ts';
+import { derive } from './cultivator.ts';
+import { INVENTORY_SIZE, setAutoAssign, setFilter } from './economy.ts';
 import { catchUp, MAX_OFFLINE_SECONDS } from './offline.ts';
 import {
   buyPassive,
@@ -238,22 +238,22 @@ describe('passives', () => {
     expect(catchUp(s, MAX_OFFLINE_SECONDS + 3600).summary.capped).toBe(false);
   });
 
-  it('starting stat points: added to this run now, and to every run after', () => {
+  it('starting stat points: added unspent to this run now, and to every run after', () => {
     const s0 = withInsight({ ...newGame(1, 'talisman'), highestFloor: 20 }, 100);
-    const primary = PATHS.talisman.primary;
-    const start = BASE_STAT + STARTING_PRIMARY_BONUS;
-    expect(s0.cultivator.stats[primary]).toBe(start);
+    const stats = { ...s0.cultivator.stats };
+    expect(s0.cultivator.unspent).toBe(0);
     const s1 = buyPassive(s0, 'points');
-    expect(s1.cultivator.stats[primary]).toBe(start + 2);
+    expect(s1.cultivator.unspent).toBe(2);
+    expect(s1.cultivator.stats).toEqual(stats);
     const s2 = retire(s1);
-    expect(s2.cultivator.stats[primary]).toBe(start + 2);
+    expect(s2.cultivator.unspent).toBe(2);
+    expect(s2.cultivator.stats).toEqual(stats);
     expect(s2.cultivator.hp).toBe(derive(s2.cultivator).maxHp);
   });
 
-  it('starting stat points heal the max HP they add, as a level-up does', () => {
-    const s = withInsight(newGame(1, 'body'), 100);
-    const after = buyPassive(s, 'points');
-    expect(derive(after.cultivator).maxHp).toBeGreaterThan(derive(s.cultivator).maxHp);
-    expect(after.cultivator.hp).toBe(derive(after.cultivator).maxHp);
+  it('starting stat points stay unspent with Auto-assign on', () => {
+    const s = setAutoAssign(withInsight({ ...newGame(1, 'body'), highestFloor: 20 }, 100), true);
+    expect(buyPassive(s, 'points').cultivator.unspent).toBe(2);
+    expect(retire(buyPassive(s, 'points')).cultivator.unspent).toBe(2);
   });
 });

@@ -2,8 +2,17 @@
 // unit-tested; the DOM layer (app.ts) only puts these strings on the page.
 
 import {
+  ATTACK_SPEED_SLOWS_AT,
+  CRIT_CURVE,
   derive,
+  DODGE_CURVE,
   effectiveStats,
+  pathShare,
+  PIERCE_CURVE,
+  REFLECT_CURVE,
+  slowsAt,
+  STAT_IDS,
+  type Stats,
   readyForTribulation,
   realmLevels,
   realmOf,
@@ -325,6 +334,8 @@ export type StatGroup = (typeof STAT_GROUPS)[number];
 
 interface StatRow {
   label: MessageKey;
+  /** The only Path the row shows for (its Mastery's number); every Path when unset. */
+  only?: PathId;
   /** The kind the details panel files this stat under; the Stats tab's `group` is separate. */
   kind: StatKind;
   /** The label under its group heading, if shorter than `label`. */
@@ -334,7 +345,12 @@ interface StatRow {
   format: (v: number) => string;
   /** How a change in this stat reads, if not the same as `format`. */
   delta?: (v: number) => string;
+  /** A finer `format` for the stat tip, where one point moves it by less than the last digit. */
+  fine?: (v: number) => string;
 }
+
+/** A share as a percent to two decimals, for the stat tip: "5.04%". */
+const finePct = (v: number): string => `${num(v * 100, 2)}%`;
 
 /** The combat numbers on the character panel, in display order. */
 export const STAT_ROWS: readonly StatRow[] = [
@@ -372,6 +388,7 @@ export const STAT_ROWS: readonly StatRow[] = [
     group: 'Offence',
     value: (d) => d.critChance,
     format: (v) => `${num(v * 100, 1)}%`,
+    fine: finePct,
   },
   {
     label: 'row.critDamage',
@@ -379,8 +396,26 @@ export const STAT_ROWS: readonly StatRow[] = [
     group: 'Offence',
     value: (d) => d.critMultiplier,
     format: (v) => `×${num(v, 2)}`,
+    // Flowing Sword moves it by 0.005 a point.
+    fine: (v) => `×${num(v, 3)}`,
     // Matches the item card: a +0.15 multiplier reads "+15% Crit damage".
     delta: (v) => `${num(v * 100, 1)}%`,
+  },
+  {
+    label: 'row.pierce',
+    kind: 'offence',
+    group: 'Offence',
+    value: (d) => d.pierce,
+    format: (v) => `${num(v * 100, 1)}%`,
+    fine: finePct,
+  },
+  {
+    label: 'row.burst',
+    only: 'talisman',
+    kind: 'offence',
+    group: 'Offence',
+    value: (d) => d.burstMultiplier,
+    format: (v) => `×${num(v, 2)}`,
   },
   {
     label: 'row.lifesteal',
@@ -388,6 +423,31 @@ export const STAT_ROWS: readonly StatRow[] = [
     group: 'Defence',
     value: (d) => d.lifesteal,
     format: (v) => `${num(v * 100, 1)}%`,
+    fine: finePct,
+  },
+  {
+    label: 'row.hpRegen',
+    kind: 'defence',
+    group: 'Defence',
+    value: (d) => d.hpRegen,
+    format: (v) => `${num(v, 2)}/s`,
+  },
+  {
+    label: 'row.dodge',
+    kind: 'defence',
+    group: 'Defence',
+    value: (d) => d.dodge,
+    format: (v) => `${num(v * 100, 1)}%`,
+    fine: finePct,
+  },
+  {
+    label: 'row.reflect',
+    only: 'body',
+    kind: 'defence',
+    group: 'Defence',
+    value: (d) => d.reflect,
+    format: (v) => `${num(v * 100, 1)}%`,
+    fine: finePct,
   },
   {
     label: 'row.maxQi',
@@ -402,6 +462,8 @@ export const STAT_ROWS: readonly StatRow[] = [
     group: 'Defence',
     value: (d) => d.qiRegen,
     format: (v) => num(v, 1),
+    // A Spirit point adds 0.01 to 0.02 a second.
+    fine: (v) => num(v, 2),
   },
   {
     label: 'row.stoneFind',
@@ -460,16 +522,114 @@ export function statRows(
   c: Cultivator,
   passives: Passives = noPassives(),
   boosts: { stoneFind: number; treasureFind: number } = { stoneFind: 0, treasureFind: 0 },
-): { label: string; short: string; group: StatGroup; value: string }[] {
+): { label: string; short: string; group: StatGroup; value: string; raw: number }[] {
   const d = derive(c);
   d.treasureFind += passiveTreasureFind(passives) + boosts.treasureFind;
   d.stoneFind += boosts.stoneFind;
-  return STAT_ROWS.map((r) => ({
+  return rowsFor(c.path).map((r) => ({
     label: t(r.label),
     short: t(r.short ?? r.label),
     group: r.group,
     value: r.format(r.value(d)),
+    raw: r.value(d),
   }));
+}
+
+/** The rows the Stats tab shows for `path`: every row but another Path's Mastery number. */
+function rowsFor(path: PathId): readonly StatRow[] {
+  return STAT_ROWS.filter((r) => r.only === undefined || r.only === path);
+}
+
+/** `c` with `n` more points in `stat`, as spendPoints() would leave it. */
+function withPoints(c: Cultivator, stat: StatId, n: number): Cultivator {
+  return { ...c, stats: { ...c.stats, [stat]: c.stats[stat] + n } };
+}
+
+/**
+ * What spending `n` points on `stat` would do to the Stats tab's rows: each
+ * row's value after, and whether it goes up or down (or stays). Built the same
+ * way as statRows(), so it matches the spend exactly.
+ */
+export function spendPreview(
+  c: Cultivator,
+  stat: StatId,
+  n: number,
+  passives: Passives = noPassives(),
+  boosts: { stoneFind: number; treasureFind: number } = { stoneFind: 0, treasureFind: 0 },
+): { value: string; change: 'up' | 'down' | '' }[] {
+  const before = statRows(c, passives, boosts);
+  return statRows(withPoints(c, stat, n), passives, boosts).map((r, i) => {
+    const was = (before[i] as (typeof before)[number]).raw;
+    return { value: r.value, change: r.raw > was ? 'up' : r.raw < was ? 'down' : '' };
+  });
+}
+
+/**
+ * Where a stat's gains start to slow for `path`: the first of its curves to
+ * fall to half its first gains (docs/design.md §3); null for a stat with no
+ * curve on this Path (Body is straight HP and defence but for Iron Body).
+ */
+export function slowPoint(path: PathId, stat: StatId): number | null {
+  if (stat === 'agility') {
+    return Math.min(slowsAt(CRIT_CURVE), slowsAt(DODGE_CURVE), ATTACK_SPEED_SLOWS_AT);
+  }
+  if (stat === 'spirit') return slowsAt(PIERCE_CURVE);
+  return path === 'body' ? slowsAt(REFLECT_CURVE) : null;
+}
+
+/**
+ * A stat's tip (docs/design.md §3): what one more point does now, in real
+ * numbers; the Path Mastery line for the main stat, or that another stat adds
+ * no damage; the Path share (full or half effect); and "Gains slow above N"
+ * once its curve has flattened ('' before then).
+ */
+export function statTip(
+  c: Cultivator,
+  stat: StatId,
+): { gain: string; mastery: string; share: string; slows: string } {
+  const rows = rowsFor(c.path);
+  const now = derive(c);
+  const next = derive(withPoints(c, stat, 1));
+  // Only rows whose shown number moves: a gain too small to show reads as none.
+  const changes = rows.flatMap((r) => {
+    const show = r.fine ?? r.format;
+    const from = show(r.value(now));
+    const to = show(r.value(next));
+    return from === to ? [] : [t('tip.change', { row: t(r.short ?? r.label), from, to })];
+  });
+  const name = t(`stat.${stat}`);
+  const gain = t('tip.gain', { stat: name, changes: changes.join(', ') });
+  const main = PATHS[c.path].primary === stat;
+  const mastery = main ? t(`mastery.${c.path}`) : t('tip.notMain');
+  const share = pathShare(c.path, stat) === 1 ? t('tip.full') : t('tip.half');
+  const n = slowPoint(c.path, stat);
+  const slows = n !== null && effectiveStats(c)[stat] >= n ? t('tip.slows', { n }) : '';
+  return { gain, mastery, share, slows };
+}
+
+/** A typed share: whole numbers from 0 to 100 only, as digits; anything else is null. */
+export function parseShare(text: string): number | null {
+  if (!/^[0-9]{1,3}$/.test(text.trim())) return null;
+  const n = Number(text.trim());
+  return n <= 100 ? n : null;
+}
+
+/**
+ * The plan's three typed shares as a ratio, or why they can't be one: each a
+ * whole number from 0 to 100, all three adding up to 100.
+ */
+export function planRatio(texts: Readonly<Record<StatId, string>>): {
+  ratio: Stats | null;
+  why: string;
+} {
+  const ratio: Stats = { body: 0, agility: 0, spirit: 0 };
+  for (const id of STAT_IDS) {
+    const n = parseShare(texts[id]);
+    if (n === null) return { ratio: null, why: t('plan.whole') };
+    ratio[id] = n;
+  }
+  const sum = ratio.body + ratio.agility + ratio.spirit;
+  return sum === 100 ? { ratio, why: '' } : { ratio: null, why: t('plan.sum', { n: sum }) };
 }
 
 /** A Respec action (stat reset, Path change): its cost, whether it is off, and why. */
@@ -1001,6 +1161,8 @@ export interface StripEvents {
   youAttack: boolean;
   foeAttack: boolean;
   youHit: boolean;
+  /** HP the hit took, with any regen step in between added back; 0 without a hit. */
+  youTook: number;
   foeHit: boolean;
   youDied: boolean;
   /** The enemy that just died, for its death animation; the next one is already in front. */
@@ -1015,10 +1177,22 @@ export function stripEvents(prev: GameState, next: GameState): StripEvents {
   // A kill or a death restarts the timers, so only a timer that moved on its own is an attack.
   const youAttack = !youDied && next.cultivator.nextAttackAt !== prev.cultivator.nextAttackAt;
   const foeAttack = !youDied && !killed && next.enemyNextAttackAt !== prev.enemyNextAttackAt;
+  // A regen step in the same frame as a hit would hide some or all of it: add
+  // back what it could have healed (never past max HP). The frame doesn't say
+  // which came first, so a tiny hit at full HP healed back by a later regen
+  // step can still go unshown; only the animation misses it, never the sim.
+  const d = derive(next.cultivator);
+  const regen =
+    !youDied && next.qiNextAt !== prev.qiNextAt
+      ? Math.max(0, Math.min(d.hpRegen, d.maxHp - prev.cultivator.hp))
+      : 0;
+  const took = prev.cultivator.hp + regen - next.cultivator.hp;
+  const youHit = !youDied && took > 1e-9;
   return {
     youAttack,
     foeAttack,
-    youHit: !youDied && next.cultivator.hp < prev.cultivator.hp,
+    youHit,
+    youTook: youHit ? took : 0,
     foeHit: !killed && !youDied && !!before && !!now && now.hp < before.hp,
     youDied,
     foeDied: killed && before ? { kind: before.kind, name: before.name } : null,

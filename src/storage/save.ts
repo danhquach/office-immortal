@@ -6,20 +6,25 @@
 
 import {
   BASE_STAT,
+  defaultRatio,
   derive,
   gainXp,
+  isCarry,
+  isRatio,
   isRealmCap,
+  PATH_IDS,
   PATHS,
   readyForTribulation,
   REALM_BONUS,
   realmOf,
   REALMS,
   STARTING_PRIMARY_BONUS,
+  STAT_IDS,
   STAT_POINTS_PER_LEVEL,
   xpToNext,
+  zeroCarry,
   type Cultivator,
-  type PathId,
-  type StatId,
+  type PlanSlot,
 } from '../core/cultivator.ts';
 import {
   BAG_ROW,
@@ -68,11 +73,13 @@ import { rngFrom } from '../core/rng.ts';
 import { bonusPoints, noPassives, PASSIVE_IDS, PASSIVES, type Passives } from '../core/prestige.ts';
 import {
   ARRAY_TICK,
+  defaultStatPlan,
   ENEMY_ARRIVAL,
   newTrial,
   QI_TICK,
   startFloor,
   type GameState,
+  type StatPlan,
   type TrialState,
 } from '../core/sim.ts';
 import {
@@ -92,8 +99,8 @@ import { arr, Bad, fail, int, num, obj, oneOf } from './validate.ts';
 export const SAVE_KEY = 'office-immortal.save';
 /** Where a save that failed to load is kept, so a new run's autosave doesn't destroy it. */
 export const REJECTED_KEY = 'office-immortal.save.rejected';
-// 12 is taken by other work in flight; it is never reused.
-export const SAVE_VERSION = 14;
+// 12 was kept for the stat rebalance, which shipped as 15; no release ever wrote it.
+export const SAVE_VERSION = 15;
 /**
  * Older versions that still load: v1 came before currencies, the filter and
  * bag upgrades; v2 before Early Retirement and Dao Insight; v3 had Pants
@@ -102,9 +109,10 @@ export const SAVE_VERSION = 14;
  * v7 came before crafting, so no item has a refine level; v8 had a cap every
  * 10 levels; v9 came before the store and its boosts; v10 had caps at 10, 22,
  * 36 … 162; v11 came before qi; v13 before Auto-Tribulation and the retry
- * limit.
+ * limit; v14 before the stat rebalance (Path share, HP regen), the
+ * Auto-assign plan and unspent level-up points.
  */
-const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13];
+const OLD_VERSIONS: readonly number[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14];
 /** A full save is a few KB; anything far bigger is not ours and is not parsed. */
 export const MAX_SAVE_CHARS = 200_000;
 /** Far past anything a run reaches, and low enough that every formula stays finite. */
@@ -246,13 +254,11 @@ function roll(v: unknown): number {
   return r;
 }
 
-const PATH_IDS = Object.keys(PATHS) as PathId[];
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
 const EQUIP_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
 const GRADE_IDS = Object.keys(GRADES) as GradeId[];
 const AFFIX_IDS = Object.keys(AFFIXES) as AffixId[];
 const UNIQUE_IDS = Object.keys(UNIQUES) as UniqueId[];
-const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
 function readSave(v: unknown): Save {
   const o = obj(v, ['v', 'savedAt', 'state']);
@@ -306,6 +312,8 @@ function readState(v: unknown, version: number): GameState {
   const before13 = version < 13;
   // Before v14 there was no Auto-Tribulation switch or retry limit.
   const before14 = version < 14;
+  // Before v15 there was no Auto-assign plan, and stats had their old worth.
+  const before15 = version < 15;
   const items: ItemReader = {
     slot: before4 ? fromPants : (id) => id,
     refines: version >= 8,
@@ -331,6 +339,7 @@ function readState(v: unknown, version: number): GameState {
         : ['bagSize', 'stones', 'essence', 'filter', 'dropsSold', 'dropsSalvaged']),
       ...(before3 ? [] : ['insight', 'passives', 'retirements']),
       ...(before10 ? [] : ['store', 'boosts']),
+      ...(before15 ? [] : ['statPlan', 'freeReset']),
     ],
     before14 ? [] : ['trial'],
   );
@@ -353,6 +362,7 @@ function readState(v: unknown, version: number): GameState {
     before4,
     oldCaps,
     before13,
+    before15,
   );
   const state: GameState = {
     time,
@@ -391,6 +401,18 @@ function readState(v: unknown, version: number): GameState {
     store: before10 ? emptyStore() : readStore(o.store, time),
     boosts: before10 ? noBoosts() : readBoosts(o.boosts, time),
     trial: readTrial(o.trial, time, readyForTribulation(cultivator)),
+    statPlan: before15 ? defaultStatPlan() : readStatPlan(o.statPlan),
+    // A save from before the rebalance is offered one free reset, if it has
+    // anything to reset.
+    freeReset: before15
+      ? STAT_IDS.some(
+          (id) =>
+            cultivator.stats[id] >
+            BASE_STAT + (PATHS[cultivator.path].primary === id ? STARTING_PRIMARY_BONUS : 0),
+        )
+      : typeof o.freeReset === 'boolean'
+        ? o.freeReset
+        : fail('freeReset'),
   };
   if (oldCaps) toNewRealms(state);
   return state;
@@ -444,6 +466,49 @@ function readTrial(v: unknown, time: number, held: boolean): TrialState {
   }
 }
 
+/**
+ * The Auto-assign plan. A plan is a preference, not progress: anything off in
+ * it (a bad ratio, a carry it could not have reached, stray keys) falls back to
+ * the default for that Path instead of failing the save.
+ */
+function readStatPlan(v: unknown): StatPlan {
+  const plan = defaultStatPlan();
+  if (typeof v !== 'object' || v === null || Object.getPrototypeOf(v) !== Object.prototype) {
+    return plan;
+  }
+  const o = v as Record<string, unknown>;
+  if (Object.hasOwn(o, 'auto') && o.auto === true) plan.auto = true;
+  const slots = Object.hasOwn(o, 'slots') ? o.slots : null;
+  if (
+    typeof slots !== 'object' ||
+    slots === null ||
+    Object.getPrototypeOf(slots) !== Object.prototype
+  ) {
+    return plan;
+  }
+  for (const path of PATH_IDS) {
+    if (!Object.hasOwn(slots, path)) continue;
+    plan.slots[path] = readPlanSlot((slots as Record<string, unknown>)[path], path);
+  }
+  return plan;
+}
+
+function readPlanSlot(v: unknown, path: (typeof PATH_IDS)[number]): PlanSlot {
+  const fallback = { ratio: defaultRatio(path), carry: zeroCarry() };
+  try {
+    const o = obj(v, ['ratio', 'carry']);
+    if (!isRatio(o.ratio)) return fallback;
+    const ratio = { body: o.ratio.body, agility: o.ratio.agility, spirit: o.ratio.spirit };
+    // A carry that doesn't fit is only rounding: start it afresh.
+    const carry = isCarry(o.carry)
+      ? { body: o.carry.body, agility: o.carry.agility, spirit: o.carry.spirit }
+      : zeroCarry();
+    return { ratio, carry };
+  } catch {
+    return fallback;
+  }
+}
+
 function readPassives(v: unknown): Passives {
   const o = obj(v, PASSIVE_IDS);
   const passives = noPassives();
@@ -494,6 +559,7 @@ function readCultivator(
   before4: boolean,
   oldCaps: readonly number[] | null,
   before13: boolean,
+  before15: boolean,
 ): Cultivator {
   // An older save was priced on the old XP curve; what it held below a cap still counts.
   const price = oldCaps ? oldXpToNext : xpToNext;
@@ -559,7 +625,10 @@ function readCultivator(
     return c;
   }
   // Above 0 (a fight in progress) and never above the max the gear allows.
-  c.hp = num(o.hp, Number.MIN_VALUE, derive(c).maxHp);
+  // Before v15 (the rebalance) Body gave more HP, so an older save's HP is cut to the new max.
+  c.hp = before15
+    ? Math.min(num(o.hp, Number.MIN_VALUE, Number.MAX_VALUE), derive(c).maxHp)
+    : num(o.hp, Number.MIN_VALUE, derive(c).maxHp);
   return c;
 }
 
