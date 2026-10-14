@@ -153,6 +153,7 @@ import {
   setLang,
   t,
   tn,
+  windUpNameParts,
   writeLang,
   type MessageKey,
   type NamePart,
@@ -262,6 +263,9 @@ import {
   type StatGroup,
   type StatKind,
   stripEvents,
+  castCallouts,
+  CALLOUT_SECONDS,
+  windUpOf,
   tribulationBanner,
   tribulationCall,
   trialPause,
@@ -280,6 +284,9 @@ const FRAME_TICK_MS = 50;
 /** Damage numbers on the stage at once, and how long each shows. */
 const MAX_DAMAGE_NUMBERS = 6;
 const DAMAGE_NUMBER_MS = 900;
+/** Skill callouts on the stage at once, and how long each shows. */
+const MAX_CALLOUTS = 4;
+const CALLOUT_MS = CALLOUT_SECONDS * 1000;
 /** Item icon frame in the atlas, in px. */
 const ICON_PX = 32;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
@@ -1121,6 +1128,8 @@ interface Fighter extends StageSprite {
   /** The qi bar's track (a progressbar for screen readers) and its fill. */
   qiTrack: HTMLElement;
   qi: HTMLElement;
+  /** The cast bar, filling over the qi bar while an enemy winds up a skill. */
+  cast: HTMLElement;
   /** The qi last read out, so a frame with the same one touches nothing. */
   qiSaid: string;
   /** The language, kind and name last drawn (see setFighter), so a frame with the same ones touches nothing. */
@@ -1142,9 +1151,12 @@ function fighter(side: 'you' | 'foe'): Fighter {
   attr(qiTrack, 'aria-label', 'strip.qi');
   qiTrack.setAttribute('aria-valuemin', '0');
   const qi = el('span');
-  qiTrack.append(qi);
+  // Drawn over the qi fill inside the same row, so a wind-up never moves anything.
+  const cast = el('span', 'cast');
+  cast.hidden = true;
+  qiTrack.append(qi, cast);
   box.append(name, track, qiTrack, hp);
-  return { box, name, bar, hp, qiTrack, qi, qiSaid: '', nameKey: '', ...stageSprite(side) };
+  return { box, name, bar, hp, qiTrack, qi, cast, qiSaid: '', nameKey: '', ...stageSprite(side) };
 }
 
 /** A CSS url() for art, or none when there is no such file (never url(""), which loads the page). */
@@ -2979,15 +2991,22 @@ function play(
     );
     if (enemy) {
       foe.box.dataset.kind = enemy.kind;
+      // While it winds up, its name line says the skill and a cast bar fills over its qi.
+      const windUp = windUpOf(state);
       setFighter(
         foe,
-        `${code}\u0000${enemy.kind}\u0000${enemy.name}`,
-        () => enemyNameParts(enemy.kind, enemy.name),
+        `${code}\u0000${enemy.kind}\u0000${enemy.name}\u0000${windUp?.skill ?? ''}`,
+        () =>
+          windUp
+            ? windUpNameParts(enemy.kind, enemy.name, windUp.skill)
+            : enemyNameParts(enemy.kind, enemy.name),
         enemy.hp,
         enemy.maxHp,
         enemy.qi,
         maxQi(enemy.kind),
       );
+      foe.cast.hidden = !windUp;
+      foe.cast.style.width = `${(windUp?.progress ?? 0) * 100}%`;
     }
     const z = zoneOf(state.floor);
     if (z !== zone) {
@@ -3031,6 +3050,13 @@ function play(
       if (e.youDied) damageNumber(you, prev.cultivator.hp);
       if (before && (e.foeHit || e.foeDied)) {
         damageNumber(foe, before.hp - (e.foeDied ? 0 : (enemy?.hp ?? 0)));
+      }
+      for (const call of castCallouts(prev, state)) {
+        const f = call.who === 'you' ? you : foe;
+        // The attack pose is the cast pose.
+        if (call.cast && !(call.who === 'you' ? e.youDied : e.foeDied))
+          playAction(f, 'attack', now);
+        callout(f, call.text, call.cast);
       }
     }
     showEnemy();
@@ -3102,6 +3128,20 @@ function play(
     n.style.bottom = `${Math.round(f.size * 0.75)}px`;
     stage.append(n);
     setTimeout(() => n.remove(), DAMAGE_NUMBER_MS);
+  }
+
+  /**
+   * A skill's name or an effect's word, drawn in code like the damage numbers,
+   * floating over the fighter. Not read out: screen readers are not told each cast.
+   */
+  function callout(f: Fighter, text: string, cast: boolean): void {
+    if (stage.querySelectorAll('.callout').length >= MAX_CALLOUTS) return;
+    const n = el('span', `callout ${f === you ? 'you' : 'foe'}${cast ? ' cast' : ''}`, text);
+    n.setAttribute('aria-hidden', 'true');
+    n.style.left = `${f.sprite.offsetLeft + f.size / 2}px`;
+    n.style.bottom = `${Math.round(f.size * 1.05)}px`;
+    stage.append(n);
+    setTimeout(() => n.remove(), CALLOUT_MS);
   }
 
   function drawSummary(): void {

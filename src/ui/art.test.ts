@@ -383,4 +383,17 @@ describe('stripEvents', () => {
     const prev = base();
     expect(Object.values(stripEvents(prev, structuredClone(prev))).some(Boolean)).toBe(false);
   });
+
+  it('sees no attack in a timer a stun pushed back, on either side', () => {
+    for (const who of ['you', 'foe'] as const) {
+      const prev = base();
+      const next = structuredClone(prev);
+      next.cultivator.nextAttackAt += 1.5;
+      next.enemyNextAttackAt += 1.5;
+      next.combat.log.push({ id: next.combat.nextNote++, at: 0, who, effect: 'stunned' });
+      const e = stripEvents(prev, next);
+      expect(e.youAttack).toBe(who !== 'you');
+      expect(e.foeAttack).toBe(who !== 'foe');
+    }
+  });
 });

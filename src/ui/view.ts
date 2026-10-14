@@ -73,6 +73,7 @@ import {
   trialSetAside,
   type GameState,
 } from '../core/sim.ts';
+import type { CastNote, EffectNote, Side } from '../core/skills.ts';
 import {
   BOOST_BONUS,
   BOOST_IDS,
@@ -1012,9 +1013,17 @@ export function stripEvents(prev: GameState, next: GameState): StripEvents {
   const killed = next.kills > prev.kills;
   const before = prev.enemies[0];
   const now = next.enemies[0];
+  // A stun pushes the stunned side's timer back: that move is no attack.
+  const stunned = new Set(
+    newNotes(prev, next).flatMap((n) => ('effect' in n && n.effect === 'stunned' ? [n.who] : [])),
+  );
   // A kill or a death restarts the timers, so only a timer that moved on its own is an attack.
-  const youAttack = !youDied && next.cultivator.nextAttackAt !== prev.cultivator.nextAttackAt;
-  const foeAttack = !youDied && !killed && next.enemyNextAttackAt !== prev.enemyNextAttackAt;
+  const youAttack =
+    !youDied &&
+    !stunned.has('you') &&
+    next.cultivator.nextAttackAt !== prev.cultivator.nextAttackAt;
+  const foeAttack =
+    !youDied && !killed && !stunned.has('foe') && next.enemyNextAttackAt !== prev.enemyNextAttackAt;
   return {
     youAttack,
     foeAttack,
@@ -1023,6 +1032,53 @@ export function stripEvents(prev: GameState, next: GameState): StripEvents {
     youDied,
     foeDied: killed && before ? { kind: before.kind, name: before.name } : null,
   };
+}
+
+/** The skill callouts the sim noted between two states, oldest first; none across a reload. */
+function newNotes(prev: GameState, next: GameState): readonly CastNote[] {
+  const from = prev.combat.nextNote;
+  if (next.combat.nextNote < from) return [];
+  return next.combat.log.filter((n) => n.id >= from);
+}
+
+/** A callout over a fighter (docs/design.md §5 Skills); `cast` marks a skill's name. */
+export interface Callout {
+  who: Side;
+  text: string;
+  cast: boolean;
+}
+
+/** How long a callout shows; one noted longer ago than this is not shown. */
+export const CALLOUT_SECONDS = 1.4;
+
+const EFFECT_CALLOUTS: Readonly<Record<EffectNote, MessageKey>> = {
+  stunned: 'callout.stunned',
+  silenced: 'callout.silenced',
+  shielded: 'callout.shielded',
+  interrupted: 'callout.interrupted',
+};
+
+/**
+ * The callouts to float between two states: a skill's name over its caster
+ * as it lands, an effect's word over the fighter it hit. An enemy starting a
+ * wind-up floats nothing: its name line says it (windUpOf).
+ */
+export function castCallouts(prev: GameState, next: GameState): Callout[] {
+  // After a long step (a throttled tab), only the latest ones: older ones are over.
+  const fresh = newNotes(prev, next).filter((n) => n.at >= next.time - CALLOUT_SECONDS);
+  return fresh.flatMap((n): Callout[] => {
+    if ('effect' in n) return [{ who: n.who, text: t(EFFECT_CALLOUTS[n.effect]), cast: false }];
+    return n.windUp ? [] : [{ who: n.who, text: tn('skill', n.skill), cast: true }];
+  });
+}
+
+/** The skill the enemy in front winds up, and how far along (0 to 1); null when none. */
+export function windUpOf(state: GameState): { skill: string; progress: number } | null {
+  const w = state.combat.foe.windUp;
+  if (!w) return null;
+  const span = w.end - w.start;
+  const progress = span > 0 ? (state.time - w.start) / span : 1;
+  return { skill: w.name, progress: Math.max(0, Math.min(1, progress)) };
 }
 
 /**

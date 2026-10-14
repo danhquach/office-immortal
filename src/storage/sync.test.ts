@@ -23,6 +23,10 @@ import {
 import { createCloud } from './cloud.ts';
 import { encodeSave, loadSave, MAX_SAVE_CHARS, SAVE_KEY, SAVE_VERSION } from './save.ts';
 import { createSync, UPLOAD_EVERY_MS, type SyncStatus } from './sync.ts';
+import { withoutCombat } from './save-fakes.ts';
+
+// The fight's skill state is never saved: states compare without it.
+expect.addEqualityTesters([withoutCombat]);
 
 const T = 1_800_000_000_000;
 const MINUTE = 60_000;

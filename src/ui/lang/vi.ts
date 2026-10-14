@@ -59,6 +59,11 @@ const vi: Pack = {
     'strip.hp': 'HP {hp} / {max}',
     'strip.qi': 'Khí',
     'strip.qiValue': 'Khí {qi} / {max}',
+    'strip.windUp': '{name}…',
+    'callout.stunned': 'Choáng',
+    'callout.silenced': 'Bị phong ấn',
+    'callout.shielded': 'Hộ thuẫn',
+    'callout.interrupted': 'Bị cắt ngang',
     'strip.wave': 'Đợt {n} / {of}',
     'strip.elite': 'Tinh Anh',
     'strip.boss': 'Trùm',
@@ -722,6 +727,7 @@ const vi: Pack = {
       'Market Crash': 'Thị Trường Sụp Đổ',
       'Heavenly Audit': 'Thiên Đình Kiểm Toán',
     },
+    skill: {},
   },
 };
 

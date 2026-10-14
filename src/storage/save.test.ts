@@ -48,10 +48,15 @@ import {
   REJECTED_KEY,
   SAVE_KEY,
   SAVE_VERSION,
+  SKILL_SLACK,
   writeSave,
   type SaveStorage,
 } from './save.ts';
 import { exportCode, importCode } from './transfer.ts';
+import { withoutCombat } from './save-fakes.ts';
+
+// The fight's skill state is never saved: states compare without it.
+expect.addEqualityTesters([withoutCombat]);
 
 const SAVED_AT = 1_800_000_000_000;
 
@@ -388,9 +393,10 @@ describe('rejects', () => {
       ['a far-off attack', (s: ReturnType<typeof raw>) => void (cult(s).nextAttackAt = 1e12)],
       ['an attack in the past', (s: ReturnType<typeof raw>) => void (cult(s).nextAttackAt = -1)],
       [
-        'an attack just past the longest interval and the pause',
+        'an attack past the longest interval, the pause and a skill push',
         (s: ReturnType<typeof raw>) =>
-          void (cult(s).nextAttackAt = (s.state.time as number) + 2 + ENEMY_ARRIVAL + 0.01),
+          void (cult(s).nextAttackAt =
+            (s.state.time as number) + 2 + ENEMY_ARRIVAL + SKILL_SLACK + 0.01),
       ],
       [
         'a far-off enemy attack',
@@ -1236,8 +1242,36 @@ describe('rejects', () => {
         save.state.enemyNextAttackAt = (save.state.time as number) + 2 + ENEMY_ARRIVAL + 3 + extra;
         return load(save);
       };
-      expect(at(0)).not.toBeNull();
-      expect(at(0.01)).toBeNull();
+      expect(at(0)?.state.enemyNextAttackAt).toBe(STATE.time + 2 + ENEMY_ARRIVAL + 3);
+      // A stun or a slow pushed it further: it loads pulled back, as the skill ended with the fight.
+      expect(at(SKILL_SLACK)?.state.enemyNextAttackAt).toBe(STATE.time + 2 + ENEMY_ARRIVAL + 3);
+      expect(at(SKILL_SLACK + 0.01)).toBeNull();
+    });
+
+    it('never writes the fight skill state, and refuses a save that carries any', () => {
+      const busy = structuredClone(STATE);
+      busy.combat.you.cooldowns.slam = STATE.time + 5;
+      expect(Object.hasOwn(JSON.parse(encodeSave(busy, 0)).state, 'combat')).toBe(false);
+      for (const combat of [
+        { you: { cooldowns: JSON.parse('{"__proto__":{"polluted":1}}') } },
+        { log: Array.from({ length: 1e5 }, () => ({ skill: '<img src=x onerror=y>' })) },
+        null,
+      ]) {
+        const save = raw();
+        (save.state as J).combat = combat;
+        expect(load(save)).toBeNull();
+      }
+      expect(({} as J).polluted).toBeUndefined();
+    });
+
+    it("pulls back the cultivator's attack a stun pushed, and rejects one past any push", () => {
+      const at = (extra: number) => {
+        const save = raw();
+        cult(save).nextAttackAt = (save.state.time as number) + 2 + ENEMY_ARRIVAL + extra;
+        return load(save);
+      };
+      expect(at(10)?.state.cultivator.nextAttackAt).toBe(STATE.time + 2 + ENEMY_ARRIVAL);
+      expect(at(SKILL_SLACK + 0.01)).toBeNull();
     });
 
     it('rejects the array timer in a save from before discs (v4)', () => {

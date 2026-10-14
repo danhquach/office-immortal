@@ -20,6 +20,8 @@ export const NAME_KINDS = {
   passive: Object.values(PASSIVES).map((p) => p.name),
   passiveRank: Object.values(PASSIVES).map((p) => p.perRankText),
   enemy: [...DEMONS, ...BOSSES, ...TRIBULATIONS],
+  // The skills' names arrive with the skills (#144, #145, #146).
+  skill: [] as readonly string[],
 } as const satisfies Record<string, readonly string[]>;
 
 export type NameKind = keyof typeof NAME_KINDS;

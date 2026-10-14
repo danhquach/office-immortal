@@ -877,6 +877,10 @@ select {
     white-space: nowrap;
     text-overflow: ellipsis;
   }
+  /* The wind-up's skill stays on the name's one line, after the badge. */
+  .game .fighter .name > .wind-up {
+    display: inline;
+  }
   /* The tier as a badge icon before the name (ranks.png: elite, boss,
      tribulation; app.ts puts its URL in --rank-art): the label's text, drawn
      at size 0, stays for screen readers and the tooltip. The gap after the
@@ -1072,11 +1076,48 @@ select {
     opacity: 0;
   }
 }
+/* Skill callouts (docs/design.md §5 Skills): a skill's name over its caster
+   in the tier gold, an effect's word ("Stunned") over the fighter it hit; drawn
+   in code like the damage numbers, a little higher so the two never cover. */
+.callout {
+  position: absolute;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  background: var(--strip-bg);
+  color: var(--strip-ink);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: callout-rise 1400ms ease-out forwards;
+}
+.callout.cast {
+  color: var(--strip-elite);
+  font-weight: 700;
+}
+@keyframes callout-rise {
+  from {
+    translate: 0 0;
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  to {
+    translate: 0 -20px;
+    opacity: 0;
+  }
+}
 /* Reduced motion: no frame animation (sprite.ts holds the first idle frame)
-   and numbers appear in place instead of rising. */
+   and numbers and callouts appear in place instead of rising or fading. */
 @media (prefers-reduced-motion: reduce) {
-  .dmg {
+  .dmg,
+  .callout {
     animation: none;
+  }
+  .fighter .bar.qi > .cast {
+    transition: none;
   }
 }
 /* The Tribulation alert: a full-width bar above the stage while one is due,
@@ -1264,6 +1305,31 @@ select {
 .fighter .bar.qi {
   grid-area: qi;
   height: 4px;
+  position: relative;
+}
+/* An enemy's cast bar: fills over its qi bar for the wind-up, from the same
+   side as its HP, in the same row so the strip keeps its height. */
+.fighter .bar.qi > .cast {
+  position: absolute;
+  inset-block: 0;
+  left: 0;
+  background: var(--strip-elite);
+  transition: width 200ms linear;
+}
+.foe .bar.qi > .cast {
+  left: auto;
+  right: 0;
+}
+.fighter .bar.qi > .cast[hidden] {
+  display: none;
+}
+/* The skill an enemy winds up takes its name's line: one line, cut with an
+   ellipsis if it must be (the title attribute holds it in full). */
+.fighter .name > .wind-up {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 /* 2 lines always reserved, so nothing below moves when the enemy changes: a
    ranked enemy's tier on line 1 and its name on line 2, a demon's name on
@@ -2382,8 +2448,9 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   zoom: 0.375;
   margin-bottom: 0.15rem;
 }
-/* At 3/8 a damage number would be about 5 px: the HP bars say it instead. */
-.mini .dmg {
+/* At 3/8 a damage number or callout would be about 5 px: the HP bars say it instead. */
+.mini .dmg,
+.mini .callout {
   display: none;
 }
 /* The pop-out has no room for the alert: its status line says it, and a
@@ -2460,7 +2527,9 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .kpi-icon,
     .figure,
     .cell .icon,
-    .item-head .icon
+    .item-head .icon,
+    .callout,
+    .bar.qi > .cast
   ) {
   display: none;
 }

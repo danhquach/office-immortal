@@ -11,6 +11,10 @@ import {
 } from './backup.ts';
 import { memory } from './cloud-fakes.ts';
 import { decodeSave, encodeSave, MAX_SAVE_CHARS, REJECTED_KEY, SAVE_KEY } from './save.ts';
+import { withoutCombat } from './save-fakes.ts';
+
+// The fight's skill state is never saved: states compare without it.
+expect.addEqualityTesters([withoutCombat]);
 
 const raw = (savedAt: number, seed = 1): string => encodeSave(newGame(seed, 'sword'), savedAt);
 /** A new run holding one Mortal cap refined 7 times, on a base roll of 50%. */

@@ -32,6 +32,10 @@ import {
   skipToTribulation,
   unequipAll,
 } from './scenarios.ts';
+import { withoutCombat } from '../storage/save-fakes.ts';
+
+// The fight's skill state is never saved: states compare without it.
+expect.addEqualityTesters([withoutCombat]);
 
 const SLOT_IDS = Object.keys(SLOTS) as SlotId[];
 const GRADE_IDS = Object.keys(GRADES) as GradeId[];

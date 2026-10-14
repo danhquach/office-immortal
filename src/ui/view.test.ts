@@ -93,10 +93,13 @@ import {
   discreetRows,
   waveLabel,
   xpBar,
+  castCallouts,
+  windUpOf,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
 import { DEFAULT_LANG, PACKS, setLang, t, tn } from './i18n.ts';
 import { setDiscreet } from './discreet.ts';
+import { freshCombat, note } from '../core/skills.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
 
@@ -2190,5 +2193,76 @@ describe('trialPause', () => {
       head: 'Tạm hoãn Độ Thiên Kiếp sau 3 lần thua: hãy mạnh hơn',
       detail: 'Thua 3 lần · thử lại sau 9 phút',
     });
+  });
+});
+
+describe('skill callouts', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  /** A state and the next one, with `notes` noted in between. */
+  function noted(...notes: Parameters<typeof note>[1][]): [GameState, GameState] {
+    const prev = newGame(7, 'sword');
+    const next = structuredClone(prev);
+    for (const n of notes) note(next.combat, n);
+    return [prev, next];
+  }
+
+  it("floats a landed skill's name over its caster and an effect over the one it hit", () => {
+    const [prev, next] = noted(
+      { at: 1, who: 'you', skill: 'Flying Sword', windUp: false },
+      { at: 1, who: 'foe', effect: 'stunned' },
+      { at: 1, who: 'foe', effect: 'interrupted' },
+    );
+    expect(castCallouts(prev, next)).toEqual([
+      { who: 'you', text: 'Flying Sword', cast: true },
+      { who: 'foe', text: 'Stunned', cast: false },
+      { who: 'foe', text: 'Interrupted', cast: false },
+    ]);
+  });
+
+  it('says every effect in each language', () => {
+    for (const code of Object.keys(PACKS)) {
+      setLang(code);
+      const effects = ['stunned', 'silenced', 'shielded', 'interrupted'] as const;
+      const [prev, next] = noted(
+        ...effects.map((effect) => ({ at: 1, who: 'you' as const, effect })),
+      );
+      const texts = castCallouts(prev, next).map((c) => c.text);
+      expect(new Set(texts).size).toBe(4);
+      for (const text of texts) expect(text).not.toMatch(/^callout\./);
+    }
+  });
+
+  it("floats nothing as a wind-up starts: the enemy's name line says it", () => {
+    const [prev, next] = noted({ at: 1, who: 'foe', skill: 'Paper Jam', windUp: true });
+    expect(castCallouts(prev, next)).toEqual([]);
+  });
+
+  it('shows each note once, and none across a reload that reset the count', () => {
+    const [prev, next] = noted({ at: 1, who: 'you', effect: 'shielded' });
+    expect(castCallouts(next, structuredClone(next))).toEqual([]);
+    const loaded = structuredClone(prev);
+    loaded.combat = freshCombat();
+    expect(castCallouts(next, loaded)).toEqual([]);
+    expect(castCallouts(prev, next)).toHaveLength(1);
+  });
+
+  it('skips callouts that are already over after a long step', () => {
+    const [prev, next] = noted(
+      { at: 0, who: 'you', effect: 'stunned' },
+      { at: 9, who: 'you', effect: 'shielded' },
+    );
+    next.time = 10;
+    expect(castCallouts(prev, next).map((c) => c.text)).toEqual(['Shielded']);
+  });
+
+  it("follows an enemy's wind-up from start to end", () => {
+    const s = newGame(7, 'sword');
+    expect(windUpOf(s)).toBeNull();
+    s.combat.foe.windUp = { skill: 'jam', name: 'Paper Jam', start: 10, end: 11 };
+    s.time = 10.25;
+    expect(windUpOf(s)).toEqual({ skill: 'Paper Jam', progress: 0.25 });
+    s.time = 12;
+    expect(windUpOf(s)?.progress).toBe(1);
   });
 });
