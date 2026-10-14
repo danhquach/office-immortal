@@ -1702,6 +1702,8 @@ function setSlotIcon(icon: HTMLElement, type: SlotId): void {
   s.backgroundPosition = `${-ICON_COLUMNS.indexOf(type) * ICON_PX}px 0`;
 }
 
+/** How long an equipped slot's pulse plays (page.css slot-pulse). */
+const PULSE_MS = 600;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const osDark = matchMedia('(prefers-color-scheme: dark)');
 /** The theme picked this visit: kept across runs even where storage is blocked. */
@@ -4198,11 +4200,16 @@ function play(
     const at = to ?? defaultSlot(state.cultivator.equipment, item);
     selected = { slot: at };
     act(equip(state, index, at));
-    // The slot pulses once (restarted for an equip right after the last).
+    // The slot pulses once when the item lands (restarted for an equip right
+    // after the last). The class goes when it ends, or showing the tab again
+    // would replay it.
     const box = slotCells[at].parentElement;
-    box?.classList.remove('pulse');
-    void box?.offsetWidth;
-    box?.classList.add('pulse');
+    if (box && state.cultivator.equipment[at]?.name === item.name) {
+      box.classList.remove('pulse');
+      void box.offsetWidth;
+      box.classList.add('pulse');
+      window.setTimeout(() => box.classList.remove('pulse'), PULSE_MS);
+    }
     if (fromDetails) {
       charTabs.show('gear');
       slotCells[at].focus();
