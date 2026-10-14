@@ -259,8 +259,8 @@ describe('charmLineName', () => {
 
   it('shows a utility affix at the line range: 0.75x on a Talisman, 1.5x on Jade', () => {
     // Qi regen 2–6% at level 1 and 1 + 9/20 = 1.45x at level 10: 8.7% at its top.
-    expect(itemLines(charm('Jade Wealth Talisman'))[1]).toBe('+6.5% Qi regen');
-    expect(itemLines(charm('Emerald Jade Token'))[1]).toBe('+13.1% Qi regen');
+    expect(itemLines(charm('Jade Wealth Talisman'))[1]).toBe('+6.5% of max qi per second');
+    expect(itemLines(charm('Emerald Jade Token'))[1]).toBe('+13.1% of max qi per second');
   });
 });
 
@@ -345,15 +345,15 @@ describe('compareToEquipped', () => {
       ]);
     });
 
-    it('files Qi regen under utility, not the Stats tab defence', () => {
-      const line = { text: '+5% Qi regen', better: true };
+    it('files qi per second under utility, not the Stats tab defence', () => {
+      const line = { text: '+5% of max qi per second', better: true };
       expect(compareGroups([{ ...line, kind: 'utility' }])).toEqual([
         { kind: 'utility', lines: [line] },
       ]);
       const c = newCultivator('sword');
       const ring: Item = { ...stapler, slot: 'accessory', affixes: [{ id: 'qiRegen', roll: 1 }] };
       const kinds = compareToEquipped(c, ring, 'accessory1').map((l) => [l.text, l.kind]);
-      expect(kinds).toContainEqual([expect.stringContaining('Qi regen'), 'utility']);
+      expect(kinds).toContainEqual([expect.stringContaining('Qi per second'), 'utility']);
     });
 
     it('puts arrays in their own kind and keeps order over input order', () => {
@@ -419,7 +419,7 @@ describe('statRows', () => {
       'HP regen',
       'Dodge',
       'Max qi',
-      'Qi regen/s',
+      'Qi per second',
     ]);
     expect(by('Find')).toEqual(['Spirit stones', 'Treasure']);
     expect(rows.every((r) => (STAT_GROUPS as readonly string[]).includes(r.group))).toBe(true);
@@ -679,7 +679,7 @@ describe('realmLabel', () => {
 
 describe('realmRows', () => {
   it('lists every realm in order with its job title and levels', () => {
-    expect(realmRows(1).map((r) => [r.name, r.title, r.levels])).toEqual([
+    expect(realmRows(1, 'sword').map((r) => [r.name, r.title, r.levels])).toEqual([
       ['Qi Condensation', 'Intern', 'Lv 1–10'],
       ['Foundation Establishment', 'Associate', 'Lv 11–20 · +1% main stat'],
       ['Golden Core', 'Team Lead', 'Lv 21–40 · +2.6% main stat'],
@@ -694,7 +694,7 @@ describe('realmRows', () => {
   });
 
   it('names the main-stat boost on every realm but the first', () => {
-    const rows = realmRows(1);
+    const rows = realmRows(1, 'sword');
     expect(rows[0]?.levels).toBe('Lv 1–10');
     expect(rows[0]?.levels).not.toContain('main stat');
     expect(rows[1]?.levels).toContain('+1% main stat');
@@ -745,7 +745,7 @@ describe('realm boost on the Stats tab', () => {
 
   it('marks only the realm the level is in as current, at both edges of a realm', () => {
     const current = (level: number): number[] =>
-      realmRows(level).flatMap((r, i) => (r.current ? [i] : []));
+      realmRows(level, 'sword').flatMap((r, i) => (r.current ? [i] : []));
     expect(current(1)).toEqual([0]);
     expect(current(10)).toEqual([0]);
     expect(current(11)).toEqual([1]);
@@ -880,7 +880,10 @@ describe('tribulationBanner', () => {
     won.cultivator.level = 11;
     won.kills += 1;
     won.enemies.shift();
-    expect(tribulationBanner(fighting, won)).toBe('Breakthrough! Foundation Establishment');
+    // The realm's skill goes on a second line: a Sword Cultivator learns Sword Intent.
+    expect(tribulationBanner(fighting, won)).toBe(
+      'Breakthrough! Foundation Establishment\nNew skill: Sword Intent',
+    );
   });
 
   it('says the floor replays after a loss', () => {
@@ -2271,7 +2274,7 @@ describe('statTip', () => {
 
   it('shows the small qi regen gain a Spirit point gives', () => {
     expect(statTip(newCultivator('talisman'), 'spirit').gain).toMatch(
-      /Qi regen\/s 1\.\d+ → 1\.\d+/,
+      /Qi per second 1\.\d+ → 1\.\d+/,
     );
   });
 

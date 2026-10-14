@@ -242,7 +242,7 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
 - **On the strip:** a thin cyan bar under each fighter's HP bar, read by
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
-  only. The Stats tab shows Max qi and Qi regen/s.
+  only. The Stats tab shows Max qi and Qi per second.
 - **Skill bar:** the cultivator's skills (up to 4, learned order) as icons
   on its side of the strip, beside the qi bar, spanning the qi and HP rows so
   the strip keeps its height. Each icon fills as qi builds toward its cost
@@ -260,10 +260,30 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   and ready, charging or blocked. Full and Narrow show it; under 720 px tall
   the icons sit on the qi bar's row; under 480 px wide they take the name's
   second line at 18 px; Mini shows HP bars only and Discreet hides the strip.
-- **Follow-ups:** skills on the Stats tab, breakthrough banner, Path choice,
-  Realm chip and Help. Each has its own ticket. The Path skills, the elite and
-  boss skills and the Tribulation skills are in (§5 Path skills, §5 Elite and
-  boss skills, §5 Tribulation skills).
+- **Skills outside the strip:** each follows the current Path and realm at
+  once (a breakthrough, a Path change, a Reincarnation).
+  - **Stats tab, Skills sub-tab** (between Stats and Respec): each skill
+    learned, learned order, with its icon (border by level), name, level pips
+    ("Level 2 / 3" for screen readers), qi cost and effect, worded as on the
+    skill bar. The name opens its "uses it when" rule as a tip (hover, focus
+    or tap), worded with the sim's own numbers. A last line says what the
+    next realm brings ("Next realm: Ten Thousand Swords"), or that every
+    realm is reached.
+  - **Breakthrough banner:** a second line names what the realm brought:
+    "New skill: Sword Intent", or an upgrade, "Flying Sword ↑ Two swords"
+    (a renamed one names its new name: "Mountain Fist ↑ Mountain-Toppling
+    Palm"). The banner is a status, so screen readers announce it; casts are
+    not announced.
+  - **Path choice:** each Path lists its four skills, icon and name (as first
+    learned), under its portrait. **Change Path** in Respec shows the skills
+    the picked Path would have at the current realm.
+  - **Realm chip list:** each realm names what it brings the current Path, in
+    the same words as the banner, wrapping so the list stays inside the
+    window. Under 560 px wide each realm takes three lines (name and title,
+    levels, what it brings).
+  - **Help:** a "Qi and skills" entry: qi gain, Qi per second, auto-cast and
+    enemy wind-ups, with the sim's own numbers.
+  - **Discreet** hides every skill icon on these surfaces; the text stays.
 
 ### Skills
 
@@ -721,7 +741,8 @@ Every drop is generated from a seeded roll.
 - **Affix pool:** +crit chance, +crit damage, +attack speed, lifesteal,
   +max HP, +defence, +qi regen, +spirit stone find, +treasure find. Qi regen
   rolls +2–6% and is read as that share of max qi each second (§5 Qi and
-  skills), so the Stats tab shows it in qi per second.
+  skills), so an item shows it as "+4% of max qi per second" and the Stats
+  tab shows Qi per second.
 - **Quality %:** the unweighted average of the item's base roll and its affix
   rolls, each a whole 0–100% within its range, rounded down; the Immortal
   unique effect is not a roll and is left out. It ignores grade, item level and

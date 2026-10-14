@@ -368,6 +368,13 @@ export function pathStep(path: PathId, realm: number): PathStep | null {
   return null;
 }
 
+/** A Path's four skills as first learned (id, name and realm), learned order, for the Path choice. */
+export function pathSkillList(
+  path: PathId,
+): readonly { id: string; name: string; realm: number }[] {
+  return LADDERS[path].map((l) => ({ id: l.id, name: l.make(1).name, realm: l.steps[0] ?? 0 }));
+}
+
 /** Every Path skill's name, an upgrade's new name included, for the language packs. */
 export const PATH_SKILL_NAMES: readonly string[] = [
   ...new Set(

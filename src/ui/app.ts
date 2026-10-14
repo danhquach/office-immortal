@@ -59,6 +59,7 @@ import {
 } from '../core/loot.ts';
 import { maxQi, zoneOf } from '../core/floors.ts';
 import { catchUp, offlineSeconds, type OvertimeSummary } from '../core/offline.ts';
+import { pathSkillList } from '../core/path-skills.ts';
 import {
   BOOST_IDS,
   boostBonus,
@@ -273,10 +274,15 @@ import {
   type StatGroup,
   type StatKind,
   skillBar,
+  skillCell,
+  skillRows,
+  nextRealmLine,
+  helpQiLines,
   skillLabel,
   skillTip,
   stripEvents,
   type SkillIcon,
+  type SkillTier,
   castCallouts,
   CALLOUT_SECONDS,
   lightningStrikes,
@@ -1098,6 +1104,34 @@ function statusBar(): { bar: HTMLElement; character: HTMLElement } {
   return { bar, character };
 }
 
+/**
+ * A skill's icon from skills.png, outside the strip (Stats tab, Path choice,
+ * Respec); decorative, the name beside it says what it is. Discreet hides it.
+ */
+function skillIcon(cell: number, tier: SkillTier = 'base'): HTMLElement {
+  const icon = el('span', 'skill-icon');
+  icon.setAttribute('aria-hidden', 'true');
+  icon.dataset.tier = tier;
+  icon.style.setProperty('--cell', String(cell));
+  icon.style.setProperty('--skill-art', cssUrl(artUrl('skills')));
+  return icon;
+}
+
+/** A row of skills, each its icon and name: a Path's four on the Path choice, or Respec's preview. */
+function skillNames(
+  skills: readonly { name: string; cell: number; tier?: SkillTier }[],
+): HTMLElement {
+  const list = el('ul', 'skill-names');
+  list.append(
+    ...skills.map((k) => {
+      const li = el('li');
+      li.append(skillIcon(k.cell, k.tier), el('span', '', k.name));
+      return li;
+    }),
+  );
+  return list;
+}
+
 function pathChoice(onPick: (path: PathId) => void): HTMLElement {
   const box = el('section', 'panel choose');
   box.setAttribute('aria-labelledby', 'choose-title');
@@ -1110,10 +1144,15 @@ function pathChoice(onPick: (path: PathId) => void): HTMLElement {
     const avatar = el('span', 'avatar');
     avatar.setAttribute('aria-hidden', 'true');
     avatar.style.backgroundImage = cssUrl(artUrl(`path-${id}`));
+    // Its four skills under the portrait, by the names they are first learned under.
+    const skills = skillNames(
+      pathSkillList(id).map((k) => ({ name: tn('skill', k.name), cell: skillCell(k.name) })),
+    );
     b.append(
       el('strong', '', tn('path', PATHS[id].name)),
       el('span', 'muted', pathBlurb(id)),
       avatar,
+      skills,
     );
     b.addEventListener('click', () => onPick(id));
     list.append(b);
@@ -1447,19 +1486,26 @@ function hoverTip(
 }
 
 /**
- * The Realm chip's hover list: every realm, the current one highlighted (see
- * hoverTip for when it opens). It reads the level from `level` when it opens;
- * `refresh` redraws an open list after a breakthrough.
+ * The Realm chip's hover list: every realm, the current one highlighted, each
+ * naming what it brings the Path (see hoverTip for when it opens). It reads
+ * the level and Path when it opens; `refresh` redraws an open list after a
+ * breakthrough or a Path change.
  */
-function realmList(chip: HTMLElement, level: () => number): { refresh: () => void } {
+function realmList(
+  chip: HTMLElement,
+  level: () => number,
+  path: () => PathId,
+): { refresh: () => void } {
   const list = el('ul', 'realm-list');
   list.id = 'realm-list';
   chip.tabIndex = 0;
-  let shown = -1;
+  let shown = '';
+  /** The realm and Path the open list shows: either changing redraws it. */
+  const key = (): string => `${realmOf(level())} ${path()}`;
   function fill(): void {
-    shown = realmOf(level());
+    shown = key();
     list.replaceChildren(
-      ...realmRows(level()).map((row) => {
+      ...realmRows(level(), path()).map((row) => {
         const li = el('li', row.current ? 'current' : '');
         if (row.current) li.setAttribute('aria-current', 'true');
         // The spaces keep a screen reader's words apart; the grid drops them.
@@ -1469,6 +1515,8 @@ function realmList(chip: HTMLElement, level: () => number): { refresh: () => voi
           el('span', 'title', row.title),
           ' ',
           el('span', 'levels', row.levels),
+          ' ',
+          el('span', 'unlock', row.unlock),
         );
         // A tooltip's text is read flat, so say which row is current in words too.
         if (row.current) li.append(el('span', 'sr-only', ` ${t('realm.current')}`));
@@ -1479,7 +1527,7 @@ function realmList(chip: HTMLElement, level: () => number): { refresh: () => voi
   const { isOpen } = hoverTip(chip, list, fill);
   return {
     refresh: () => {
-      if (isOpen() && realmOf(level()) !== shown) fill();
+      if (isOpen() && key() !== shown) fill();
     },
   };
 }
@@ -2069,7 +2117,11 @@ function play(
     return { id, box, full, percent, word, tip, isOpen, fillTip };
   });
   kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box, boostRow);
-  const realms = realmList(kRealm.box, () => state.cultivator.level);
+  const realms = realmList(
+    kRealm.box,
+    () => state.cultivator.level,
+    () => state.cultivator.path,
+  );
 
   // Character: a paper doll with each slot where it is worn (the drop target), then stats
   const character = panel('character', 'character.title');
@@ -2259,7 +2311,31 @@ function play(
   });
   pathBtn.setAttribute('aria-describedby', 'path-cost path-why');
   const pathLine = respecLine('path', pathPick, pathBtn);
-  respec.append(elt('p', 'muted hint', 'respec.note'), resetLine.line, pathLine.line);
+  // The skills the picked Path would have at the realm now.
+  const pathSkillsLine = el('div', 'path-skills');
+  const pathSkillsHead = el('p', 'muted hint');
+  const pathSkillsBox = el('div');
+  pathSkillsLine.append(pathSkillsHead, pathSkillsBox);
+  /** The Path, realm and language the preview shows. */
+  let pathSkillsShown = '';
+  pathPick.addEventListener('change', drawPathSkills);
+  respec.append(
+    elt('p', 'muted hint', 'respec.note'),
+    resetLine.line,
+    pathLine.line,
+    pathSkillsLine,
+  );
+  function drawPathSkills(): void {
+    const to = pathPick.value as PathId;
+    // Only a Path on the list (the options are), never a value edited in.
+    if (!Object.hasOwn(PATHS, to)) return;
+    const level = state.cultivator.level;
+    const key = `${to} ${realmOf(level)} ${lang().code}`;
+    if (key === pathSkillsShown) return;
+    pathSkillsShown = key;
+    setText(pathSkillsHead, t('skill.changeTo', { path: tn('path', PATHS[to].name) }));
+    pathSkillsBox.replaceChildren(skillNames(skillRows(to, level)));
+  }
 
   // Store boosts running now, with the time each has left.
   const boostList = el('ul', 'boost-list');
@@ -2269,10 +2345,68 @@ function play(
   const boosts = fold('Boosts', elt('span', '', 'store.boosts'), boostBody);
   boosts.box.classList.add('boosts');
 
+  // Skills: each skill learned, its icon, name, level pips, qi cost and
+  // effect, its "uses it when" rule as the name's tip; then what the next
+  // realm brings (docs/design.md §5 Qi and skills). Four rows, reused.
+  const skillsPane = el('div', 'skills-tab');
+  const skillList = el('ul', 'skill-list');
+  const nextRealm = el('p', 'muted next-realm');
+  /** What the rows show (Path, realm, language), so an unchanged frame touches nothing. */
+  let skillsShown = '';
+  const skillSlots = [0, 1, 2, 3].map((i) => {
+    const li = el('li');
+    const icon = skillIcon(0);
+    // A button, so every screen reader reads the rule it is described by.
+    const name = el('button', 'name');
+    name.type = 'button';
+    const tip = el('div', 'boost-tip skill-tip');
+    tip.id = `skill-when-${i}`;
+    const tipLabel = el('strong');
+    const tipText = el('p');
+    tip.append(tipLabel, tipText);
+    const pips = el('span', 'pips');
+    pips.setAttribute('aria-hidden', 'true');
+    const level = el('span', 'sr-only');
+    const cost = el('span', 'cost');
+    const effect = el('p', 'effect');
+    li.append(icon, name, pips, level, cost, effect);
+    hoverTip(name, tip, () => {});
+    skillList.append(li);
+    return { li, icon, name, tip, tipLabel, tipText, pips, level, cost, effect };
+  });
+  skillsPane.append(skillList, nextRealm);
+
+  /** The Skills list, for the cultivator's Path and realm now. */
+  function drawSkillsTab(): void {
+    const c = state.cultivator;
+    const key = `${c.path} ${realmOf(c.level)} ${lang().code}`;
+    if (key === skillsShown) return;
+    skillsShown = key;
+    const rows = skillRows(c.path, c.level);
+    skillSlots.forEach((slot, i) => {
+      const row = rows[i];
+      // A tip open on a row that changes or goes would show the old skill.
+      if (slot.tip.matches(':popover-open')) slot.tip.hidePopover();
+      slot.li.hidden = !row;
+      if (!row) return;
+      slot.icon.dataset.tier = row.tier;
+      slot.icon.style.setProperty('--cell', String(row.cell));
+      setText(slot.name, row.name);
+      setText(slot.tipLabel, t('skill.whenLabel'));
+      setText(slot.tipText, row.when);
+      setText(slot.pips, '●'.repeat(row.level) + '○'.repeat(row.maxLevel - row.level));
+      setText(slot.level, row.levelText);
+      setText(slot.cost, row.cost);
+      setText(slot.effect, row.effect);
+    });
+    setText(nextRealm, nextRealmLine(c.path, c.level));
+  }
+
   const statMain = el('div', 'statmain');
   statMain.append(base, plan, ...derived, boosts.box);
   const statTabs = tabs([
     { id: 'stats-main', label: 'tab.stats', body: statMain },
+    { id: 'stats-skills', label: 'skill.bar', body: skillsPane },
     { id: 'stats-respec', label: 'respec.title', body: respec },
   ]);
   statTabs.bar.classList.add('subtabs');
@@ -3236,8 +3370,15 @@ function play(
       li.append(parts.name, ...parts.lines);
       statList.append(li);
     }
+    // Qi and skills, with the sim's own numbers.
+    const qiList = el('ul', 'lines');
+    const qiLines = [0, 1, 2, 3].map(() => el('li'));
+    qiList.append(...qiLines);
+    say(() => helpQiLines().forEach((line, i) => qiLines[i] && setText(qiLines[i], line)));
     help.append(
       helpLines,
+      elt('h3', '', 'help.qi'),
+      qiList,
       elt('h3', '', 'help.stats'),
       elt('p', 'muted hint', 'help.statsHint'),
       statList,
@@ -3677,6 +3818,7 @@ function play(
     }
     for (const refresh of boostTips) refresh();
     for (const refresh of statTips) refresh();
+    drawSkillsTab();
     drawDerived();
     drawPlan();
     if (menu.open) drawHelpStats();
@@ -4374,6 +4516,7 @@ function play(
     setButton(pathBtn, t('respec.change'), change.off);
     setText(pathLine.cost, change.cost);
     setText(pathLine.why, change.why);
+    drawPathSkills();
 
     setText(insightCount, String(state.insight));
     setText(retiredText, t('retire.count', { n: state.retirements }));

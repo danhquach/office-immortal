@@ -313,11 +313,12 @@ describe('t and tn', () => {
     expect(realmLabel(171)).toBe('Độ Kiếp · Chủ Tịch');
     expect(realmLabel(211)).toBe('Phi Thăng');
     expect(tabTitle(12, 3, true)).toBe('T12 · Đến lúc Độ Thiên Kiếp · 3 món đồ');
-    const rows = realmRows(15);
+    const rows = realmRows(15, 'sword');
     expect(rows[1]).toEqual({
       name: 'Trúc Cơ',
       title: 'Nhân Viên',
       levels: 'Cấp 11–20 · +1% chỉ số chính',
+      unlock: 'Kiếm Ý',
       current: true,
     });
     expect(rows[9]?.levels).toBe('Cấp 211+ · +31.5% chỉ số chính');
