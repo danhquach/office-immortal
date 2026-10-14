@@ -2,6 +2,7 @@
 // on its own, as one English name could mean two things in different kinds.
 
 import { PATHS, REALMS } from '../core/cultivator.ts';
+import { ENEMY_SKILL_NAMES } from '../core/enemy-skills.ts';
 import { BOSSES, DEMONS, TRIBULATIONS } from '../core/floors.ts';
 import { PATH_SKILL_NAMES } from '../core/path-skills.ts';
 import { ARRAYS, CHARM_LINES, EQUIP_SLOTS, GRADES, SLOTS, UNIQUES } from '../core/loot.ts';
@@ -21,8 +22,8 @@ export const NAME_KINDS = {
   passive: Object.values(PASSIVES).map((p) => p.name),
   passiveRank: Object.values(PASSIVES).map((p) => p.perRankText),
   enemy: [...DEMONS, ...BOSSES, ...TRIBULATIONS],
-  // The Path skills' names; the enemy skills' arrive with #145 and #146.
-  skill: PATH_SKILL_NAMES,
+  // The Path, elite and boss skills' names; the Tribulations' arrive with #146.
+  skill: [...PATH_SKILL_NAMES, ...ENEMY_SKILL_NAMES],
 } as const satisfies Record<string, readonly string[]>;
 
 export type NameKind = keyof typeof NAME_KINDS;

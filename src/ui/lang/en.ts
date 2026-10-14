@@ -55,7 +55,7 @@ const messages = {
   'strip.hp': 'HP {hp} / {max}',
   'strip.qi': 'Qi',
   'strip.qiValue': 'Qi {qi} / {max}',
-  'strip.windUp': '{name}…',
+  'strip.yell': '{name}!',
   'callout.stunned': 'Stunned',
   'callout.silenced': 'Silenced',
   'callout.shielded': 'Shielded',

@@ -2390,7 +2390,7 @@ describe('skill callouts', () => {
     }
   });
 
-  it("floats nothing as a wind-up starts: the enemy's name line says it", () => {
+  it('floats nothing as a wind-up starts: its yell bubble says it', () => {
     const [prev, next] = noted({ at: 1, who: 'foe', skill: 'Paper Jam', windUp: true });
     expect(castCallouts(prev, next)).toEqual([]);
   });

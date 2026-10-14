@@ -395,7 +395,13 @@ describe('casting', () => {
 
 describe('enemy wind-up', () => {
   const slam = (over: Partial<SkillDef> = {}) =>
-    skill({ id: 'slam', name: 'Paper Jam', qi: 30, effects: [{ type: 'hit', mult: 3 }], ...over });
+    skill({
+      id: 'slam',
+      name: 'Paper-Binding Seal',
+      qi: 30,
+      effects: [{ type: 'hit', mult: 3 }],
+      ...over,
+    });
 
   it('pays its qi, winds up for 1 s, then lands', () => {
     const s = arena();
@@ -404,7 +410,7 @@ describe('enemy wind-up', () => {
     const w = mid.combat.foe.windUp;
     expect(w).not.toBeNull();
     expect(w?.end).toBeCloseTo((w?.start ?? 0) + WIND_UP);
-    expect(w?.name).toBe('Paper Jam');
+    expect(w?.name).toBe('Paper-Binding Seal');
     // An elite's pool is full at 60, so the regen step before adds nothing.
     expect(front(mid).qi).toBe(60 - 30);
     expect(mid.cultivator.hp).toBe(s.cultivator.hp);
@@ -413,8 +419,8 @@ describe('enemy wind-up', () => {
     const hit = mitigate(front(s).damage * 3, derive(s.cultivator).defence);
     expect(done.cultivator.hp).toBe(s.cultivator.hp - hit);
     expect(casts(done).map((n) => [n.skill, n.windUp])).toEqual([
-      ['Paper Jam', true],
-      ['Paper Jam', false],
+      ['Paper-Binding Seal', true],
+      ['Paper-Binding Seal', false],
     ]);
   });
 

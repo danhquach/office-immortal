@@ -823,6 +823,7 @@ select {
 @media (min-width: 940px) and (min-height: 600px) and (max-height: 719px) {
   .game .strip > .stage {
     zoom: 0.5;
+    --z: 0.5;
   }
   .game .top > .strip > .where {
     padding-block: 0;
@@ -887,10 +888,6 @@ select {
     min-height: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
-  }
-  /* The wind-up's skill stays on the name's one line, after the badge. */
-  .game .fighter .name > .wind-up {
-    display: inline;
   }
   /* The tier as a badge icon before the name (ranks.png: elite, boss,
      tribulation; app.ts puts its URL in --rank-art): the label's text, drawn
@@ -1044,6 +1041,7 @@ select {
 @media (min-width: 768px) {
   .stage {
     zoom: 0.75;
+    --z: 0.75;
   }
 }
 .sprite {
@@ -1107,6 +1105,60 @@ select {
   color: var(--strip-elite);
   font-weight: 700;
 }
+/* The skill an enemy winds up, yelled in a bubble over it: at the stage's top,
+   its right edge on the foe's sprite (set in code), wrapping to 2 lines at
+   most so a long name ("Ten Thousand Unread Scrolls!") fits a phone's stage
+   whole. The tail points down at the sprite. Its sizes are divided by the
+   stage's zoom (--z), so it reads at full size on a zoomed-out stage. */
+.yell {
+  position: absolute;
+  top: calc(0.3rem / var(--z, 1));
+  z-index: 3;
+  max-width: min(calc(10.5rem / var(--z, 1)), 90%);
+  margin: 0;
+  padding: calc(0.15rem / var(--z, 1)) calc(0.45rem / var(--z, 1));
+  border: calc(1px / var(--z, 1)) solid var(--strip-elite);
+  border-radius: calc(8px / var(--z, 1));
+  background: var(--strip-bg);
+  color: var(--strip-elite);
+  font-size: calc(0.8rem / var(--z, 1));
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  animation: yell-pop 160ms ease-out;
+}
+.yell[hidden] {
+  display: none;
+}
+.yell::after {
+  content: '';
+  position: absolute;
+  right: calc(var(--tail, 64px) - 6px / var(--z, 1));
+  bottom: calc(-6px / var(--z, 1));
+  border: calc(6px / var(--z, 1)) solid transparent;
+  border-bottom: 0;
+  border-top-color: var(--strip-elite);
+}
+/* No room above the sprite (names drawn over a short stage): the bubble sits
+   on its left, the tail pointing right at it. */
+.yell.beside::after {
+  top: 50%;
+  translate: 0 -50%;
+  right: calc(-6px / var(--z, 1));
+  bottom: auto;
+  border-width: calc(6px / var(--z, 1));
+  border-right: 0;
+  border-top-color: transparent;
+  border-left-color: var(--strip-elite);
+}
+@keyframes yell-pop {
+  from {
+    scale: 0.6;
+    opacity: 0;
+  }
+}
 @keyframes callout-rise {
   from {
     translate: 0 0;
@@ -1124,7 +1176,8 @@ select {
    and numbers and callouts appear in place instead of rising or fading. */
 @media (prefers-reduced-motion: reduce) {
   .dmg,
-  .callout {
+  .callout,
+  .yell {
     animation: none;
   }
   .fighter .bar.qi > .cast {
@@ -1333,14 +1386,6 @@ select {
 }
 .fighter .bar.qi > .cast[hidden] {
   display: none;
-}
-/* The skill an enemy winds up takes its name's line: one line, cut with an
-   ellipsis if it must be (the title attribute holds it in full). */
-.fighter .name > .wind-up {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
 }
 /* 2 lines always reserved, so nothing below moves when the enemy changes: a
    ranked enemy's tier on line 1 and its name on line 2, a demon's name on
@@ -2560,11 +2605,13 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
    has zoom. */
 .mini .stage {
   zoom: 0.375;
+  --z: 0.375;
   margin-bottom: 0.15rem;
 }
 /* At 3/8 a damage number or callout would be about 5 px: the HP bars say it instead. */
 .mini .dmg,
-.mini .callout {
+.mini .callout,
+.mini .yell {
   display: none;
 }
 /* The pop-out has no room for the alert: its status line says it, and a
@@ -2643,6 +2690,7 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .cell .icon,
     .item-head .icon,
     .callout,
+    .yell,
     .bar.qi > .cast
   ) {
   display: none;

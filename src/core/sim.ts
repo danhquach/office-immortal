@@ -49,6 +49,7 @@ import {
   type GradeId,
   type Item,
 } from './loot.ts';
+import { enemySkills } from './enemy-skills.ts';
 import { pathSkills } from './path-skills.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
@@ -261,11 +262,15 @@ export const noSkills: Loadout = () => [];
 
 /**
  * The skills in the game: the cultivator's Path skills for its Path and realm
- * (docs/design.md §5 Path skills), derived at every event, never saved. The
- * enemy skills (#145, #146) fill in the other side.
+ * (docs/design.md §5 Path skills) and the enemy in front's elite or boss
+ * skills (§5 Elite and boss skills), derived at every event, never saved.
+ * The Tribulations' skills (#146) are still to come.
  */
-export const gameSkills: Loadout = (s, side) =>
-  side === 'you' ? pathSkills(s.cultivator.path, realmOf(s.cultivator.level)) : [];
+export const gameSkills: Loadout = (s, side) => {
+  if (side === 'you') return pathSkills(s.cultivator.path, realmOf(s.cultivator.level));
+  const enemy = s.enemies[0];
+  return enemy ? enemySkills(enemy, s.combat.foe.uses) : [];
+};
 
 /**
  * How a tick is played: `offline` is Overtime Cultivation, at the offline drop

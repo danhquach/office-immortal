@@ -1254,12 +1254,14 @@ describe('qi', () => {
     expect(ENEMY_MAX_QI[kind]).toBe(max);
     const s = quiet(facing(kind), { foe: true, regen: true });
     const foe = s.enemies[0] as { attackInterval: number };
+    // Its skills would spend the qi this counts.
+    const opts = { loadout: noSkills };
     // One attack and its interval's trickle.
-    const one = tick(s, foe.attackInterval * 1.5);
+    const one = tick(s, foe.attackInterval * 1.5, opts);
     expect(one.enemies[0]?.qi).toBe(
       ENEMY_QI_PER_ATTACK + ENEMY_QI_REGEN * Math.floor(foe.attackInterval * 1.5),
     );
-    expect(tick(s, 600).enemies[0]?.qi).toBe(max);
+    expect(tick(s, 600, opts).enemies[0]?.qi).toBe(max);
   });
 
   it('gives regular demons no qi at all', () => {

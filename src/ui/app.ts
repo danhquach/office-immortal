@@ -149,6 +149,7 @@ import {
 import { showCodeLine } from './code-line.ts';
 import {
   enemyNameParts,
+  yellText,
   lang,
   nameSpans,
   PACKS,
@@ -157,7 +158,6 @@ import {
   setLang,
   t,
   tn,
-  windUpNameParts,
   writeLang,
   type MessageKey,
   type NamePart,
@@ -1852,6 +1852,14 @@ function play(
   arrayMark.setAttribute('aria-hidden', 'true');
   let arrayTimer = 0;
   stage.append(arrayMark);
+  // The skill the enemy winds up, yelled in a bubble over it (docs/design.md
+  // §5 Skills). Not read out: screen readers are not told each cast.
+  const yell = el('p', 'yell');
+  yell.setAttribute('aria-hidden', 'true');
+  yell.hidden = true;
+  // The layout the bubble was last placed for; '' while hidden.
+  let yellPlacedFor = '';
+  stage.append(yell);
   // XP to the next level, with the level at its left end. The text is drawn
   // twice: light on the dark track, and dark on the yellow fill, which is
   // clipped to the XP so far. Screen readers get aria-valuetext instead.
@@ -3139,23 +3147,21 @@ function play(
     );
     if (enemy) {
       foe.box.dataset.kind = enemy.kind;
-      // While it winds up, its name line says the skill and a cast bar fills over its qi.
-      const windUp = windUpOf(state);
       setFighter(
         foe,
-        `${code}\u0000${enemy.kind}\u0000${enemy.name}\u0000${windUp?.skill ?? ''}`,
-        () =>
-          windUp
-            ? windUpNameParts(enemy.kind, enemy.name, windUp.skill)
-            : enemyNameParts(enemy.kind, enemy.name),
+        `${code}\u0000${enemy.kind}\u0000${enemy.name}`,
+        () => enemyNameParts(enemy.kind, enemy.name),
         enemy.hp,
         enemy.maxHp,
         enemy.qi,
         maxQi(enemy.kind),
       );
+      // While it winds up, it yells the skill and a cast bar fills over its qi.
+      const windUp = windUpOf(state);
       foe.cast.hidden = !windUp;
       foe.cast.style.width = `${(windUp?.progress ?? 0) * 100}%`;
-    }
+      showYell(windUp?.skill ?? null);
+    } else showYell(null);
     const z = zoneOf(state.floor);
     if (z !== zone) {
       zone = z;
@@ -3224,6 +3230,44 @@ function play(
       trialBanner.classList.remove('show');
       trialBanner.textContent = '';
     }, TRIAL_BANNER_MS);
+  }
+
+  /**
+   * The foe's yell bubble: `skill` while it winds up, hidden for null. Its
+   * right edge lines up with the foe's sprite and its top with the stage's,
+   * so it never leaves the stage whatever the sprite's size; where the names
+   * and HP are drawn over the stage (short screens), it sits just under them.
+   * Placed as it appears, and again if the stage changes size mid wind-up.
+   */
+  function showYell(skill: string | null): void {
+    yell.hidden = skill === null;
+    if (skill === null) {
+      yellPlacedFor = '';
+      return;
+    }
+    const text = yellText(skill);
+    setText(yell, text);
+    const placeFor = `${stage.clientWidth}x${stage.clientHeight}x${window.innerHeight}x${foe.size}x${foe.sprite.offsetLeft}x${text}`;
+    if (placeFor === yellPlacedFor) return;
+    yellPlacedFor = placeFor;
+    const s = stage.getBoundingClientRect();
+    const f = fighters.getBoundingClientRect();
+    const over = f.top < s.bottom && f.bottom > s.top ? f.bottom - s.top : 0;
+    // Bounding boxes are in page pixels; the stage may be zoomed (page.css --z).
+    const z = s.height > 0 && stage.offsetHeight > 0 ? s.height / stage.offsetHeight : 1;
+    const top = over > 0 ? Math.ceil(over / z) : 0;
+    const sprite = foe.sprite;
+    // Above the sprite when it fits there; otherwise (the names drawn over a
+    // short stage) beside it, on its left, so it never covers the enemy.
+    yell.classList.remove('beside');
+    yell.style.top = top > 0 ? `${top}px` : '';
+    yell.style.right = `${Math.max(0, stage.clientWidth - sprite.offsetLeft - foe.size)}px`;
+    // The tail points at the middle of the sprite, whatever its size.
+    yell.style.setProperty('--tail', `${foe.size / 2}px`);
+    if (yell.offsetTop + yell.offsetHeight <= sprite.offsetTop) return;
+    yell.classList.add('beside');
+    yell.style.right = `${Math.max(0, stage.clientWidth - sprite.offsetLeft)}px`;
+    yell.style.top = `${Math.max(top, sprite.offsetTop)}px`;
   }
 
   /** Shows an array's set-up under the fighters for the pause before a fight; null does nothing. */

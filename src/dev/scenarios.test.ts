@@ -230,6 +230,17 @@ describe('debug setups', () => {
     expect(() => unequipAll(fillBag(worn, 0))).toThrow(/no room/);
   });
 
+  it("puts the floor's elite and boss in front with full qi", () => {
+    // Even once the floor's elite and boss are beaten.
+    const past = newGame(5, 'sword');
+    past.enemies = past.enemies.filter((e) => e.kind === 'demon');
+    const s = SCENARIOS.skilledFoes(past);
+    expect(s.enemies.map((e) => [e.kind, e.qi])).toEqual([
+      ['elite', 60],
+      ['boss', 100],
+    ]);
+  });
+
   it('skips to the next Tribulation, due at the end of the floor', () => {
     for (const [level, cap] of [
       [1, 10],

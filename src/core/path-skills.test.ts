@@ -752,7 +752,7 @@ describe('Path skill "uses it when" rules', () => {
 describe('skills follow the Path and realm', () => {
   const ids = (s: GameState) => gameSkills(s, 'you').map((k) => k.id);
 
-  it('the game casts the Path skills, and no enemy skills yet', () => {
+  it('the game casts the Path skills, and none for a regular demon', () => {
     const s = newGame(5, 'sword');
     expect(ids(s)).toEqual(['flyingSword']);
     expect(gameSkills(s, 'foe')).toEqual([]);

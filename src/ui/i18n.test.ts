@@ -15,7 +15,7 @@ import {
   setLang,
   t,
   tn,
-  windUpNameParts,
+  yellText,
   writeLang,
   type MessageKey,
 } from './i18n.ts';
@@ -223,15 +223,18 @@ describe('t and tn', () => {
     expect(nameSpans(enemyNameParts('demon', 'Inbox Hydra'))).toEqual([
       { className: '', text: 'Cửu Đầu Xà Hộp Thư' },
     ]);
-    // A wind-up keeps the tier and puts the skill in the name's place, as text only.
-    expect(nameSpans(windUpNameParts('boss', 'The Auditor', 'Paper Jam'))).toEqual([
-      { className: 'enemy-tier enemy-tier--boss', text: '(Trùm)' },
-      { className: 'wind-up', text: 'Paper Jam…' },
-    ]);
-    expect(nameSpans(windUpNameParts('elite', 'Elite x', '<b onclick="y">'))[1]).toEqual({
-      className: 'wind-up',
-      text: '<b onclick="y">…',
-    });
+    // A wind-up is yelled in the player's language, as text only.
+    expect(yellText('Qi Confiscation Palm')).toBe('Tịch Khí Chưởng!');
+    expect(yellText('Endless Meeting Domain')).toBe('Vô Tận Nghị Vực!');
+    expect(yellText('<b onclick="y">')).toBe('<b onclick="y">!');
+    // An unknown name is plain text, never a placeholder, a pattern or a prototype key.
+    for (const lang of ['en', 'vi'] as const) {
+      setLang(lang);
+      for (const name of ['{name}', '$&$1', '__proto__', 'constructor', '\u202eevil\u200b']) {
+        expect(yellText(name)).toBe(`${name}!`);
+      }
+    }
+    setLang('vi');
     // A hostile name is only ever text, never a class.
     expect(nameSpans(enemyNameParts('elite', 'Elite x" onclick="y'))).toEqual([
       { className: 'enemy-tier enemy-tier--elite', text: '(Tinh Anh)' },
