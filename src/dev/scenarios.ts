@@ -7,6 +7,7 @@
 import {
   derive,
   newCultivator,
+  readyForTribulation,
   REALM_CAPS,
   spendByPlan,
   STAT_POINTS_PER_LEVEL,
@@ -14,7 +15,16 @@ import {
   zeroCarry,
   type PathId,
 } from '../core/cultivator.ts';
-import { BAG_ROW, earn, INVENTORY_SIZE, MAX_BAG_SIZE, pickUp } from '../core/economy.ts';
+import {
+  answerFreeReset,
+  BAG_ROW,
+  canResetStats,
+  earn,
+  INVENTORY_SIZE,
+  MAX_BAG_SIZE,
+  pickUp,
+} from '../core/economy.ts';
+import { maxQi, type EnemyKind } from '../core/floors.ts';
 import {
   ARRAY_IDS,
   EQUIP_SLOTS,
@@ -30,8 +40,14 @@ import {
   type Item,
   type SlotId,
 } from '../core/loot.ts';
-import { maxQi } from '../core/floors.ts';
-import { bonusPoints } from '../core/prestige.ts';
+import {
+  bonusPoints,
+  PASSIVE_IDS,
+  PASSIVES,
+  POINTS_PER_RANK,
+  RETIRE_MIN_FLOOR,
+  type PassiveId,
+} from '../core/prestige.ts';
 import { rngFrom } from '../core/rng.ts';
 import {
   activePlan,
@@ -44,6 +60,7 @@ import {
   unequip,
   type GameState,
 } from '../core/sim.ts';
+import { BOOST_CAP_SECONDS, BOOST_IDS, emptyStore, type BoostId } from '../core/store.ts';
 import { MAX_FLOOR } from '../storage/save.ts';
 
 /** The highest level a setup goes to: XP to the next level stays a safe whole number. */
@@ -206,18 +223,146 @@ export function skipToTribulation(state: GameState): GameState {
   return restartFloor(s);
 }
 
-/** The next realm's Tribulation due and set aside after TRIAL_LOSS_LIMIT losses just now. */
-export function setTribulationAside(state: GameState): GameState {
-  const s = skipToTribulation(state);
+/**
+ * The next realm's Tribulation due (kept when one is due already) after
+ * `losses` losses in a row just now, at the cultivator's strength; at
+ * TRIAL_LOSS_LIMIT it is set aside.
+ */
+export function setTrialLosses(state: GameState, losses: number): GameState {
+  whole(losses, 0, TRIAL_LOSS_LIMIT, 'losses');
+  const s = readyForTribulation(state.cultivator)
+    ? structuredClone(state)
+    : skipToTribulation(state);
   const d = derive(s.cultivator);
+  const lost = losses > 0;
   s.trial = {
     ...s.trial,
-    losses: TRIAL_LOSS_LIMIT,
-    lostAt: s.time,
-    lostDamage: d.damage,
-    lostMaxHp: d.maxHp,
+    losses,
+    lostAt: lost ? s.time : 0,
+    lostDamage: lost ? d.damage : 0,
+    lostMaxHp: lost ? d.maxHp : 0,
   };
   return restartFloor(s);
+}
+
+/** The next realm's Tribulation due and set aside after TRIAL_LOSS_LIMIT losses just now. */
+export function setTribulationAside(state: GameState): GameState {
+  return setTrialLosses(state, TRIAL_LOSS_LIMIT);
+}
+
+export type FightKind = Extract<EnemyKind, 'elite' | 'boss'>;
+
+/**
+ * Floor `floor` (up to the highest floor) starts again with its demon waves
+ * cleared, and for a boss its elite too, so the next enemy is the one asked
+ * for; a due Tribulation still waits at the end. The cultivator's HP and qi
+ * are kept, so a fight can be set up first. Beating it plays on as normal.
+ */
+export function jumpToFight(state: GameState, kind: FightKind, floor: number): GameState {
+  if (kind !== 'elite' && kind !== 'boss') throw new RangeError('fight must be elite or boss');
+  whole(floor, 1, state.highestFloor, 'floor (up to the highest floor)');
+  const { hp, qi } = state.cultivator;
+  const s = structuredClone(state);
+  s.floor = floor;
+  const out = restartFloor(s);
+  const skip: readonly EnemyKind[] = kind === 'boss' ? ['demon', 'elite'] : ['demon'];
+  out.enemies = out.enemies.filter((e) => !skip.includes(e.kind));
+  const d = derive(out.cultivator);
+  out.cultivator.hp = Math.min(hp, d.maxHp);
+  out.cultivator.qi = Math.min(qi, d.maxQi);
+  return out;
+}
+
+/** Qi to `qi` (a whole number up to the max), or to the exact max with `'full'`. */
+export function setQi(state: GameState, qi: number | 'full'): GameState {
+  const max = derive(state.cultivator).maxQi;
+  if (qi !== 'full') whole(qi, 0, Math.floor(max), 'qi');
+  const s = structuredClone(state);
+  s.cultivator.qi = qi === 'full' ? max : qi;
+  return s;
+}
+
+/** Every one of the cultivator's skills off cooldown now, mid-fight. */
+export function resetCooldowns(state: GameState): GameState {
+  const s = structuredClone(state);
+  s.combat.you.cooldowns = {};
+  return s;
+}
+
+/** Qi full and every skill off cooldown: the next skill its rules allow goes off. */
+export function readyToCast(state: GameState): GameState {
+  return resetCooldowns(setQi(state, 'full'));
+}
+
+/** The enemy in front down to 1 HP, so the next hit kills it through the normal rules. */
+export function foeToOneHp(state: GameState): GameState {
+  const s = structuredClone(state);
+  const foe = s.enemies[0];
+  if (!foe) throw new RangeError('no enemy to hit');
+  foe.hp = Math.min(foe.hp, 1);
+  return s;
+}
+
+/** Every spent stat point back to unspent, free, as the rebalance offer does; that offer is left as it was. */
+export function freeStatReset(state: GameState): GameState {
+  if (!canResetStats(state.cultivator)) throw new RangeError('no stat point is spent');
+  const s = structuredClone(state);
+  s.freeReset = true;
+  const out = answerFreeReset(s, true);
+  out.freeReset = state.freeReset;
+  return out;
+}
+
+/** The one-time free stat reset offer on or off. */
+export function setFreeResetOffer(state: GameState, on: boolean): GameState {
+  const s = structuredClone(state);
+  s.freeReset = on;
+  return s;
+}
+
+/**
+ * Passive `id` at `rank`. Head Start's points come and go unspent, as buying
+ * a rank gives them; taking back more than are unspent is refused.
+ */
+export function setPassive(state: GameState, id: PassiveId, rank: number): GameState {
+  if (!PASSIVE_IDS.includes(id)) throw new RangeError(`passive must be one of ${PASSIVE_IDS}`);
+  whole(rank, 0, PASSIVES[id].maxRank, 'rank');
+  const s = structuredClone(state);
+  const before = bonusPoints(s.passives);
+  s.passives[id] = rank;
+  s.cultivator.unspent += bonusPoints(s.passives) - before;
+  if (s.cultivator.unspent < 0) {
+    throw new RangeError(`that takes back ${POINTS_PER_RANK} points a rank: reset stats first`);
+  }
+  return s;
+}
+
+/** The highest floor up to Early Retirement's minimum, so it pays Dao Insight. */
+export function retireReady(state: GameState): GameState {
+  return setFloors(state, state.floor, Math.max(state.highestFloor, RETIRE_MIN_FLOOR));
+}
+
+/** The store's stock thrown out; the game rolls a fresh one at once, free. */
+export function restockStore(state: GameState): GameState {
+  const s = structuredClone(state);
+  s.store = emptyStore();
+  return s;
+}
+
+/** Boost `id` on at its longest, or off. */
+export function setBoost(state: GameState, id: BoostId, on: boolean): GameState {
+  if (!BOOST_IDS.includes(id)) throw new RangeError(`boost must be one of ${BOOST_IDS}`);
+  const s = structuredClone(state);
+  s.boosts[id] = on ? s.time + BOOST_CAP_SECONDS : 0;
+  return s;
+}
+
+/** The most hours a setup may say the player was away: past the offline cap, to test it. */
+export const MAX_AWAY_HOURS = 24;
+
+/** `hours` away, in seconds. */
+export function awaySeconds(hours: number): number {
+  return whole(hours, 1, MAX_AWAY_HOURS, 'hours away') * 3600;
 }
 
 export function freshRun(seed: number, path: PathId): GameState {
@@ -253,15 +398,36 @@ export interface DebugStep {
   dropped: boolean;
 }
 
-/** Plays `dt` seconds at `speed`, then forces a drop on a kill if `forceDrop` is armed. */
+/** Longest stretch played between HP refills while HP is kept full, in sim seconds. */
+export const KEEP_HP_STEP = 0.1;
+/** Most refills in one step, so a long step (a throttled tab) stays cheap. */
+const MAX_KEEP_HP_STEPS = 1000;
+
+/**
+ * `seconds` of play; with `keepHp`, in short stretches each started at full
+ * HP, so only a hit bigger than max HP can still end a fight.
+ */
+function play(state: GameState, seconds: number, keepHp: boolean): GameState {
+  if (!keepHp) return tick(state, seconds);
+  const n = Math.min(MAX_KEEP_HP_STEPS, Math.max(1, Math.ceil(seconds / KEEP_HP_STEP)));
+  let s = state;
+  for (let i = 0; i < n; i++) s = tick(setHp(s, 'full'), seconds / n);
+  return s;
+}
+
+/**
+ * Plays `dt` seconds at `speed` (HP kept full with `keepHp`), then forces a
+ * drop on a kill if `forceDrop` is armed.
+ */
 export function debugStep(
   state: GameState,
   dt: number,
   speed: number,
   forceDrop: boolean,
+  keepHp = false,
 ): DebugStep {
-  const next = tick(state, dt * speed);
-  const cheated = speed > 1;
+  const next = play(state, dt * speed, keepHp);
+  const cheated = speed > 1 || keepHp;
   if (!forceDrop) return { state: next, cheated, dropped: false };
   const forced = dropOnKill(state, next);
   if (!forced) return { state: next, cheated, dropped: false };
@@ -332,10 +498,27 @@ export const SCENARIOS = {
   tribulationDue: skipToTribulation,
   /** The same, set aside after three losses. */
   tribulationPaused: setTribulationAside,
+  /** The same, one loss before it is set aside. */
+  tribulationLastTry: (s: GameState) => setTrialLosses(s, TRIAL_LOSS_LIMIT - 1),
+  /** This floor's elite next, at full HP and qi. */
+  eliteFight: (s: GameState) => setQi(setHp(jumpToFight(s, 'elite', s.floor), 'full'), 'full'),
+  /** This floor's boss next, at full HP and qi. */
+  bossFight: (s: GameState) => setQi(setHp(jumpToFight(s, 'boss', s.floor), 'full'), 'full'),
+  /** This floor's boss next, at full HP and no qi, for skills held back or out of reach. */
+  lowQi: (s: GameState) => setQi(setHp(jumpToFight(s, 'boss', s.floor), 'full'), 0),
+  /** Back after eight hours away (the panel saves it as written that long ago). */
+  offline8h: (s: GameState) => s,
+  /** Far enough up the tower for Early Retirement to pay Dao Insight. */
+  retireReady,
 } satisfies Record<string, (s: GameState) => GameState>;
 
 export type ScenarioId = keyof typeof SCENARIOS;
 export const SCENARIO_IDS = Object.keys(SCENARIOS) as ScenarioId[];
+
+/** How long ago a named setup is saved as written, in seconds; 0 for most. */
+export function scenarioAway(id: ScenarioId): number {
+  return id === 'offline8h' ? 8 * 3600 : 0;
+}
 
 /** The named setup `id`, from the allow-list only (never an inherited name such as `constructor`). */
 export function scenarioFor(id: unknown): (s: GameState) => GameState {
