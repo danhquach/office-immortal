@@ -24,7 +24,7 @@ import {
   MAX_BAG_SIZE,
   pickUp,
 } from '../core/economy.ts';
-import type { EnemyKind } from '../core/floors.ts';
+import { maxQi, type EnemyKind } from '../core/floors.ts';
 import {
   ARRAY_IDS,
   EQUIP_SLOTS,
@@ -486,6 +486,14 @@ export const SCENARIOS = {
         ),
       s,
     ),
+  /** A fresh floor's elite and boss in front, qi full, so each casts its skills at once. */
+  skilledFoes: (s: GameState) => {
+    const x = restartFloor(s);
+    x.enemies = x.enemies
+      .filter((e) => e.kind === 'elite' || e.kind === 'boss')
+      .map((e) => ({ ...e, qi: maxQi(e.kind) }));
+    return x;
+  },
   /** The next realm's Tribulation due. */
   tribulationDue: skipToTribulation,
   /** The same, set aside after three losses. */

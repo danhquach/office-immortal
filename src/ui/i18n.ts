@@ -123,8 +123,6 @@ export interface NamePart {
   readonly text: string;
   /** Set on the tier unit only. */
   readonly tier?: EnemyTier;
-  /** Set on the skill an enemy winds up, shown in its name's place. */
-  readonly windUp?: true;
 }
 
 /**
@@ -140,14 +138,9 @@ export function enemyNameParts(kind: string, name: string): readonly NamePart[] 
   return [{ text: t('enemy.tier.wrap', { tier: t(TIER_KEYS[tier]) }), tier }, named];
 }
 
-/**
- * An enemy's name line while it winds up a skill: the tier unit stays, the
- * skill's name ("Paper Jam…") takes the name's place.
- */
-export function windUpNameParts(kind: string, name: string, skill: string): readonly NamePart[] {
-  const parts = enemyNameParts(kind, name);
-  const cast: NamePart = { text: t('strip.windUp', { name: tn('skill', skill) }), windUp: true };
-  return [...parts.slice(0, -1), cast];
+/** What an enemy yells in its bubble while it winds up a skill, e.g. "Paper-Binding Seal!". */
+export function yellText(skill: string): string {
+  return t('strip.yell', { name: tn('skill', skill) });
 }
 
 /**
@@ -158,7 +151,7 @@ export function nameSpans(
   parts: readonly NamePart[],
 ): readonly { readonly className: string; readonly text: string }[] {
   return parts.map((p) => ({
-    className: p.tier ? `enemy-tier enemy-tier--${p.tier}` : p.windUp ? 'wind-up' : '',
+    className: p.tier ? `enemy-tier enemy-tier--${p.tier}` : '',
     text: p.text,
   }));
 }

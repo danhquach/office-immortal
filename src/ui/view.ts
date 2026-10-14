@@ -1235,7 +1235,7 @@ const EFFECT_CALLOUTS: Readonly<Record<EffectNote, MessageKey>> = {
 /**
  * The callouts to float between two states: a skill's name over its caster
  * as it lands, an effect's word over the fighter it hit. An enemy starting a
- * wind-up floats nothing: its name line says it (windUpOf).
+ * wind-up floats nothing: its yell bubble says it (windUpOf).
  */
 export function castCallouts(prev: GameState, next: GameState): Callout[] {
   // After a long step (a throttled tab), only the latest ones: older ones are over.

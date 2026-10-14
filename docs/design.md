@@ -210,7 +210,8 @@ The realm name is primary; the job title is shown beside it.
 - **A pause between fights:** after a kill or a loss, neither side attacks
   for 1.2 s, so the fallen one's death plays out before the next fight.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer
-  Golem, Reply-All Swarm.
+  Golem, Reply-All Swarm. Elites and bosses cast skills (§5 Elite and boss
+  skills); regular demons don't.
 
 ### Qi and skills
 
@@ -241,16 +242,16 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi regen/s.
-- **Follow-ups:** elite and boss skills, a signature skill for each
-  Tribulation, a skill bar on the strip, and skills on the Stats tab,
-  breakthrough banner, Path choice, Realm chip and Help. Each has its own
-  ticket. The Path skills are in (§5 Path skills).
+- **Follow-ups:** a signature skill for each Tribulation, a skill bar on the
+  strip, and skills on the Stats tab, breakthrough banner, Path choice, Realm
+  chip and Help. Each has its own ticket. The Path skills and the elite and
+  boss skills are in (§5 Path skills, §5 Elite and boss skills).
 
 ### Skills
 
 The engine that spends qi, shared by the cultivator and enemies. The
 simulation casts every skill itself, so offline play casts as live play does.
-The Path skills (below) are the first to plug into it; the elite, boss and
+The Path skills and the elite and boss skills (below) plug into it; the
 Tribulation skills follow.
 
 - **A skill** has a qi cost, an optional cooldown, a kind (damage, defensive
@@ -334,12 +335,19 @@ Tribulation skills follow.
 - **On the strip:** the skill's name floats over its caster as it lands, in
   the tier gold, with the attack pose as the cast pose; an effect's word
   ("Stunned", "Silenced", "Shielded", "Interrupted") floats over the fighter it
-  hit. While an enemy winds up, its name line shows the skill ("Paper Jam…",
-  one line, cut with an ellipsis if it must be) and a gold cast bar fills over
-  its qi bar, so the strip never changes height; the rank badge and tier label
-  stay. Reduced motion shows the text in place with no rise and the bar with
-  no glide. Discreet hides callouts and cast bars, and the Mini view leaves
-  callouts out. Screen readers are not told about each cast.
+  hit. While an enemy winds up, it yells the skill in a gold speech bubble
+  ("Paper-Binding Seal!") at the top of the stage, its right edge on the
+  enemy's sprite and its tail pointing down at it, and a gold cast bar fills over its
+  qi bar. The bubble wraps to 2 lines at most, so the longest name fits a
+  320 px phone whole; it is sized against the stage's zoom so it reads at the
+  callouts' full size. Where names and HP are drawn over the stage (short
+  screens) it starts just under them, and when it can't fit above the enemy
+  it sits on the enemy's left instead, tail pointing right, so it never covers
+  the enemy or its name. The name line keeps the enemy's name, so
+  the strip never changes height. Reduced motion shows the text in place with
+  no rise or pop and the bar with no glide. Discreet hides callouts, bubbles
+  and cast bars, and the Mini view leaves callouts and bubbles out. Screen
+  readers are not told about each cast.
 
 ### Path skills
 
@@ -396,6 +404,42 @@ every combat event and never saved. A Path change or a Reincarnation (level
 1, Qi Condensation) has the right skills at once, and an older save loads
 with the skills for its Path and realm. A skill's name floats over the
 cultivator as it lands (§5 Skills), in the player's language.
+
+### Elite and boss skills
+
+An elite has one skill, from the demon it is a variant of; a boss has two;
+regular demons have none. Every one winds up first (1 s unless listed), so
+the cultivator's defensive and stun skills can answer it. Enemy skill damage
+is a share of the enemy's normal hit, through the cultivator's defence; it
+never crits.
+
+| Enemy | Skill | Qi | Cooldown | Effect | Uses it when |
+|---|---|---|---|---|---|
+| Elite Deadline Fiend | Deadline Frenzy Art | 40 | — | +50% attack speed for 5 s | whenever ready, not while it runs |
+| Elite Inbox Hydra | Ten Thousand Unread Scrolls | 40 | — | 3 hits at 60% | whenever ready |
+| Elite Meeting Wraith | Endless Meeting Domain | 40 | 10 s | the cultivator attacks 30% slower for 5 s | whenever ready |
+| Elite Printer Golem | Paper-Binding Seal | 45 | 8 s | stuns the cultivator 1.5 s | whenever ready |
+| Elite Reply-All Swarm | Thousand Echo Reply Array | 40 | — | 5 hits at 30%, one more each cast that fight | whenever ready |
+| Quarterly Review | Quarterly Judgement Palm | 60 | — | one hit at 250%, 2.5 s wind-up | whenever ready |
+| Quarterly Review | Meridian-Sealing Review | 40 | 12 s | the cultivator's damage −25% for 6 s | whenever ready |
+| The Auditor | Qi Confiscation Palm | 50 | — | takes 50 of the cultivator's qi, then a hit at 100% | the cultivator holds 25 qi or more |
+| The Auditor | Golden Ledger Body (defensive) | 40 | 10 s | takes 50% less damage for 5 s | HP at or below 60% (rule 3), not while it runs |
+| Middle Manager | Burden-Shifting Mirror | 40 | 10 s | reflects 30% of damage taken for 5 s | whenever ready, not while it runs |
+| Middle Manager | Heavenly Oversight Seal | 50 | 12 s | silences the cultivator (no skills) for 4 s | the cultivator's qi at 90% of its max or more |
+
+- **Picking:** the shared rules apply (§5 Skills): the costliest skill it may
+  cast, a damage skill held when its next normal hit kills, Golden Ledger Body
+  waiting for low HP. A debuff's cooldown outlasts it, so it is never cast
+  over one still running.
+- **Thousand Echo Reply Array** counts every cast from its wind-up, an
+  interrupted one too; the count starts again each fight.
+- **Balance:** the Path balance test (§3) plays with these skills on; the
+  floor ratios across Paths are 1.127 at 10 min and 1.112 at 60 min, so no
+  numbers moved.
+- **Names** are yelled in the wind-up bubble and float as the skill lands, in
+  the player's language (EN and VI) (§5 Skills). Every one, EN and VI, fits
+  the bubble whole within 2 lines at 320 px, 375 px, 479 px, 960 x 640 and
+  1280 px.
 
 ## 6. Loot
 
