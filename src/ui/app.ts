@@ -251,7 +251,9 @@ import {
   realmMist,
   realmBoost,
   realmBoostTip,
-  realmRows,
+  nearRealmRows,
+  pathCell,
+  realmName,
   retireLabel,
   SUMMARY_ICONS,
   summaryIcon,
@@ -1408,6 +1410,34 @@ function kpi(
   return { box, icon, value };
 }
 
+/**
+ * A summary chip's tip with id `id`: its label and value, which a narrow chip
+ * column hides behind the icon (page.css). Opens on hover, focus or a tap,
+ * only while the label is hidden; `refresh` redraws it while open. The chip's
+ * own text says the same, so it is not described twice.
+ */
+function kpiTip(
+  chip: { box: HTMLElement; value: HTMLElement },
+  label: MessageKey,
+  id: string,
+): { refresh: () => void } {
+  chip.box.tabIndex = 0;
+  const tip = el('p', 'boost-tip');
+  tip.id = id;
+  const fill = (): void =>
+    setText(tip, t('kpi.tip', { label: t(label), value: chip.value.textContent ?? '' }));
+  const name = chip.box.querySelector('.label');
+  // page.css hides the label by taking it out of the flow.
+  const hidden = (): boolean => !!name && getComputedStyle(name).position === 'absolute';
+  const { isOpen } = hoverTip(chip.box, tip, fill, hidden);
+  chip.box.removeAttribute('aria-describedby');
+  return {
+    refresh: () => {
+      if (isOpen()) fill();
+    },
+  };
+}
+
 /** A stat tip's parts, one line each; a part with nothing to say is left out. */
 function fillStatTip(
   box: HTMLElement,
@@ -1425,12 +1455,14 @@ function fillStatTip(
  * bottom) on hover or keyboard focus, and on a tap through the focus it
  * leaves; it closes when the pointer has
  * left and the anchor has no keyboard focus, on blur after a tap, on Escape,
- * or on a resize or scroll. `fill` draws it just before it opens.
+ * or on a resize or scroll. `fill` draws it just before it opens; `wanted`,
+ * when given, says whether it may open at all.
  */
 function hoverTip(
   anchor: HTMLElement,
   tip: HTMLElement,
   fill: () => void,
+  wanted: () => boolean = () => true,
 ): { isOpen: () => boolean } {
   tip.setAttribute('role', 'tooltip');
   // A panel can clip what spills out, so the tip opens in the top layer.
@@ -1440,7 +1472,7 @@ function hoverTip(
   let hovered = false;
   const isOpen = (): boolean => tip.matches(':popover-open');
   function show(): void {
-    if (isOpen()) return;
+    if (isOpen() || !wanted()) return;
     fill();
     tip.showPopover();
     const r = anchor.getBoundingClientRect();
@@ -1507,7 +1539,7 @@ function realmList(
   function fill(): void {
     shown = key();
     list.replaceChildren(
-      ...realmRows(level(), path()).map((row) => {
+      ...nearRealmRows(level(), path()).map((row) => {
         const li = el('li', row.current ? 'current' : '');
         if (row.current) li.setAttribute('aria-current', 'true');
         // The spaces keep a screen reader's words apart; the grid drops them.
@@ -2096,10 +2128,15 @@ function play(
   strip.append(where, trialCall, stage, fighters, xp);
   let zone = '';
 
-  // Summary chips, one line each
+  // Summary chips: Path and Realm a row each, then Spirit Stones and Essence
+  // side by side, then the boosts; a narrow column shows icons (page.css)
   const kpis = el('section', 'kpis');
   attr(kpis, 'aria-label', 'kpi.label');
   const kPath = kpi('kpi.path');
+  // The Path's first skill stands for it, so a narrow chip still says which.
+  const pathIcon = skillIcon(pathCell(state.cultivator.path));
+  pathIcon.classList.add('kpi-skill');
+  kPath.box.prepend(pathIcon);
   const kRealm = kpi('kpi.realm', summaryIcon('realm', state.cultivator.level));
   const kStones = kpi('kpi.stones', summaryIcon('stones'));
   const kEssence = kpi('kpi.essence', summaryIcon('essence'));
@@ -2133,7 +2170,14 @@ function play(
     box.removeAttribute('aria-describedby');
     return { id, box, full, percent, word, tip, isOpen, fillTip };
   });
+  kPath.box.classList.add('wide');
+  kRealm.box.classList.add('wide');
   kpis.append(kPath.box, kRealm.box, kStones.box, kEssence.box, boostRow);
+  const kpiTips = [
+    kpiTip(kPath, 'kpi.path', 'kpi-tip-path'),
+    kpiTip(kStones, 'kpi.stones', 'kpi-tip-stones'),
+    kpiTip(kEssence, 'kpi.essence', 'kpi-tip-essence'),
+  ];
   const realms = realmList(
     kRealm.box,
     () => state.cultivator.level,
@@ -3074,7 +3118,7 @@ function play(
   rebalance.append(rebalanceTitle, rebalanceRow);
   rebalance.hidden = !state.freeReset;
   game.append(rebalance);
-  // Beside the strip: the summary chips over Recent drops; the two share a row.
+  // Beside the strip: the summary chips, and Recent drops to their right.
   const beside = el('div', 'beside');
   beside.append(kpis, log.box);
   const top = el('div', 'top');
@@ -3806,7 +3850,9 @@ function play(
   function drawSummary(): void {
     const c = state.cultivator;
     kPath.value.textContent = tn('path', PATHS[c.path].name);
-    kRealm.value.textContent = realmLabel(c.level);
+    pathIcon.style.setProperty('--cell', String(pathCell(c.path)));
+    kRealm.value.textContent = realmName(c.level);
+    for (const tip of kpiTips) tip.refresh();
     realms.refresh();
     // A breakthrough swaps the realm's icon.
     const icon = summaryIcon('realm', c.level);
@@ -4534,6 +4580,7 @@ function play(
     const c = state.cultivator;
     kStones.value.textContent = String(state.stones);
     kEssence.value.textContent = String(state.essence);
+    for (const tip of kpiTips) tip.refresh();
 
     const bag = bagCost(state);
     setButton(
