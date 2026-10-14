@@ -13,6 +13,7 @@ import {
   BAG_ROW,
   INVENTORY_SIZE,
   MAX_BAG_SIZE,
+  changePath,
   refineCost,
   rerollCost,
   spendPoints,
@@ -22,6 +23,7 @@ import {
   equip,
   faceTribulation,
   newGame,
+  retire,
   setAutoTribulation,
   tick,
   TRIAL_RETRY_SECONDS,
@@ -110,11 +112,17 @@ import {
   yelledSkills,
   lightningStrikes,
   windUpOf,
+  skillBar,
+  skillEffect,
+  SKILL_FLASH_SECONDS,
+  skillLabel,
+  skillTip,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
 import { DEFAULT_LANG, PACKS, setLang, t, tn, yellText } from './i18n.ts';
 import { pathSkills } from '../core/path-skills.ts';
 import { setDiscreet } from './discreet.ts';
+import { MAX_LEVEL } from '../storage/save.ts';
 import { freshCombat, note } from '../core/skills.ts';
 import { xpToNext } from '../core/cultivator.ts';
 import { noPassives, type RetirePreview } from '../core/prestige.ts';
@@ -2475,5 +2483,206 @@ describe('skill callouts', () => {
     expect(windUpOf(s)).toEqual({ skill: 'Paper Jam', progress: 0.25 });
     s.time = 12;
     expect(windUpOf(s)?.progress).toBe(1);
+  });
+});
+
+describe('skill bar', () => {
+  afterEach(() => setLang(DEFAULT_LANG));
+
+  /** A sword cultivator at `level`, with `qi` qi, at sim time 100. */
+  function at(level: number, qi: number, path: PathId = 'sword'): GameState {
+    const s = newGame(3, path);
+    s.cultivator.level = level;
+    s.cultivator.qi = qi;
+    s.time = 100;
+    return s;
+  }
+
+  it("shows the Path's skills for its realm, in learned order, and follows every change at once", () => {
+    const s = at(1, 0);
+    expect(skillBar(s).map((k) => k.name)).toEqual(['Flying Sword']);
+    // A breakthrough to Foundation Establishment adds Sword Intent.
+    s.cultivator.level = realmLevels(1).from;
+    expect(skillBar(s).map((k) => k.name)).toEqual(['Flying Sword', 'Sword Intent']);
+    // A Path change swaps the whole row for the same realm.
+    s.cultivator.level = realmLevels(3).from;
+    s.stones = 1e9;
+    expect(skillBar(changePath(s, 'talisman')).map((k) => k.id)).toEqual([
+      'fireTalisman',
+      'thunderTalisman',
+      'spiritShield',
+    ]);
+    // A Reincarnation starts again with the first skill.
+    const late = at(150, 0, 'body');
+    late.highestFloor = late.floor = 40;
+    expect(skillBar(late)).toHaveLength(4);
+    expect(skillBar(retire(late)).map((k) => k.id)).toEqual(['ironSkin']);
+  });
+
+  it('fills toward the qi cost and glows once the qi is there', () => {
+    const [half] = skillBar(at(1, 15));
+    expect(half).toMatchObject({ qi: 30, fill: 0.5, ready: false, state: 'charging' });
+    const [full] = skillBar(at(1, 30));
+    expect(full).toMatchObject({ fill: 1, ready: true, blocked: false, state: 'ready' });
+    const [over] = skillBar(at(1, 99));
+    expect(over?.fill).toBe(1);
+  });
+
+  it('greys out with a lock while silenced or stunned, qi or not', () => {
+    for (const block of ['silenceUntil', 'stunUntil'] as const) {
+      const s = at(realmLevels(1).from, 100);
+      s.combat.you[block] = s.time + 2;
+      const bar = skillBar(s);
+      expect(bar.every((k) => k.blocked && !k.ready && k.state === 'blocked')).toBe(true);
+      // Once it runs out, the skills are back.
+      s.combat.you[block] = s.time;
+      expect(skillBar(s).every((k) => k.ready)).toBe(true);
+    }
+  });
+
+  it("wears a ring for what is left of the buff or shield a skill put up, and none for another's", () => {
+    const s = at(realmLevels(1).from, 0);
+    // Sword Intent: +40% attack speed for 6 s, 3 s left.
+    s.combat.you.mods.push({
+      stat: 'attackSpeed',
+      amount: 0.4,
+      until: s.time + 3,
+      source: 'swordIntent',
+    });
+    // The same stat from something else is not its buff.
+    s.combat.you.mods.push({
+      stat: 'attackSpeed',
+      amount: 0.4,
+      until: s.time + 6,
+      source: 'other',
+    });
+    expect(skillBar(s).map((k) => [k.id, k.ring])).toEqual([
+      ['flyingSword', 0],
+      ['swordIntent', 0.5],
+    ]);
+    // Run out: no ring.
+    s.time += 3;
+    expect(skillBar(s)[1]?.ring).toBe(0);
+
+    const shield = at(realmLevels(2).from, 0, 'talisman');
+    shield.combat.you.shield = 50;
+    shield.combat.you.shieldUntil = shield.time + 2;
+    expect(skillBar(shield).find((k) => k.id === 'spiritShield')?.ring).toBe(0.25);
+    // A broken shield is gone, whatever time it had left.
+    shield.combat.you.shield = 0;
+    expect(skillBar(shield).find((k) => k.id === 'spiritShield')?.ring).toBe(0);
+
+    const step = at(realmLevels(3).from, 0);
+    step.combat.you.evades = 1;
+    expect(skillBar(step).find((k) => k.id === 'lightningStep')?.ring).toBe(0.5);
+
+    // Iron Skin's reflect alone (its defence buff dispelled) still shows.
+    const iron = at(realmLevels(2).from, 0, 'body');
+    iron.combat.you.reflect = 0.25;
+    iron.combat.you.reflectUntil = iron.time + 3;
+    expect(skillBar(iron).find((k) => k.id === 'ironSkin')?.ring).toBe(0.5);
+
+    const vajra = at(realmLevels(5).from, 0, 'body');
+    vajra.combat.you.endureUntil = vajra.time + 1;
+    expect(skillBar(vajra).find((k) => k.id === 'vajraBody')?.ring).toBe(0.25);
+  });
+
+  it('flashes for a moment after its own cast lands, keyed by the cast', () => {
+    const s = at(realmLevels(1).from, 0);
+    note(s.combat, { at: s.time - 0.1, who: 'you', skill: 'Sword Intent', windUp: false });
+    // An enemy casting a skill of the same name, or an effect, is not this skill's cast.
+    note(s.combat, { at: s.time, who: 'foe', skill: 'Flying Sword', windUp: false });
+    note(s.combat, { at: s.time, who: 'you', effect: 'shielded' });
+    const id = s.combat.nextNote - 3;
+    expect(skillBar(s).map((k) => k.flash)).toEqual([null, id]);
+    s.time += SKILL_FLASH_SECONDS;
+    expect(skillBar(s).map((k) => k.flash)).toEqual([null, null]);
+  });
+
+  it('colours the border by level: green when learned, azure between, gold at the top', () => {
+    const tiers = (s: GameState) => skillBar(s).map((k) => [k.id, k.level, k.maxLevel, k.tier]);
+    expect(tiers(at(1, 0))).toEqual([['flyingSword', 1, 3, 'base']]);
+    expect(tiers(at(realmLevels(2).from, 0))).toEqual([
+      ['flyingSword', 2, 3, 'mid'],
+      ['swordIntent', 1, 3, 'base'],
+    ]);
+    // A 2-level skill goes straight from green to gold.
+    expect(tiers(at(realmLevels(6).from, 0)).find(([id]) => id === 'lightningStep')).toEqual([
+      'lightningStep',
+      2,
+      2,
+      'max',
+    ]);
+    // A skill that becomes something new shows its own icon, at the top level.
+    const palm = skillBar(at(realmLevels(9).from, 0, 'body')).find((k) => k.id === 'mountainFist');
+    expect(palm).toMatchObject({ name: 'Mountain-Toppling Palm', cell: 6, tier: 'max' });
+    const fist = skillBar(at(realmLevels(1).from, 0, 'body')).find((k) => k.id === 'mountainFist');
+    expect(fist?.cell).toBe(5);
+  });
+
+  it('names each icon with its level and state, in each language', () => {
+    const s = at(realmLevels(2).from, 30);
+    expect(skillBar(s).map(skillLabel)).toEqual([
+      'Flying Sword, Level 2 / 3: ready',
+      'Sword Intent, Level 1 / 3: charging',
+    ]);
+    s.combat.you.silenceUntil = s.time + 1;
+    expect(skillLabel(skillBar(s)[0]!)).toBe('Flying Sword, Level 2 / 3: blocked');
+    setLang('vi');
+    expect(skillLabel(skillBar(s)[0]!)).toBe('Phi Kiếm, Cấp 2 / 3: bị phong ấn');
+  });
+
+  it("tips the name, level, qi cost and the effect at the skill's rank", () => {
+    const s = at(realmLevels(9).from, 0, 'talisman');
+    const tips = skillBar(s).map((k) => skillTip(k, s));
+    expect(tips[0]).toEqual({
+      name: 'Fire Talisman',
+      level: 'Level 3 / 3',
+      cost: '20 qi',
+      effect: '220% damage, burns for 50% over 3 s, burns stack (up to 3)',
+    });
+    expect(tips[1]?.effect).toBe('200% to the whole wave');
+    expect(tips[3]?.effect).toBe("Steals all the enemy's qi, silences it for 8 s");
+  });
+
+  it('keeps every number in range at the limits a save allows', () => {
+    for (const path of ['sword', 'body', 'talisman'] as const) {
+      for (const level of [1, MAX_LEVEL]) {
+        for (const qi of [0, derive(newCultivator(path)).maxQi, 1e6]) {
+          const s = at(level, qi, path);
+          for (const k of skillBar(s)) {
+            expect(k.fill).toBeGreaterThanOrEqual(0);
+            expect(k.fill).toBeLessThanOrEqual(1);
+            expect(k.ring).toBeGreaterThanOrEqual(0);
+            expect(k.ring).toBeLessThanOrEqual(1);
+            expect(k.cell).toBeGreaterThanOrEqual(0);
+            expect(k.level).toBeLessThanOrEqual(k.maxLevel);
+          }
+        }
+      }
+    }
+  });
+
+  it('says every Path skill at every rank in words, in each language, with no gaps', () => {
+    for (const pack of PACKS) {
+      setLang(pack.code);
+      for (const path of ['sword', 'body', 'talisman'] as const) {
+        for (let realm = 0; realm < REALMS.length; realm += 1) {
+          for (const def of pathSkills(path, realm)) {
+            const text = skillEffect(def);
+            expect(text, `${pack.code} ${def.name}`).not.toMatch(/\{|undefined|NaN|Infinity/);
+            expect(text.length).toBeGreaterThan(5);
+          }
+        }
+      }
+    }
+    setLang('en');
+    expect(skillEffect(pathSkills('sword', 9).find((k) => k.id === 'tenThousandSwords')!)).toBe(
+      '8 × 100% damage, ×2 on an enemy below 30% HP',
+    );
+    expect(skillEffect(pathSkills('body', 6).find((k) => k.id === 'bloodQiSurge')!)).toBe(
+      'Heals 25% of max HP, ×2 Lifesteal for 6 s',
+    );
+    expect(skillEffect(pathSkills('sword', 0)[0]!)).toBe('250% damage, always a crit');
   });
 });

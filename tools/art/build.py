@@ -11,6 +11,7 @@ Outputs: src/assets/art/*.png (shipped).
   python3 tools/art/build.py <id>...       # build only these
   python3 tools/art/build.py summary       # build only the summary chip icons
   python3 tools/art/build.py ranks         # build only the enemy rank badges
+  python3 tools/art/build.py skills        # build only the skill bar icons
   python3 tools/art/build.py icons:<id>... # rebuild only these icon columns,
                                            # keeping every other column of the
                                            # shipped atlas as it is
@@ -53,6 +54,11 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               ranked enemy's name in the compact strip, in the order page.css
               expects (elite, boss, tribulation), built the same way into
               ranks.png. Build them alone with `ranks`.
+  skills      id*, source*, seed, prompt: the Path skills' icons for the strip's
+              skill bar, one per skill name in the order path-skills.ts lists
+              them (PATH_SKILL_NAMES), built the same way into skills.png;
+              shadow (also drop a dark magenta drop shadow under the frame).
+              Build them alone with `skills`.
 """
 
 import json
@@ -473,10 +479,13 @@ def pair_of(boot: Image.Image) -> Image.Image:
     return out
 
 
-def smooth_icon(path: Path, n: int, pair: bool, transparent: bool = False) -> Image.Image:
+def smooth_icon(
+    path: Path, n: int, pair: bool, transparent: bool = False, shadow: bool = False
+) -> Image.Image:
     """A generation cut out (or a render already on transparency) and fitted
-    into n x n, smoothly: no palette, no pixel grid."""
-    cut = Image.open(path).convert("RGBA") if transparent else cut_out(Image.open(path))
+    into n x n, smoothly: no palette, no pixel grid. `shadow` also drops dark
+    magenta drop shadows."""
+    cut = Image.open(path).convert("RGBA") if transparent else cut_out(Image.open(path), shadow=shadow)
     cut = cut.crop(cut.getbbox())
     if pair:
         cut = pair_of(cut)
@@ -548,7 +557,7 @@ def row_atlas(key: str) -> Image.Image:
     entries = MANIFEST[key]
     out = Image.new("RGBA", (cell * len(entries), cell), (0, 0, 0, 0))
     for c, e in enumerate(entries):
-        out.paste(smooth_icon(SRC / e["source"], cell, False), (c * cell, 0))
+        out.paste(smooth_icon(SRC / e["source"], cell, False, shadow=e.get("shadow", False)), (c * cell, 0))
         if out.crop((c * cell, 0, (c + 1) * cell, cell)).getbbox() is None:
             sys.exit(f"{key} {e['id']}: came out empty")
     return out
@@ -577,6 +586,7 @@ KNOBS = {
     "summary": {"id", "source", "seed", "prompt"},
     "store": {"id", "source", "seed", "prompt"},
     "ranks": {"id", "source", "seed", "prompt"},
+    "skills": {"id", "source", "seed", "prompt", "shadow"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -586,10 +596,11 @@ REQUIRED = {
     "summary": {"id", "source"},
     "store": {"id", "source"},
     "ranks": {"id", "source"},
+    "skills": {"id", "source"},
 }
 # Manifest rows built as one-row atlases of the same name (summary.png, store.png,
-# ranks.png).
-ROWS = ("summary", "store", "ranks")
+# ranks.png, skills.png).
+ROWS = ("summary", "store", "ranks", "skills")
 
 
 def check_manifest(builds=lambda kind, name: True) -> None:

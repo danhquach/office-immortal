@@ -242,11 +242,27 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi regen/s.
-- **Follow-ups:** a skill bar on the strip, and skills on the Stats tab,
-  breakthrough banner, Path choice, Realm chip and Help. Each has its own
-  ticket. The Path skills, the elite and boss skills and the Tribulation
-  skills are in (§5 Path skills, §5 Elite and boss skills, §5 Tribulation
-  skills).
+- **Skill bar:** the cultivator's skills (up to 4, learned order) as icons
+  on its side of the strip, beside the qi bar, spanning the qi and HP rows so
+  the strip keeps its height. Each icon fills as qi builds toward its cost
+  and glows once the qi is there and nothing blocks it (the sim may still
+  hold a ready skill for its "uses it when" rules: a defensive one waits for
+  low HP or a wind-up, a buff isn't cast again while it runs); it flashes
+  as its cast lands, and a ring inside it runs down while its buff or shield
+  lasts (dodges by count). While the cultivator is stunned or silenced every icon
+  greys out under a padlock. Its border shows its level: green when
+  learned, azure between, gold at its top level (a 2-level skill goes green
+  to gold); a skill that becomes something new (Mountain-Toppling Palm,
+  Heavenly Thunder Array) has its own icon. Hover, focus or tap opens a tip
+  with the name, "Level 2 / 3", the qi cost and the effect at that level,
+  worded from the skill's own numbers; screen readers hear the name, level
+  and ready, charging or blocked. Full and Narrow show it; under 720 px tall
+  the icons sit on the qi bar's row; under 480 px wide they take the name's
+  second line at 18 px; Mini shows HP bars only and Discreet hides the strip.
+- **Follow-ups:** skills on the Stats tab, breakthrough banner, Path choice,
+  Realm chip and Help. Each has its own ticket. The Path skills, the elite and
+  boss skills and the Tribulation skills are in (§5 Path skills, §5 Elite and
+  boss skills, §5 Tribulation skills).
 
 ### Skills
 
@@ -1397,6 +1413,12 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   qi, a red-tasselled jade charm, and a red envelope with spirit stones
   peeking out. Built by `python3 tools/art/build.py store` from the manifest's
   `store` row.
+- **Skill icons:** in the same style and size, one atlas row (`skills.png`),
+  one per skill name in `PATH_SKILL_NAMES` order (14: the renamed upgrades
+  have their own), each in a rounded metal frame in its Path's colour (Sword
+  azure and silver, Body bronze and gold, Talisman jade and gold), shown at
+  22 px on the strip. Built by `python3 tools/art/build.py skills` from the
+  manifest's `skills` row.
 - **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
   are worn.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies

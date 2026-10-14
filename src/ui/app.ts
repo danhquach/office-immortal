@@ -270,7 +270,11 @@ import {
   statRows,
   type StatGroup,
   type StatKind,
+  skillBar,
+  skillLabel,
+  skillTip,
   stripEvents,
+  type SkillIcon,
   castCallouts,
   CALLOUT_SECONDS,
   lightningStrikes,
@@ -1177,6 +1181,131 @@ function cssUrl(url: string): string {
   return url ? `url("${url}")` : '';
 }
 
+/** A padlock, drawn as SVG nodes (never markup); decorative, the icon's name says "blocked". */
+function padlock(): SVGSVGElement {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('class', 'lock');
+  const shackle = document.createElementNS(ns, 'path');
+  shackle.setAttribute('d', 'M5 7V5a3 3 0 0 1 6 0v2');
+  const body = document.createElementNS(ns, 'rect');
+  const box: [string, string][] = [
+    ['x', '3'],
+    ['y', '7'],
+    ['width', '10'],
+    ['height', '7.5'],
+    ['rx', '1.5'],
+  ];
+  for (const [k, v] of box) body.setAttribute(k, v);
+  svg.append(shackle, body);
+  return svg;
+}
+
+/** One icon of the skill bar; the bar reuses up to four of them. */
+interface SkillSlot {
+  box: HTMLElement;
+  tip: HTMLElement;
+  /** What it shows now, so a frame with the same skill and state touches nothing. */
+  icon: SkillIcon | null;
+  drawn: string;
+  /** Its accessible name as last set (skillLabel: name, level, state, in the language shown). */
+  label: string;
+  /** The cast it last flashed for; null once the flash is over. */
+  flashed: number | null;
+  isOpen: () => boolean;
+  fill: () => void;
+}
+
+/** The cultivator's skill bar: up to four icons beside its qi bar (docs/design.md §5 Skills). */
+function skillRow(read: () => GameState): { row: HTMLElement; slots: SkillSlot[] } {
+  const row = el('div', 'skills');
+  row.setAttribute('role', 'group');
+  attr(row, 'aria-label', 'skill.bar');
+  const slots = [0, 1, 2, 3].map((i): SkillSlot => {
+    const box = el('span', 'skill');
+    box.setAttribute('role', 'img');
+    box.tabIndex = 0;
+    box.hidden = true;
+    const art = el('span', 'art');
+    const charge = el('span', 'charge');
+    const ring = el('span', 'ring');
+    box.append(art, charge, ring, padlock());
+    row.append(box);
+    const tip = el('div', 'boost-tip skill-tip');
+    tip.id = `skill-tip-${i}`;
+    const slot: SkillSlot = {
+      box,
+      tip,
+      icon: null,
+      drawn: '',
+      label: '',
+      flashed: null,
+      isOpen: () => false,
+      fill: () => {
+        if (!slot.icon) return;
+        const info = skillTip(slot.icon, read());
+        tip.replaceChildren(
+          el('strong', '', info.name),
+          el('p', 'cost', `${info.level} · ${info.cost}`),
+          el('p', '', info.effect),
+        );
+      },
+    };
+    slot.isOpen = hoverTip(box, tip, slot.fill).isOpen;
+    return slot;
+  });
+  return { row, slots };
+}
+
+/** Draws the skill bar's icons for `icons`; only what changed is touched. */
+function drawSkills(slots: readonly SkillSlot[], icons: readonly SkillIcon[]): void {
+  const code = lang().code;
+  slots.forEach((slot, i) => {
+    const icon = icons[i] ?? null;
+    slot.icon = icon;
+    if (!icon) {
+      slot.box.hidden = true;
+      slot.drawn = '';
+      slot.label = '';
+      if (slot.isOpen()) slot.tip.hidePopover();
+      return;
+    }
+    // Fill and ring in steps of 1%, so a frame with no visible change touches nothing.
+    const fill = Math.round(icon.fill * 100);
+    const ring = Math.round(icon.ring * 100);
+    const key = [code, icon.name, icon.state, icon.tier, icon.level, fill, ring].join('\u0000');
+    if (key !== slot.drawn) {
+      slot.drawn = key;
+      const b = slot.box;
+      b.hidden = false;
+      b.style.setProperty('--cell', String(icon.cell));
+      b.style.setProperty('--fill', String(fill / 100));
+      b.style.setProperty('--ring', String(ring / 100));
+      b.dataset.tier = icon.tier;
+      b.classList.toggle('ready', icon.ready);
+      b.classList.toggle('blocked', icon.blocked);
+      b.classList.toggle('buffed', ring > 0);
+      // The name changes with the skill, its level or state, or the language;
+      // an open tip (name, level, cost, effect) is redrawn with it.
+      const label = skillLabel(icon);
+      if (label !== slot.label) {
+        slot.label = label;
+        b.setAttribute('aria-label', label);
+        if (slot.isOpen()) slot.fill();
+      }
+    }
+    if (icon.flash !== null && icon.flash !== slot.flashed) {
+      // Restarts the flash for each new cast, even one right after the last.
+      slot.box.classList.remove('flash');
+      void slot.box.offsetWidth;
+      slot.box.classList.add('flash');
+    }
+    slot.flashed = icon.flash;
+  });
+}
+
 /** Puts sheet `name` (frames `size` px square) on a fighter's sprite, if it changed. */
 function useSheet(f: StageSprite, name: string, size: number): void {
   if (f.sheet === name) return;
@@ -1820,6 +1949,10 @@ function play(
   where.append(floorText, killText, live);
   const you = fighter('you');
   const foe = fighter('foe');
+  // The cultivator's skill bar, beside its qi bar; skills.png holds the icons.
+  const skills = skillRow(() => state);
+  skills.row.style.setProperty('--skill-art', cssUrl(artUrl('skills')));
+  you.box.append(skills.row);
   // The stage: the zone's tiling background with both sprites on its floor.
   const stage = el('div', 'stage');
   // The enemy that just died plays its death here, behind the next one.
@@ -3189,6 +3322,7 @@ function play(
       stage.style.backgroundImage = cssUrl(artUrl(`bg-${z}`));
     }
     useSheet(you, `path-${c.path}`, SPRITE_SIZE.path);
+    drawSkills(skills.slots, skillBar(state));
     const call = tribulationCall(state);
     const pause = trialPause(state);
     trialCall.hidden = !call;

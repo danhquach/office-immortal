@@ -8,6 +8,7 @@ import {
   pathSkills,
   pathStep,
   PATH_SKILL_NAMES,
+  rankedPathSkills,
   SEAL_QI_SHARE,
   SURGE_HP_SHARE,
   VAJRA_HP_SHARE,
@@ -107,6 +108,26 @@ describe('what each Path learns, realm by realm', () => {
     expect(pathSkills('sword', 99)).toEqual(pathSkills('sword', 9));
     expect(pathSkills('sword', 2.7)).toEqual(pathSkills('sword', 2));
     expect(pathStep('sword', 10)).toBeNull();
+  });
+
+  it('ranks each known skill as the table does, in the same order as pathSkills', () => {
+    for (const path of PATH_IDS) {
+      for (let realm = 0; realm < REALMS.length; realm++) {
+        const ranked = rankedPathSkills(path, realm);
+        expect(ranked.map((k) => k.def)).toEqual(pathSkills(path, realm));
+        for (const { def, rank, maxRank } of ranked) {
+          // The rank is the number of table steps for this skill up to this realm.
+          const steps = TABLE[path].slice(0, realm + 1).filter(([id]) => id === def.id);
+          expect(rank).toBe(steps.length);
+          expect(maxRank).toBe(TABLE[path].filter(([id]) => id === def.id).length);
+        }
+      }
+    }
+    expect(rankedPathSkills('body', 9).find((k) => k.def.id === 'mountainFist')).toMatchObject({
+      rank: 3,
+      maxRank: 3,
+      def: { name: 'Mountain-Toppling Palm' },
+    });
   });
 
   it('names every skill once, renamed upgrades included, for the language packs', () => {
