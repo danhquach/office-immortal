@@ -10,6 +10,8 @@ export interface Enemy {
   kind: EnemyKind;
   maxHp: number;
   hp: number;
+  /** Qi held, 0 to maxQi(kind); a demon has none. */
+  qi: number;
   damage: number;
   defence: number;
   /** Seconds between attacks. */
@@ -73,6 +75,19 @@ const KINDS: Readonly<Record<EnemyKind, { hp: number; damage: number; xp: number
   tribulation: { hp: 8, damage: 2.5, xp: 0 },
 };
 
+/** Each kind's qi pool; regular demons have none (docs/design.md §5). */
+export const ENEMY_MAX_QI: Readonly<Record<EnemyKind, number>> = {
+  demon: 0,
+  elite: 60,
+  boss: 100,
+  tribulation: 150,
+};
+
+/** The qi pool of an enemy of `kind`. */
+export function maxQi(kind: EnemyKind): number {
+  return ENEMY_MAX_QI[kind];
+}
+
 export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
   const power = POWER_GROWTH ** (floor - 1);
   const k = KINDS[kind];
@@ -82,6 +97,7 @@ export function makeEnemy(floor: number, kind: EnemyKind, name: string): Enemy {
     kind,
     maxHp,
     hp: maxHp,
+    qi: 0,
     damage: 3 * power * k.damage,
     defence: 2 * (floor - 1),
     attackInterval: 2,

@@ -372,7 +372,7 @@ describe('statRows', () => {
     const rows = statRows(newCultivator('sword'));
     const by = (g: string) => rows.filter((r) => r.group === g).map((r) => r.short);
     expect(by('Offence')).toEqual(['Damage', 'Attacks/s', 'Crit chance', 'Crit damage']);
-    expect(by('Defence')).toEqual(['Max HP', 'Defence', 'Lifesteal', 'Qi regen']);
+    expect(by('Defence')).toEqual(['Max HP', 'Defence', 'Lifesteal', 'Max qi', 'Qi regen/s']);
     expect(by('Find')).toEqual(['Spirit stones', 'Treasure']);
     expect(rows.every((r) => (STAT_GROUPS as readonly string[]).includes(r.group))).toBe(true);
     expect(rows.find((r) => r.short === 'Treasure')?.label).toBe('Treasure find');

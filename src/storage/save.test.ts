@@ -32,6 +32,7 @@ import {
   equip,
   faceTribulation,
   newGame,
+  QI_TICK,
   retire,
   tick,
   type GameState,
@@ -62,6 +63,14 @@ function played(): GameState {
 
 const STATE = played();
 
+/** STATE as a save from before qi (v13) loads it: no qi, the regen step a second off. */
+const STATE_NO_QI: GameState = {
+  ...STATE,
+  qiNextAt: STATE.time + QI_TICK,
+  cultivator: { ...STATE.cultivator, qi: 0 },
+  enemies: STATE.enemies.map((e) => ({ ...e, qi: 0 })),
+};
+
 function memory(): SaveStorage & { data: Map<string, string> } {
   const data = new Map<string, string>();
   return {
@@ -88,8 +97,17 @@ function tampered(change: (save: ReturnType<typeof raw>) => void): unknown {
 type J = Record<string, unknown>;
 const cult = (s: ReturnType<typeof raw>) => s.state.cultivator as J;
 
+/** The save as versions before 13 wrote it: no qi and no qi timer. */
+function beforeQi(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  delete save.state.qiNextAt;
+  delete (save.state.cultivator as Record<string, unknown>).qi;
+  for (const e of save.state.enemies as Record<string, unknown>[]) delete e.qi;
+  return save;
+}
+
 /** The save as versions before 10 wrote it: no store and no boosts. */
 function beforeStore(save: ReturnType<typeof raw>): ReturnType<typeof raw> {
+  beforeQi(save);
   delete save.state.store;
   delete save.state.boosts;
   return save;
@@ -1222,6 +1240,116 @@ describe('rejects', () => {
     });
   });
 
+  describe('qi (v13)', () => {
+    const load = (s: ReturnType<typeof raw>) => decodeSave(JSON.stringify(s));
+    const maxQi = derive(STATE.cultivator).maxQi;
+    const foes = (s: ReturnType<typeof raw>) => s.state.enemies as J[];
+    /** The save with an elite in front, so an enemy with a pool is checked too. */
+    function withElite(): ReturnType<typeof raw> {
+      const save = raw();
+      const kinds = foes(save).map((e) => e.kind);
+      save.state.enemies = foes(save).slice(kinds.indexOf('elite'));
+      return save;
+    }
+
+    it('round-trips qi and the regen step', () => {
+      const save = withElite();
+      cult(save).qi = maxQi;
+      (foes(save)[0] as J).qi = 60;
+      const loaded = load(save)?.state;
+      expect(loaded?.cultivator.qi).toBe(maxQi);
+      expect(loaded?.enemies[0]?.qi).toBe(60);
+      expect(loaded?.qiNextAt).toBe(STATE.qiNextAt);
+    });
+
+    it.each([
+      ['negative', -1],
+      ['past max qi', 1e9],
+      ['text', '50'],
+      ['null', null],
+      ['an object', { valueOf: 5 }],
+      ['an array', [5]],
+    ])("rejects the cultivator's qi as %s", (_what, qi) => {
+      expect(tampered((save) => (cult(save).qi = qi))).toBeNull();
+    });
+
+    it("rejects an enemy's qi past its kind's pool, and any qi on a demon", () => {
+      const elite = withElite();
+      (foes(elite)[0] as J).qi = 61;
+      expect(load(elite)).toBeNull();
+      const demon = raw();
+      expect(foes(demon)[0]?.kind).toBe('demon');
+      (foes(demon)[0] as J).qi = 0.5;
+      expect(load(demon)).toBeNull();
+      expect(tampered((save) => ((foes(save)[0] as J).qi = -1))).toBeNull();
+    });
+
+    it('rejects a regen step in the past or more than a second off', () => {
+      expect(tampered((save) => (save.state.qiNextAt = STATE.time - 1))).toBeNull();
+      expect(tampered((save) => (save.state.qiNextAt = STATE.time + 1.5))).toBeNull();
+      expect(tampered((save) => (save.state.qiNextAt = '1'))).toBeNull();
+    });
+
+    it('rejects a save missing a qi field, and a v11 save that has one', () => {
+      expect(tampered((save) => delete cult(save).qi)).toBeNull();
+      expect(tampered((save) => delete save.state.qiNextAt)).toBeNull();
+      expect(tampered((save) => delete (foes(save)[0] as J).qi)).toBeNull();
+      const old = raw();
+      old.v = 11;
+      expect(load(old)).toBeNull();
+    });
+
+    it('loads a v11 save with no qi and the next step a second away', () => {
+      const old = beforeQi(raw());
+      old.v = 11;
+      expect(load(old)?.state).toEqual(STATE_NO_QI);
+    });
+
+    it.each([
+      ['text', '0'],
+      ['null', null],
+      ['an object', { valueOf: 0 }],
+      ['an array', [0]],
+    ])("rejects an enemy's qi as %s", (_what, qi) => {
+      const save = withElite();
+      (foes(save)[0] as J).qi = qi;
+      expect(load(save)).toBeNull();
+    });
+
+    it.each([null, {}, [1], true])('rejects the regen step as %j', (at) => {
+      expect(tampered((save) => (save.state.qiNextAt = at))).toBeNull();
+    });
+
+    it('rejects qi that JSON reads as Infinity', () => {
+      const text = JSON.stringify(withElite());
+      const enemies = text.indexOf('"enemies"');
+      const inEnemy = text.slice(0, enemies) + text.slice(enemies).replace(/"qi":0/, '"qi":1e999');
+      for (const json of [
+        text.replace(/"qi":[\d.]+/, '"qi":1e999'),
+        text.replace(/"qiNextAt":[\d.]+/, '"qiNextAt":1e999'),
+        text.replace(/"qiNextAt":[\d.]+/, '"qiNextAt":-1e999'),
+        inEnemy,
+      ]) {
+        expect(json).toContain('1e999');
+        expect(decodeSave(json)).toBeNull();
+      }
+    });
+
+    it('never carries a __proto__ key on the cultivator or an enemy', () => {
+      const text = JSON.stringify(raw());
+      const enemies = text.indexOf('"enemies"');
+      const bad = '"__proto__":{"polluted":1},"qi":';
+      for (const json of [
+        text.replace('"qi":', bad),
+        text.slice(0, enemies) + text.slice(enemies).replace('"qi":', bad),
+      ]) {
+        expect(json).toContain('__proto__');
+        expect(decodeSave(json)).toBeNull();
+      }
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    });
+  });
+
   describe('Soul Banners', () => {
     const banner = (name = 'Hempen Soul Banner', grade = 'mortal'): Item => ({
       slot: 'sideArm',
@@ -1346,7 +1474,7 @@ describe('rejects', () => {
       const save = raw();
       save.v = 5;
       expect(load(save)).toBeNull();
-      expect(load(beforeBanners(save))?.state).toEqual({ ...STATE, souls: 0 });
+      expect(load(beforeBanners(save))?.state).toEqual({ ...STATE_NO_QI, souls: 0 });
     });
   });
 
@@ -1482,7 +1610,7 @@ describe('rejects', () => {
     it('loads, with the new fields at their defaults', () => {
       const loaded = decodeSave(v1());
       expect(loaded?.state).toEqual({
-        ...STATE,
+        ...STATE_NO_QI,
         bagSize: 40,
         stones: 0,
         essence: 0,
@@ -1555,7 +1683,7 @@ describe('Dao Insight and passives', () => {
     for (const k of ['insight', 'passives', 'retirements']) delete save.state[k];
     const loaded = decodeSave(JSON.stringify({ ...withPants(save), v: 2 }));
     expect(loaded?.state).toEqual({
-      ...STATE,
+      ...STATE_NO_QI,
       insight: 0,
       passives: noPassives(),
       retirements: 0,
@@ -2050,7 +2178,7 @@ describe('refine level (v8)', () => {
   it('loads a v7 save with no refine levels, and rejects one that has them', () => {
     const save = beforeStore(raw());
     save.v = 7;
-    expect(load(save)?.state).toEqual(STATE);
+    expect(load(save)?.state).toEqual(STATE_NO_QI);
     const old = beforeStore(withRefines(3));
     old.v = 7;
     expect(load(old)).toBeNull();
@@ -2207,7 +2335,7 @@ describe('older realm ladders (v9, v11)', () => {
     }
     const save = JSON.parse(encodeSave(s, SAVED_AT)) as ReturnType<typeof raw>;
     save.v = version;
-    return version === 8 ? beforeStore(save) : save;
+    return version === 8 ? beforeStore(save) : beforeQi(save);
   }
   const load8 = (save: ReturnType<typeof raw>) => decodeSave(JSON.stringify(save));
   const load10 = load8;

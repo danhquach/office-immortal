@@ -81,7 +81,8 @@ describe('derive', () => {
     };
   }
 
-  // Each affix moves exactly the Derived field it names, by its value.
+  // Each affix moves exactly the Derived field it names, by its value (Qi
+  // regen's as a share of the qi pool, so in qi per second).
   const ADDS: [AffixId, keyof Derived][] = [
     ['critChance', 'critChance'],
     ['critDamage', 'critMultiplier'],
@@ -101,7 +102,7 @@ describe('derive', () => {
     const before = derive(c);
     c.equipment.accessory1 = withAffix(id, 10);
     const after = derive(c);
-    const value = affixValue({ id, roll: 1 }, 10);
+    const value = affixValue({ id, roll: 1 }, 10) * (id === 'qiRegen' ? derive(c).maxQi : 1);
     expect(value).toBeGreaterThan(0);
     for (const k of Object.keys(before) as (keyof Derived)[]) {
       expect(after[k]).toBeCloseTo(before[k] + (k === field ? value : 0), 9);

@@ -563,6 +563,20 @@ describe('spending Spirit Stones', () => {
     expect(() => resetStats({ ...levelled, stones: cost - 1 })).toThrow(RangeError);
   });
 
+  it('keeps qi within max qi when a Path change or a stat reset shrinks it', () => {
+    const s = { ...game([], 1e9) };
+    const c = s.cultivator;
+    c.path = 'talisman';
+    c.stats = { body: BASE_STAT, agility: BASE_STAT, spirit: BASE_STAT + 200 };
+    c.qi = derive(c).maxQi;
+    const moved = changePath(s, 'body');
+    expect(moved.cultivator.qi).toBe(derive(moved.cultivator).maxQi);
+    expect(moved.cultivator.qi).toBeLessThan(c.qi);
+    const reset = resetStats(s);
+    expect(reset.cultivator.qi).toBe(derive(reset.cultivator).maxQi);
+    expect(reset.cultivator.qi).toBeLessThan(c.qi);
+  });
+
   it('spends only Spirit Stones, never Spirit Essence', () => {
     const s = { ...game([], 1e9), essence: 77 };
     expect(buyBagSpace(s).essence).toBe(77);

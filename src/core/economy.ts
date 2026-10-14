@@ -354,9 +354,11 @@ function unassign(c: Cultivator): void {
   c.unspent = total - STAT_IDS.length * BASE_STAT;
 }
 
-/** Max HP may have dropped; never sit above it. */
-function clampHp(c: Cultivator): void {
-  c.hp = Math.min(c.hp, derive(c).maxHp);
+/** Max HP and max qi may have dropped; never sit above them. */
+function clampPools(c: Cultivator): void {
+  const d = derive(c);
+  c.hp = Math.min(c.hp, d.maxHp);
+  c.qi = Math.min(c.qi, d.maxQi);
 }
 
 /** Switches Path; every stat point is re-spent on the new primary stat. */
@@ -369,7 +371,7 @@ export function changePath(state: GameState, path: PathId): GameState {
   unassign(c);
   c.stats[PATHS[path].primary] += c.unspent;
   c.unspent = 0;
-  clampHp(c);
+  clampPools(c);
   return s;
 }
 
@@ -383,7 +385,7 @@ export function resetStats(state: GameState): GameState {
   if (!canResetStats(state.cultivator)) throw new RangeError('resetStats: nothing to reset');
   const s = pay(state, 'stones', statResetCost(state.cultivator), 'resetStats');
   unassign(s.cultivator);
-  clampHp(s.cultivator);
+  clampPools(s.cultivator);
   return s;
 }
 
@@ -478,7 +480,7 @@ export function refine(state: GameState, at: ItemAt): GameState {
   mine.refines = Math.min(MAX_REFINES, (mine.refines ?? 0) + 1);
   // A refine only raises a stat, but HP is kept within the gear's max all the
   // same: the save refuses a cultivator above it.
-  clampHp(s.cultivator);
+  clampPools(s.cultivator);
   return s;
 }
 
@@ -501,6 +503,6 @@ export function rerollAffix(state: GameState, at: ItemAt, affixIndex: number): G
   if (!fresh) throw new Error('rerollAffix: nothing to draw');
   mine.affixes[affixIndex] = fresh;
   // A worn item can lose Max HP; never sit above the new max (as equip does).
-  clampHp(s.cultivator);
+  clampPools(s.cultivator);
   return s;
 }

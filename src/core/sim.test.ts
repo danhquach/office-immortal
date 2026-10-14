@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { derive, PATHS, readyForTribulation, xpToNext, type PathId } from './cultivator.ts';
-import { makeEnemy, makeTribulation, TRIBULATIONS, type EnemyKind } from './floors.ts';
+import {
+  BASE_MAX_QI,
+  derive,
+  effectiveStats,
+  MAX_QI_PER_SPIRIT,
+  PATHS,
+  QI_BASE_REGEN,
+  QI_PER_SPIRIT,
+  readyForTribulation,
+  xpToNext,
+  type PathId,
+} from './cultivator.ts';
+import {
+  ENEMY_MAX_QI,
+  makeEnemy,
+  makeTribulation,
+  TRIBULATIONS,
+  type EnemyKind,
+} from './floors.ts';
 import {
   arrayValue,
   equippedArray,
+  itemAffixValue,
   namesFor,
   slotsFor,
   SOUL_CAPS,
@@ -20,11 +38,17 @@ import {
   canFaceTribulation,
   characterStatus,
   ENEMY_ARRIVAL,
+  ENEMY_QI_PER_ATTACK,
+  ENEMY_QI_REGEN,
   equip,
   faceTribulation,
   mitigate,
   newGame,
+  QI_PER_ATTACK,
+  QI_PER_HIT_TAKEN,
+  QI_TICK,
   requiredRealm,
+  restartFloor,
   retire,
   tick,
   unequip,
@@ -77,9 +101,12 @@ describe('tick', () => {
       const start = newGame(7, 'sword');
       const big = tick(start, 3600);
       const small = run(start, 3600, 0.1);
-      // Summing 0.1s drifts the clock by a hair; every event still lands the same.
+      // Summing 0.1s drifts the clock by a hair; every event still lands the
+      // same. The qi step due at exactly 3600 s can fall a hair past the
+      // drifted end, so both settle half a second more before comparing.
       expect(small.time).toBeCloseTo(big.time, 6);
-      expect({ ...small, time: 0 }).toEqual({ ...big, time: 0 });
+      const settle = (s: GameState) => ({ ...tick(s, 0.5), time: 0 });
+      expect(settle(small)).toEqual(settle(big));
     },
     LONG_SIM_MS,
   );
@@ -999,6 +1026,216 @@ describe('Soul Banners', () => {
   it('gives the same result for one big step as many small ones with a banner', () => {
     const start = wearing(hidden(2, 'heaven'), 9);
     expect(run(start, 1800, 0.5)).toEqual(tick(start, 1800));
+  });
+});
+
+describe('qi', () => {
+  /** A copy where only the events turned on happen: no attacks, no regen step. */
+  function quiet(state: GameState, on: { you?: boolean; foe?: boolean; regen?: boolean } = {}) {
+    const x = structuredClone(state);
+    x.cultivator.hp = 1e12;
+    (x.enemies[0] as { hp: number }).hp = 1e12;
+    if (!on.you) x.cultivator.nextAttackAt = 1e15;
+    if (!on.foe) x.enemyNextAttackAt = 1e15;
+    if (!on.regen) x.qiNextAt = 1e15;
+    return x;
+  }
+  /** A run whose enemy in front is the floor's elite (or another kind). */
+  function facing(kind: EnemyKind, seed = 3): GameState {
+    const s = newGame(seed, 'sword');
+    s.enemies = s.enemies.filter((e) => e.kind === kind);
+    if (s.enemies.length === 0) s.enemies = [makeEnemy(1, kind, 'Test Demon')];
+    return s;
+  }
+  const charm = (roll: number): Item => ({
+    slot: 'charm',
+    name: namesFor('charm', 'spirit')[0] as string,
+    level: 1,
+    grade: 'spirit',
+    baseRoll: 0,
+    affixes: [{ id: 'qiRegen', roll }],
+  });
+
+  it('starts a run at 0, the first regen step a second in', () => {
+    const s = newGame(7, 'sword');
+    expect(s.cultivator.qi).toBe(0);
+    expect(s.qiNextAt).toBe(QI_TICK);
+    expect(s.enemies.every((e) => e.qi === 0)).toBe(true);
+  });
+
+  it.each([
+    ['talisman', 1],
+    ['sword', 0.5],
+    ['body', 0.5],
+  ] as const)('gives %s Spirit qi at a share of %d: max qi and regen alike', (path, share) => {
+    const c = newGame(7, path).cultivator;
+    for (const spirit of [5, 55, 305]) {
+      c.stats.spirit = spirit;
+      const d = derive(c);
+      expect(d.maxQi).toBe(Math.round(BASE_MAX_QI + MAX_QI_PER_SPIRIT * share * spirit));
+      expect(d.qiRegen).toBeCloseTo(QI_BASE_REGEN + QI_PER_SPIRIT * share * spirit, 9);
+    }
+  });
+
+  it('reads the Qi regen stat as a share of max qi each second', () => {
+    const c = newGame(7, 'sword').cultivator;
+    c.stats.spirit = BASE_MAX_QI / MAX_QI_PER_SPIRIT;
+    const bare = derive(c).qiRegen;
+    const worn = charm(1);
+    c.equipment.charm1 = worn;
+    const roll = itemAffixValue(worn, worn.affixes[0] as Item['affixes'][number]);
+    // A 4% roll is 4 qi a second at 100 max qi, and more with a bigger pool.
+    expect(derive(c).maxQi).toBe(150);
+    expect(derive(c).qiRegen - bare).toBeCloseTo(roll * 150, 9);
+  });
+
+  it('counts Spirit as it fights, realm bonus included', () => {
+    const c = newGame(7, 'talisman').cultivator;
+    c.level = 11;
+    const spirit = effectiveStats(c).spirit;
+    expect(spirit).toBeGreaterThan(c.stats.spirit);
+    expect(derive(c).qiRegen).toBeCloseTo(QI_BASE_REGEN + QI_PER_SPIRIT * spirit, 9);
+    expect(derive(c).maxQi).toBe(Math.round(BASE_MAX_QI + MAX_QI_PER_SPIRIT * spirit));
+  });
+
+  it('adds a second of regen at each step, between fights too', () => {
+    const s = quiet(newGame(7, 'sword'), { regen: true });
+    s.cultivator.equipment.charm1 = charm(0.5);
+    const rate = derive(s.cultivator).qiRegen;
+    const next = tick(s, 3.5);
+    expect(next.cultivator.qi).toBeCloseTo(3 * rate, 9);
+    expect(next.qiNextAt).toBe(4);
+  });
+
+  it('gains qi per attack and per hit taken', () => {
+    const attack = quiet(newGame(7, 'sword'), { you: true });
+    const swung = tick(attack, attack.cultivator.nextAttackAt - attack.time);
+    expect(swung.cultivator.qi).toBe(QI_PER_ATTACK);
+    const hit = quiet(newGame(7, 'sword'), { foe: true });
+    const struck = tick(hit, hit.enemyNextAttackAt - hit.time);
+    expect(struck.cultivator.qi).toBe(QI_PER_HIT_TAKEN);
+  });
+
+  it('gains nothing for a hit an Illusion Array turns aside', () => {
+    const s = quiet(newGame(7, 'sword'), { foe: true });
+    const name = namesFor('attachment', 'immortal')[1] as string;
+    s.cultivator.equipment.attachment = {
+      slot: 'attachment',
+      name,
+      level: 1,
+      grade: 'immortal',
+      baseRoll: 1,
+      affixes: [],
+      array: 'illusion',
+    };
+    let x = s;
+    let dodged = 0;
+    let hits = 0;
+    for (let i = 0; i < 200; i++) {
+      const before = x.cultivator.hp;
+      x = tick(x, x.enemyNextAttackAt - x.time);
+      const hit = x.cultivator.hp < before;
+      if (hit) hits++;
+      else dodged++;
+      expect(x.cultivator.qi).toBe(hit ? QI_PER_HIT_TAKEN : 0);
+      x.cultivator.qi = 0;
+    }
+    expect(dodged).toBeGreaterThan(0);
+    expect(hits).toBeGreaterThan(0);
+  });
+
+  it.each(PATH_IDS)('never takes %s past max qi', (path) => {
+    const s = quiet(newGame(7, path), { you: true, foe: true, regen: true });
+    const max = derive(s.cultivator).maxQi;
+    s.cultivator.qi = max - 1;
+    const next = tick(s, 60);
+    expect(next.cultivator.qi).toBe(max);
+  });
+
+  it('carries over between fights on a floor', () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.qi = 50;
+    s.qiNextAt = 1e15;
+    s.enemyNextAttackAt = 1e15;
+    (s.enemies[0] as { hp: number }).hp = 1;
+    const next = tick(s, s.cultivator.nextAttackAt - s.time);
+    expect(next.kills).toBe(1);
+    expect(next.floor).toBe(1);
+    expect(next.cultivator.qi).toBe(50 + QI_PER_ATTACK);
+  });
+
+  it('starts each new floor, and each floor played again, at 0', () => {
+    const s = newGame(7, 'sword');
+    s.cultivator.qi = 50;
+    s.qiNextAt = 1e15;
+    s.enemyNextAttackAt = 1e15;
+    s.enemies = [s.enemies.at(-1) as (typeof s.enemies)[number]];
+    (s.enemies[0] as { hp: number }).hp = 1;
+    const cleared = tick(s, s.cultivator.nextAttackAt - s.time);
+    expect(cleared.floor).toBe(2);
+    expect(cleared.cultivator.qi).toBe(0);
+    const again = restartFloor({ ...cleared, cultivator: { ...cleared.cultivator, qi: 70 } });
+    expect(again.cultivator.qi).toBe(0);
+    // And after a loss.
+    const losing = quiet(newGame(7, 'sword'), { foe: true });
+    losing.cultivator.hp = 1;
+    losing.cultivator.qi = 70;
+    const lost = tick(losing, losing.enemyNextAttackAt - losing.time);
+    expect(lost.deaths).toBe(1);
+    expect(lost.cultivator.qi).toBe(0);
+  });
+
+  it('is full when a Tribulation starts, faced early or at the end of the floor', () => {
+    const due = until(
+      newGame(7, 'sword'),
+      (x) => hasTribulation(x) && x.enemies[0]?.kind !== 'tribulation',
+    );
+    const max = derive(due.cultivator).maxQi;
+    expect(
+      faceTribulation({ ...due, cultivator: { ...due.cultivator, qi: 3 } }).cultivator.qi,
+    ).toBe(max);
+    // Reached in turn: the kill before it starts the fight with full qi.
+    const last = structuredClone(due);
+    last.enemies = last.enemies.slice(-2);
+    expect(last.enemies.map((e) => e.kind)).toEqual(['boss', 'tribulation']);
+    (last.enemies[0] as { hp: number }).hp = 1;
+    last.cultivator.qi = 3;
+    last.qiNextAt = 1e15;
+    last.enemyNextAttackAt = 1e15;
+    const reached = tick(last, last.cultivator.nextAttackAt - last.time);
+    expect(reached.enemies[0]?.kind).toBe('tribulation');
+    expect(reached.cultivator.qi).toBe(max);
+  });
+
+  it.each([
+    ['elite', 60],
+    ['boss', 100],
+    ['tribulation', 150],
+  ] as const)('fills a %s up to %i by attacking plus a trickle', (kind, max) => {
+    expect(ENEMY_MAX_QI[kind]).toBe(max);
+    const s = quiet(facing(kind), { foe: true, regen: true });
+    const foe = s.enemies[0] as { attackInterval: number };
+    // One attack and its interval's trickle.
+    const one = tick(s, foe.attackInterval * 1.5);
+    expect(one.enemies[0]?.qi).toBe(
+      ENEMY_QI_PER_ATTACK + ENEMY_QI_REGEN * Math.floor(foe.attackInterval * 1.5),
+    );
+    expect(tick(s, 600).enemies[0]?.qi).toBe(max);
+  });
+
+  it('gives regular demons no qi at all', () => {
+    const s = quiet(newGame(7, 'sword'), { foe: true, regen: true });
+    expect(s.enemies[0]?.kind).toBe('demon');
+    expect(ENEMY_MAX_QI.demon).toBe(0);
+    expect(tick(s, 120).enemies[0]?.qi).toBe(0);
+  });
+
+  it.each(PATH_IDS)('gives %s the same qi for one big step as many small ones', (path) => {
+    const start = newGame(5, path);
+    start.cultivator.equipment.charm1 = charm(0.7);
+    const big = tick(start, 900);
+    expect(run(start, 900, 0.5)).toEqual(big);
+    expect(big.cultivator.qi).toBeGreaterThan(0);
   });
 });
 

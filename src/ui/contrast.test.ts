@@ -319,7 +319,7 @@ describe('fight strip names', () => {
 
   it('gives the name its own row at every width, the foe mirrored', () => {
     const fighter = rules('.fighter');
-    expect(fighter.join('\n')).toMatch(/grid-template-areas:\s*'name'\s*'bar'\s*'hp'/);
+    expect(fighter.join('\n')).toMatch(/grid-template-areas:\s*'name'\s*'bar'\s*'qi'\s*'hp'/);
     expect(fighter.join('\n')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/);
     // No rule (in any other media query) puts the name beside the HP.
     expect(roomy).not.toMatch(/'name hp'|'hp name'/);

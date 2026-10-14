@@ -43,8 +43,10 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 - **Balance:** no Path is much stronger than the others; a test keeps each
   within 15% of the others on the floor reached.
 - **Stats:** Body (HP, defence), Agility (attack speed, crit), Spirit (skill
-  damage, qi regen). Each level grants stat points, assigned automatically to
-  the Path's primary stat by default; the player can reset and re-spend them.
+  damage, max qi and qi regen: in full for a Talisman Master, half for the
+  other Paths, §5 Qi and skills). Each level grants stat points, assigned
+  automatically to the Path's primary stat by default; the player can reset
+  and re-spend them.
 
 ## 4. Realms and levels
 
@@ -138,6 +140,41 @@ The realm name is primary; the job title is shown beside it.
   for 1.2 s, so the fallen one's death plays out before the next fight.
 - **Enemy examples:** Deadline Fiend, Inbox Hydra, Meeting Wraith, Printer
   Golem, Reply-All Swarm.
+
+### Qi and skills
+
+Qi is the resource skills will spend. Both sides build it up in combat and
+the pure simulation tracks it, so offline play gives the same qi as live play.
+
+- **The cultivator's pool:** 100 max qi, plus 0.5 per point of Spirit for a
+  Talisman Master and 0.25 for the other Paths (half the benefit), rounded to
+  a whole number. A Talisman Master's realm bonus to Spirit (its primary stat,
+  §4) counts.
+- **Gaining qi:** +8 per attack, +4 per hit taken (a hit an Illusion Array
+  turns aside gives none), and regen once a second, between fights too:
+  - a base of 1 qi/s;
+  - the Qi regen stat read as a share of max qi (a 4% roll is 4 qi/s at 100
+    max qi);
+  - 0.02 qi/s per point of Spirit for a Talisman Master, 0.01 for the other
+    Paths.
+  Never past max qi; a Path change or stat reset that shrinks the pool cuts
+  qi down to it.
+- **Across fights:** qi carries over between fights on a floor, starts at 0
+  on each new floor (and when a floor is played again after a loss), and is
+  full when a Tribulation starts, faced early or reached in turn.
+- **Enemies:** elites hold up to 60 qi, bosses 100, Tribulations 150, each
+  stepping up at 0 and gaining 10 per attack (one an Illusion Array turns
+  aside too) plus 1 a second from when it steps up. Regular
+  demons have no qi.
+- **On the strip:** a thin cyan bar under each fighter's HP bar, read by
+  screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
+  but empty, so the strip never changes height. The Mini view shows HP bars
+  only. The Stats tab shows Max qi and Qi regen/s.
+- **Follow-ups:** the skill engine that spends qi (auto-cast rules, wind-ups,
+  cast callouts), four Path skills learned at realm breakthroughs, elite and
+  boss skills, a signature skill for each Tribulation, a skill bar on the
+  strip, and skills on the Stats tab, breakthrough banner, Path choice, Realm
+  chip and Help. Each has its own ticket.
 
 ## 6. Loot
 
@@ -328,7 +365,9 @@ Every drop is generated from a seeded roll.
   multiplied by 0.5: demon 1%, elite 6%, boss 12.5%, about 0.28 drops a floor.
   Grades, affixes and item level roll the same online and offline.
 - **Affix pool:** +crit chance, +crit damage, +attack speed, lifesteal,
-  +max HP, +defence, +qi regen, +spirit stone find, +treasure find.
+  +max HP, +defence, +qi regen, +spirit stone find, +treasure find. Qi regen
+  rolls +2–6% and is read as that share of max qi each second (§5 Qi and
+  skills), so the Stats tab shows it in qi per second.
 - **Quality %:** the unweighted average of the item's base roll and its affix
   rolls, each a whole 0–100% within its range, rounded down; the Immortal
   unique effect is not a roll and is left out. It ignores grade, item level and
@@ -587,6 +626,10 @@ on every autosave, and is always the copy the game plays from.
   140, 170, 210, and the cheaper XP curve of 50 × 1.15^(level − 1) per level
   (it was 1.2 before). Version 8, 9 and 10 saves are moved onto both on load,
   held XP buying the levels it now pays for (§4, older saves).
+- **Version 13** adds qi (§5): the cultivator's (0 to its max qi), each
+  enemy's (0 to its kind's pool, so a demon's is always 0) and the next qi
+  regen step (`qiNextAt`, at most a second off). Older saves load with no qi
+  and the next step a second away; the fields in an older save are rejected.
 
 ### Updates
 
