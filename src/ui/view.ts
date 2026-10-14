@@ -35,6 +35,7 @@ import {
   type BulkPreview,
 } from '../core/economy.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
+import { LIGHTNING_NAME } from '../core/enemy-skills.ts';
 import {
   AFFIXES,
   arrayValue,
@@ -1236,6 +1237,7 @@ const EFFECT_CALLOUTS: Readonly<Record<EffectNote, MessageKey>> = {
   silenced: 'callout.silenced',
   shielded: 'callout.shielded',
   interrupted: 'callout.interrupted',
+  dispelled: 'callout.dispelled',
 };
 
 /** The names of the cultivator's costliest skills at its Path and realm (ties all count). */
@@ -1263,6 +1265,18 @@ export function castCallouts(prev: GameState, next: GameState): Callout[] {
     const yell = n.who === 'you' && yelled.has(n.skill) ? yellText(n.skill) : null;
     return [{ who: n.who, text: tn('skill', n.skill), cast: true, yell }];
   });
+}
+
+/** Heavenly Lightning strikes landed between two states, for the stage's flash. */
+export function lightningStrikes(prev: GameState, next: GameState): number {
+  return newNotes(prev, next).filter(
+    (n) =>
+      'skill' in n &&
+      n.who === 'foe' &&
+      !n.windUp &&
+      n.skill === LIGHTNING_NAME &&
+      n.at >= next.time - CALLOUT_SECONDS,
+  ).length;
 }
 
 /** The skill the enemy in front winds up, and how far along (0 to 1); null when none. */

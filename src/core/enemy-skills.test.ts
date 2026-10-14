@@ -4,9 +4,22 @@ import {
   ENEMY_SKILL_NAMES,
   enemySkills,
   EXPENSE_MIN_QI,
+  FINAL_JUDGEMENT_WIND_UP,
+  LIGHTNING_HP_SHARE,
+  LIGHTNING_WIND_UP,
   MICROMANAGE_QI_SHARE,
+  SEIZURE_MIN_QI,
 } from './enemy-skills.ts';
-import { BOSSES, DEMONS, makeEnemy, makeFloor, type EnemyKind } from './floors.ts';
+import {
+  BOSSES,
+  DEMONS,
+  makeEnemy,
+  makeFloor,
+  makeTribulation,
+  maxQi,
+  TRIBULATIONS,
+  type EnemyKind,
+} from './floors.ts';
 import { createRng } from './rng.ts';
 import {
   freshStatus,
@@ -22,7 +35,7 @@ import { gameSkills, mitigate, newGame, tick, type GameState, type Loadout } fro
 
 const OFF = 1e15;
 
-/** The one skill or the two a named elite or boss has, by id. */
+/** The skills a named elite, boss or Tribulation has, by id. */
 const OWN: readonly (readonly [EnemyKind, string, readonly string[]])[] = [
   ['elite', 'Elite Deadline Fiend', ['crunchTime']],
   ['elite', 'Elite Inbox Hydra', ['unreadFlood']],
@@ -32,6 +45,15 @@ const OWN: readonly (readonly [EnemyKind, string, readonly string[]])[] = [
   ['boss', 'Quarterly Review', ['missedTargets', 'pip']],
   ['boss', 'The Auditor', ['expenseDisallowed', 'fullAudit']],
   ['boss', 'Middle Manager', ['delegation', 'micromanage']],
+  ['tribulation', 'Probation Review', ['heavenlyLightning', 'finalWarning']],
+  ['tribulation', 'Annual Appraisal', ['heavenlyLightning', 'bellCurve']],
+  ['tribulation', 'Restructuring', ['heavenlyLightning', 'redundancy']],
+  ['tribulation', 'Hostile Takeover', ['heavenlyLightning', 'assetSeizure']],
+  ['tribulation', 'Shareholder Revolt', ['heavenlyLightning', 'noConfidence']],
+  ['tribulation', 'Board Inquiry', ['heavenlyLightning', 'underInvestigation']],
+  ['tribulation', 'Regulatory Probe', ['heavenlyLightning', 'complianceFreeze']],
+  ['tribulation', 'Market Crash', ['heavenlyLightning', 'freefall']],
+  ['tribulation', 'Heavenly Audit', ['heavenlyLightning', 'finalJudgement']],
 ];
 
 /** The skill `id` of the enemy `name`. */
@@ -46,18 +68,23 @@ describe('who has which skills', () => {
     expect(enemySkills({ kind, name }, {}).map((k) => k.id)).toEqual(ids);
   });
 
-  it('gives regular demons and Tribulations none, whatever their name', () => {
-    for (const name of [...DEMONS, ...BOSSES]) {
+  it('gives regular demons none, and a Tribulation only by its own name', () => {
+    for (const name of [...DEMONS, ...BOSSES, ...TRIBULATIONS]) {
       expect(enemySkills({ kind: 'demon', name }, {})).toEqual([]);
+    }
+    for (const name of [...DEMONS, ...BOSSES]) {
       expect(enemySkills({ kind: 'tribulation', name }, {})).toEqual([]);
     }
-    expect(enemySkills({ kind: 'tribulation', name: 'Heavenly Audit' }, {})).toEqual([]);
+    // A Tribulation's name on a boss or elite gives nothing either.
+    expect(enemySkills({ kind: 'boss', name: 'Heavenly Audit' }, {})).toEqual([]);
+    expect(enemySkills({ kind: 'elite', name: 'Elite Heavenly Audit' }, {})).toEqual([]);
   });
 
   it('gives an unknown or hostile name none, never a prototype entry', () => {
     for (const name of ['__proto__', 'constructor', 'toString', 'Elite __proto__', 'Elite ', '']) {
       expect(enemySkills({ kind: 'elite', name }, {})).toEqual([]);
       expect(enemySkills({ kind: 'boss', name }, {})).toEqual([]);
+      expect(enemySkills({ kind: 'tribulation', name }, {})).toEqual([]);
     }
     // An elite's skill comes from its "Elite " name only.
     expect(enemySkills({ kind: 'elite', name: 'Printer Golem' }, {})).toEqual([]);
@@ -72,9 +99,13 @@ describe('who has which skills', () => {
       'elite Printer Golem',
       'Elite ' + 'x'.repeat(100_000),
       'Quarterly Review\u200b',
+      'Heavenly Audit\u200b',
+      'Heavenly\u00a0Audit',
+      'heavenly audit',
     ]) {
       expect(enemySkills({ kind: 'elite', name }, {})).toEqual([]);
       expect(enemySkills({ kind: 'boss', name }, {})).toEqual([]);
+      expect(enemySkills({ kind: 'tribulation', name }, {})).toEqual([]);
     }
   });
 
@@ -88,6 +119,12 @@ describe('who has which skills', () => {
     );
   });
 
+  it('covers every Tribulation the game makes', () => {
+    TRIBULATIONS.forEach((name, realm) => {
+      expect(enemySkills(makeTribulation(1 + realm * 10, realm), {}), name).toHaveLength(2);
+    });
+  });
+
   it('covers every demon and boss on a real floor', () => {
     for (let seed = 1; seed <= 40; seed++) {
       for (const e of makeFloor(createRng(seed), 1 + (seed % 30))) {
@@ -97,19 +134,19 @@ describe('who has which skills', () => {
     }
   });
 
-  it('names all eleven, once each, for the language packs', () => {
-    expect(ENEMY_SKILL_NAMES).toHaveLength(11);
-    expect(new Set(ENEMY_SKILL_NAMES).size).toBe(11);
+  it('names all twenty-one, once each, for the language packs', () => {
+    expect(ENEMY_SKILL_NAMES).toHaveLength(21);
+    expect(new Set(ENEMY_SKILL_NAMES).size).toBe(21);
     const all = OWN.flatMap(([kind, name, ids]) => ids.map((id) => skill(kind, name, id).name));
-    expect([...ENEMY_SKILL_NAMES].sort()).toEqual(all.sort());
+    expect([...ENEMY_SKILL_NAMES].sort()).toEqual([...new Set(all)].sort());
   });
 
-  it('costs qi an elite or boss can hold, and every one winds up', () => {
+  it('costs qi its caster can hold, and every one winds up', () => {
     for (const [kind, name, ids] of OWN) {
       for (const id of ids) {
         const def = skill(kind, name, id);
         expect(def.qi).toBeGreaterThan(0);
-        expect(def.qi).toBeLessThanOrEqual(kind === 'elite' ? 60 : 100);
+        expect(def.qi).toBeLessThanOrEqual(Math.min(100, maxQi(kind)));
         expect(def.windUp ?? WIND_UP).toBeGreaterThan(0);
       }
     }
@@ -262,6 +299,145 @@ describe('enemy skills in a fight', () => {
     expect(after.combat.you.silenceUntil).toBe(at + 4);
   });
 
+  /** A Tribulation, qi `qi`, at full HP unless `hpShare` (of its max) says otherwise. */
+  function trial(name: string, qi: number, hpShare = 1): GameState {
+    const s = arena('tribulation', name, qi);
+    s.enemies[0]!.hp = 1e6 * hpShare;
+    return s;
+  }
+
+  it('Final Warning: 150% at full HP, more the lower the player HP', () => {
+    const full = landing(trial('Probation Review', 30), 'Final Warning');
+    expect(full.after.cultivator.hp).toBe(
+      full.d.maxHp - mitigate(full.foe.damage * 1.5, full.d.defence),
+    );
+    const s = trial('Probation Review', 30);
+    const hp = Math.round(full.d.maxHp * 0.6);
+    s.cultivator.hp = hp;
+    const low = landing(s, 'Final Warning');
+    expect(low.after.cultivator.hp).toBe(
+      hp - mitigate(low.foe.damage * 1.5 * (1 + (1 - hp / low.d.maxHp)), low.d.defence),
+    );
+  });
+
+  it('Bell Curve: damage equal to 20% of the player current HP, past defence', () => {
+    const s = trial('Annual Appraisal', 30);
+    const { after, d } = landing(s, 'Bell Curve');
+    expect(after.cultivator.hp).toBe(d.maxHp - Math.round(d.maxHp * 0.2));
+    s.cultivator.hp = 50;
+    expect(landing(s, 'Bell Curve').after.cultivator.hp).toBe(40);
+  });
+
+  it('Redundancy: removes the player active buffs, not its debuffs', () => {
+    const s = trial('Restructuring', 40);
+    const you = s.combat.you;
+    you.mods = [
+      { stat: 'attackSpeed', amount: 0.4, until: OFF, source: 'lightningStep' },
+      { stat: 'damage', amount: -0.25, until: OFF, source: 'pip' },
+    ];
+    you.shield = 30;
+    you.shieldUntil = OFF;
+    you.reflect = 0.2;
+    you.reflectUntil = OFF;
+    const { after, at } = landing(s, 'Redundancy');
+    expect(after.combat.you.mods.map((m) => m.source)).toEqual(['pip']);
+    expect(after.combat.you).toMatchObject({ shield: 0, reflect: 0 });
+    expect(after.combat.log.at(-1)).toMatchObject({ at, who: 'you', effect: 'dispelled' });
+  });
+
+  it('Asset Seizure: steals 60 of the player qi', () => {
+    const { after, d } = landing(trial('Hostile Takeover', 30), 'Asset Seizure');
+    expect(after.cultivator.qi).toBe(d.maxQi - 60);
+    // 30 spent, a second of regen in the wind-up, 60 stolen.
+    expect(after.enemies[0]?.qi).toBeGreaterThanOrEqual(60);
+    expect(after.enemies[0]?.qi).toBeLessThanOrEqual(62);
+  });
+
+  it('Vote of No Confidence: blocks the player skills for 5 s', () => {
+    const { after, at } = landing(trial('Shareholder Revolt', 40), 'Vote of No Confidence');
+    expect(after.combat.you.silenceUntil).toBe(at + 5);
+    expect(after.combat.log.at(-1)).toMatchObject({ at, who: 'you', effect: 'silenced' });
+  });
+
+  it('Under Investigation: damage over time for 8 s', () => {
+    const s = trial('Board Inquiry', 40);
+    const { after, at, d, foe } = landing(s, 'Under Investigation');
+    expect(after.combat.you.burns).toEqual([
+      { damage: (foe.damage * 3) / 8, left: 8, next: at + 1 },
+    ]);
+    // Eight ticks through defence, then no more.
+    const later = tick(after, 9, { loadout: () => [] });
+    expect(later.combat.you.burns).toEqual([]);
+    expect(later.cultivator.hp).toBe(d.maxHp - 8 * mitigate((foe.damage * 3) / 8, d.defence));
+  });
+
+  it('Compliance Freeze: stuns the player for 2 s', () => {
+    const { after, at } = landing(trial('Regulatory Probe', 40), 'Compliance Freeze');
+    expect(after.combat.you.stunUntil).toBe(at + 2);
+  });
+
+  it('Freefall: 3 hits, each 15% of the player max HP', () => {
+    const { after, d } = landing(trial('Market Crash', 60), 'Freefall');
+    expect(after.cultivator.hp).toBe(d.maxHp - 3 * Math.round(d.maxHp * 0.15));
+  });
+
+  it(`Final Judgement: a 400% strike after a ${FINAL_JUDGEMENT_WIND_UP} s wind-up`, () => {
+    const s = trial('Heavenly Audit', 60);
+    const { after, d, foe } = landing(s, 'Final Judgement', FINAL_JUDGEMENT_WIND_UP);
+    expect(FINAL_JUDGEMENT_WIND_UP).toBeGreaterThan(WIND_UP);
+    expect(after.cultivator.hp).toBe(d.maxHp - mitigate(foe.damage * 4, d.defence));
+  });
+
+  it.each(TRIBULATIONS)(
+    '%s gains Heavenly Lightning below half HP: 3 telegraphed strikes',
+    (name) => {
+      // Qi for Lightning only, or a tie with a 30 qi signature: Lightning is listed first.
+      const s = trial(name, 30, LIGHTNING_HP_SHARE - 0.01);
+      // A short horizon, so later casts never push the first out of the log.
+      const third = landing(s, 'Heavenly Lightning', LIGHTNING_WIND_UP, 3, 12);
+      const strike = mitigate(third.foe.damage * 1.5, third.d.defence);
+      const first = landing(s, 'Heavenly Lightning', LIGHTNING_WIND_UP, 1, 12);
+      expect(first.after.cultivator.hp).toBe(first.d.maxHp - strike);
+      expect(third.after.cultivator.hp).toBe(third.d.maxHp - 3 * strike);
+      // One cast: the qi is paid once.
+      expect(third.after.combat.foe.uses.heavenlyLightning).toBe(1);
+    },
+  );
+
+  it.each(TRIBULATIONS)(
+    '%s casts Heavenly Lightning in a real fight below half HP, its signature skill too',
+    (name) => {
+      // From 0 qi, attacking as normal: a cheap signature must not keep its
+      // qi from ever reaching Lightning.
+      const s = trial(name, 0, LIGHTNING_HP_SHARE - 0.01);
+      s.enemyNextAttackAt = s.time + 2;
+      // The player's buff, so Redundancy has one to end.
+      s.combat.you.mods.push({ stat: 'damage', amount: 0.1, until: OFF, source: 'test' });
+      // Healed every second, so it never falls and the fight (and its counts) goes on.
+      let after = s;
+      for (let i = 0; i < 90; i++) {
+        after = tick(after, 1, { loadout: foeOnly });
+        after.cultivator.hp = derive(after.cultivator).maxHp;
+      }
+      expect(after.deaths).toBe(s.deaths);
+      const uses = after.combat.foe.uses;
+      expect(uses.heavenlyLightning, name).toBeGreaterThanOrEqual(2);
+      const own = enemySkills({ kind: 'tribulation', name }, {})[1]!.id;
+      expect(uses[own], name).toBeGreaterThanOrEqual(1);
+    },
+  );
+
+  it('casts no Heavenly Lightning at half HP or more', () => {
+    for (const name of TRIBULATIONS) {
+      const s = trial(name, 150, LIGHTNING_HP_SHARE);
+      const log = tick(s, 60, { loadout: foeOnly }).combat.log;
+      expect(
+        log.some((n) => 'skill' in n && n.skill === 'Heavenly Lightning'),
+        name,
+      ).toBe(false);
+    }
+  });
+
   it('a stun answers the wind-up: it is cancelled and the qi stays spent', () => {
     const s = arena('boss', 'Quarterly Review', 100);
     // A cultivator that stuns whenever the enemy winds up.
@@ -299,6 +475,7 @@ describe('enemy skill "uses it when" rules', () => {
       fightTime: 5,
       burning: false,
       evades: 0,
+      buffs: 0,
       ...over,
     };
   }
@@ -413,6 +590,49 @@ describe('enemy skill "uses it when" rules', () => {
     expect(may(def, { other: { qi: 180, maxQi: 200 }, status: cooling('micromanage', 11) })).toBe(
       false,
     );
+  });
+
+  it('Heavenly Lightning: only below half its max HP, not when the next normal hit kills', () => {
+    const def = skill('tribulation', 'Market Crash', 'heavenlyLightning');
+    expect(def.strikes).toBe(3);
+    expect(may(def, { self: { hp: 50 } })).toBe(false);
+    expect(may(def, { self: { hp: 49 } })).toBe(true);
+    expect(may(def, { self: { hp: 49 }, nextHitKills: true })).toBe(false);
+  });
+
+  it.each([
+    ['Probation Review', 'finalWarning'],
+    ['Annual Appraisal', 'bellCurve'],
+    ['Board Inquiry', 'underInvestigation'],
+    ['Market Crash', 'freefall'],
+    ['Heavenly Audit', 'finalJudgement'],
+  ] as const)('%s %s: whenever ready, but not when the next normal hit kills', (name, id) => {
+    const def = skill('tribulation', name, id);
+    expect(def.kind).toBe('damage');
+    expect(may(def)).toBe(true);
+    expect(may(def, { nextHitKills: true })).toBe(false);
+  });
+
+  it.each([
+    ['Shareholder Revolt', 'noConfidence', 5],
+    ['Board Inquiry', 'underInvestigation', 8],
+    ['Regulatory Probe', 'complianceFreeze', 2],
+  ] as const)('%s %s: its cooldown outlasts the effect (%d s)', (name, id, lasts) => {
+    const def = skill('tribulation', name, id);
+    expect(def.cooldown).toBeGreaterThan(lasts);
+    expect(may(def, { status: cooling(id, 11) })).toBe(false);
+  });
+
+  it('Redundancy: only while the player has a buff', () => {
+    const def = skill('tribulation', 'Restructuring', 'redundancy');
+    expect(may(def)).toBe(false);
+    expect(may(def, { other: { buffs: 1 } })).toBe(true);
+  });
+
+  it(`Asset Seizure: the player holds ${SEIZURE_MIN_QI} qi or more`, () => {
+    const def = skill('tribulation', 'Hostile Takeover', 'assetSeizure');
+    expect(may(def, { other: { qi: SEIZURE_MIN_QI } })).toBe(true);
+    expect(may(def, { other: { qi: SEIZURE_MIN_QI - 1 } })).toBe(false);
   });
 
   it('a boss casts the costliest it may: Heavenly Oversight Seal over Burden-Shifting Mirror, when both may', () => {

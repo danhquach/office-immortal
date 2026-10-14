@@ -515,6 +515,7 @@ describe('Path skill "uses it when" rules', () => {
       fightTime: 5,
       burning: false,
       evades: 0,
+      buffs: 0,
       ...over,
     };
   }

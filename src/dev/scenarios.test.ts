@@ -569,6 +569,8 @@ describe('debug setups for fights, skills, stats and retirement', () => {
         'bossFight',
         'lowQi',
         'tribulationLastTry',
+        'tribulationSkill',
+        'tribulationLightning',
         'offline8h',
         'retireReady',
       ]),
@@ -579,6 +581,28 @@ describe('debug setups for fights, skills, stats and retirement', () => {
     expect(SCENARIOS.eliteFight(game()).enemies[0]?.kind).toBe('elite');
     expect(SCENARIOS.lowQi(game()).cultivator.qi).toBe(0);
     expect(SCENARIOS.tribulationLastTry(game()).trial.losses).toBe(TRIAL_LOSS_LIMIT - 1);
+  });
+
+  it('faces the next Tribulation with full qi, whole or just under half HP', () => {
+    const whole = SCENARIOS.tribulationSkill(game());
+    const trial = whole.enemies[0]!;
+    expect(trial).toMatchObject({ kind: 'tribulation', hp: trial.maxHp, qi: 150 });
+    const low = SCENARIOS.tribulationLightning(game()).enemies[0]!;
+    expect(low.hp).toBeLessThan(low.maxHp / 2);
+    expect(low.hp).toBeGreaterThan(low.maxHp * 0.48);
+    // Again while already fighting it: still the same Tribulation, no second one.
+    const again = SCENARIOS.tribulationLightning(whole);
+    expect(again.enemies.filter((e) => e.kind === 'tribulation')).toHaveLength(1);
+    // On floor 1, where its normal hit can't kill (a damage skill waits then),
+    // each casts at once: the signature skill, or Heavenly Lightning.
+    const first = (x: GameState) =>
+      tick(x, 3).combat.log.find((n) => 'skill' in n && n.who === 'foe' && n.windUp);
+    expect(first(SCENARIOS.tribulationSkill(newGame(7, 'sword')))).toMatchObject({
+      skill: 'Final Warning',
+    });
+    expect(first(SCENARIOS.tribulationLightning(newGame(7, 'sword')))).toMatchObject({
+      skill: 'Heavenly Lightning',
+    });
   });
 });
 

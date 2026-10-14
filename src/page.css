@@ -1178,6 +1178,25 @@ select {
   border-top-color: transparent;
   border-right-color: var(--qi);
 }
+/* A Heavenly Lightning strike flashes the whole stage once, pale gold, under
+   the callouts and bubble; one flash a strike, a strike's 3 s wind-up apart. */
+.strike {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--strip-elite);
+  opacity: 0;
+  pointer-events: none;
+  animation: strike-flash 350ms ease-out;
+}
+@keyframes strike-flash {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: 0;
+  }
+}
 @keyframes yell-pop {
   from {
     scale: 0.6;
@@ -1204,6 +1223,9 @@ select {
   .callout,
   .yell {
     animation: none;
+  }
+  .strike {
+    display: none;
   }
   .fighter .bar.qi > .cast {
     transition: none;
@@ -2636,7 +2658,8 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 /* At 3/8 a damage number or callout would be about 5 px: the HP bars say it instead. */
 .mini .dmg,
 .mini .callout,
-.mini .yell {
+.mini .yell,
+.mini .strike {
   display: none;
 }
 /* The pop-out has no room for the alert: its status line says it, and a
@@ -2716,6 +2739,7 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .item-head .icon,
     .callout,
     .yell,
+    .strike,
     .bar.qi > .cast
   ) {
   display: none;

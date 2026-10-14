@@ -22,7 +22,7 @@ export const NAME_KINDS = {
   passive: Object.values(PASSIVES).map((p) => p.name),
   passiveRank: Object.values(PASSIVES).map((p) => p.perRankText),
   enemy: [...DEMONS, ...BOSSES, ...TRIBULATIONS],
-  // The Path, elite and boss skills' names; the Tribulations' arrive with #146.
+  // The Path, elite, boss and Tribulation skills' names.
   skill: [...PATH_SKILL_NAMES, ...ENEMY_SKILL_NAMES],
 } as const satisfies Record<string, readonly string[]>;
 

@@ -54,11 +54,13 @@ import { pathSkills } from './path-skills.ts';
 import { chance, rngFrom, type Rng, type RngState } from './rng.ts';
 import {
   BURN_TICK,
+  buffsOn,
   CAST_PAUSE,
   chooseSkill,
   cooldownFor,
   enduring,
   freshCombat,
+  helps,
   MAX_BURNS,
   modFactor,
   modInterval,
@@ -263,8 +265,8 @@ export const noSkills: Loadout = () => [];
 /**
  * The skills in the game: the cultivator's Path skills for its Path and realm
  * (docs/design.md §5 Path skills) and the enemy in front's elite or boss
- * skills (§5 Elite and boss skills), derived at every event, never saved.
- * The Tribulations' skills (#146) are still to come.
+ * skills (§5 Elite and boss skills) or Tribulation skills (§5 Tribulation
+ * skills), derived at every event, never saved.
  */
 export const gameSkills: Loadout = (s, side) => {
   if (side === 'you') return pathSkills(s.cultivator.path, realmOf(s.cultivator.level));
@@ -891,6 +893,7 @@ function rules(s: GameState, side: Side): RuleInputs {
     fightTime,
     burning: you.burns.length > 0,
     evades: you.evades,
+    buffs: buffsOn(you, now),
   };
   const theirs = {
     hp: enemy.hp,
@@ -901,6 +904,7 @@ function rules(s: GameState, side: Side): RuleInputs {
     fightTime,
     burning: foe.burns.length > 0,
     evades: foe.evades,
+    buffs: buffsOn(foe, now),
   };
   // Each side's next normal hit, without crit or burst, through defence (and
   // the cultivator's pierce) as strikeFoe/strikeYou take it: what rule 2 and
@@ -970,22 +974,35 @@ function castNow(s: GameState, p: Play, side: Side): void {
     return;
   }
   currentEnemy(s).qi -= def.qi;
-  status.windUp = {
+  windUp(s, def, Math.max(1, def.strikes ?? 1) - 1);
+}
+
+/** The enemy starts winding up `def`, with `left` strikes after this one. */
+function windUp(s: GameState, def: SkillDef, left: number): void {
+  s.combat.foe.windUp = {
     skill: def.id,
     name: def.name,
     start: s.time,
     end: s.time + (def.windUp ?? WIND_UP),
+    ...(left > 0 ? { left } : {}),
   };
   note(s.combat, { at: s.time, who: 'foe', skill: def.name, windUp: true });
 }
 
-/** An enemy's wind-up ran its course: the skill lands. */
+/**
+ * An enemy's wind-up ran its course: the skill lands, and a skill with
+ * strikes left winds up the next while the fight goes on (a stun cancels a
+ * wind-up, and with it the strikes left).
+ */
 function landWindUp(s: GameState, p: Play): void {
-  const { foe } = s.combat;
+  const { foe, fight } = s.combat;
   const id = foe.windUp?.skill;
+  const left = foe.windUp?.left ?? 0;
   foe.windUp = null;
   const def = skillsOf(s, p, 'foe').find((k) => k.id === id);
-  if (def) land(s, p, 'foe', def);
+  if (!def) return;
+  land(s, p, 'foe', def);
+  if (left > 0 && s.combat.fight === fight) windUp(s, def, left - 1);
 }
 
 /**
@@ -1117,6 +1134,22 @@ function apply(s: GameState, p: Play, side: Side, e: Effect, def: SkillDef): voi
     case 'hit':
       hits(s, p, side, e, def.qi);
       return;
+    case 'cut':
+      cuts(s, p, side, e);
+      return;
+    case 'purge':
+      theirs.mods = theirs.mods.filter((m) => m.until > now && !helps(m));
+      theirs.shield = 0;
+      theirs.shieldUntil = 0;
+      theirs.shieldBurst = 0;
+      theirs.reflect = 0;
+      theirs.reflectUntil = 0;
+      theirs.endureUntil = 0;
+      theirs.endureHeal = 0;
+      theirs.evades = 0;
+      theirs.counter = false;
+      note(combat, { at: now, who: other, effect: 'dispelled' });
+      return;
     case 'mod': {
       const on = e.on === 'self' ? side : other;
       const target = combat[on];
@@ -1212,7 +1245,9 @@ function hits(
     const base = skillBase(s, side);
     const enemy = currentEnemy(s);
     const target = side === 'you' ? enemy : { hp: c.hp, maxHp: d.maxHp };
-    const low = e.low && target.hp < target.maxHp * e.low.below ? e.low.mult : 1;
+    const low =
+      (e.low && target.hp < target.maxHp * e.low.below ? e.low.mult : 1) *
+      (1 + (e.missing ?? 0) * Math.max(0, 1 - target.hp / target.maxHp));
     const ownMaxHp = side === 'you' ? d.maxHp : enemy.maxHp;
     const extra = ownMaxHp * (e.maxHp ?? 0) * skillScale(s, side);
     if (side === 'foe') {
@@ -1237,6 +1272,32 @@ function hits(
       }
       // The ones waiting fall first, from the back, so the indices hold.
       for (let j = spill; j >= 1; j--) if ((s.enemies[j]?.hp ?? 1) <= 0) defeated(s, p, j);
+      if (currentEnemy(s).hp <= 0) defeated(s, p);
+      else reflect(s, p, 'foe', dealt);
+    }
+    if (s.combat.fight !== fight) return;
+  }
+}
+
+/**
+ * A cut effect: each hit takes its share of the other side's current or max
+ * HP, past defence (a shield and damage-taken mods still count), stopping
+ * once the fight ends. No crit, spill, lifesteal or qi; Iron Body's reflect
+ * answers it as any skill hit.
+ */
+function cuts(s: GameState, p: Play, side: Side, e: Extract<Effect, { type: 'cut' }>): void {
+  const fight = s.combat.fight;
+  const c = s.cultivator;
+  for (let i = 0; i < (e.hits ?? 1); i++) {
+    if (side === 'foe') {
+      const hp = e.of === 'current' ? c.hp : derive(c).maxHp;
+      const taken = strikeYou(s, hp * e.share, false);
+      if (c.hp <= 0) lost(s, p);
+      else reflect(s, p, 'you', taken);
+    } else {
+      const enemy = currentEnemy(s);
+      const hp = e.of === 'current' ? enemy.hp : enemy.maxHp;
+      const dealt = strikeFoe(s, 0, hp * e.share, false);
       if (currentEnemy(s).hp <= 0) defeated(s, p);
       else reflect(s, p, 'foe', dealt);
     }

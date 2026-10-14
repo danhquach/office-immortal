@@ -36,7 +36,16 @@ export type Effect =
       maxHp?: number;
       /** A kill by this effect gives back this share of the skill's qi, once a cast. */
       refund?: number;
+      /** Each hit deals (1 + `missing` × the share of its target's max HP already lost) times as much. */
+      missing?: number;
     }
+  /**
+   * `hits` hits, each `share` of the other side's current or max HP, past
+   * its defence (a shield and damage-taken mods still count); never a crit.
+   */
+  | { type: 'cut'; share: number; of: 'current' | 'max'; hits?: number }
+  /** Ends the other side's buffs: its own buff mods, shield, reflect, "can't drop below 1" and dodges. */
+  | { type: 'purge' }
   /**
    * A buff (`on: 'self'`) or a debuff (`on: 'other'`) for `duration` seconds.
    * `relative` scales `amount` by the target's own value of a share stat
@@ -110,6 +119,8 @@ export interface FighterView {
   burning: boolean;
   /** Normal attacks this side will still turn aside (an evade effect). */
   evades: number;
+  /** Buffs working on this side now, as a purge would end them (buffsOn). */
+  buffs: number;
 }
 
 export interface SkillDef {
@@ -123,6 +134,11 @@ export interface SkillDef {
   kind: SkillKind;
   /** Seconds an enemy winds up before it lands; WIND_UP when left out. The cultivator never winds up. */
   windUp?: number;
+  /**
+   * An enemy skill that lands as this many strikes, each its own wind-up and
+   * landing of `effects`, paid for once; a stun cancels the strikes left.
+   */
+  strikes?: number;
   effects: readonly Effect[];
   /** The skill's own "uses it when" rule, on top of the shared ones. */
   when: (ctx: SkillContext) => boolean;
@@ -151,7 +167,7 @@ export const SKILL_DAMAGE_PER_SPIRIT = 0.001;
 export const LOG_SIZE = 8;
 
 /** The callouts an effect floats over the fighter it hit. */
-export type EffectNote = 'stunned' | 'silenced' | 'shielded' | 'interrupted';
+export type EffectNote = 'stunned' | 'silenced' | 'shielded' | 'interrupted' | 'dispelled';
 
 /**
  * One callout for the strip: `who` is the fighter it floats over. A cast
@@ -206,8 +222,8 @@ export interface Status {
   uses: Record<string, number>;
   /** A cast chosen and waiting out its pause. */
   pending: { skill: string; at: number } | null;
-  /** An enemy skill winding up, landing at `end`. */
-  windUp: { skill: string; name: string; start: number; end: number } | null;
+  /** An enemy skill winding up, landing at `end`; `left` strikes follow it (SkillDef.strikes). */
+  windUp: { skill: string; name: string; start: number; end: number; left?: number } | null;
 }
 
 /**
@@ -366,14 +382,34 @@ export function buffed(def: SkillDef, status: Status, now: number): boolean {
   });
 }
 
+/** True for a mod that helps the fighter it is on: more of a stat, or less damage taken. */
+export function helps(m: Mod): boolean {
+  return m.stat === 'damageTaken' ? m.amount < 0 : m.amount > 0;
+}
+
+/**
+ * The buffs working on a fighter at `now`: each helping mod, a shield, a
+ * reflect, a "can't drop below 1" and dodges left count one each.
+ */
+export function buffsOn(status: Status, now: number): number {
+  let n = status.mods.filter((m) => m.until > now && helps(m)).length;
+  if (shieldLeft(status, now) > 0) n += 1;
+  if (reflectShare(status, now) > 0) n += 1;
+  if (enduring(status, now)) n += 1;
+  if (status.evades > 0) n += 1;
+  return n;
+}
+
 /** True for an effect that reaches the other side: an evade turns the whole lot aside. */
 export function reachesOther(e: Effect): boolean {
   switch (e.type) {
     case 'hit':
+    case 'cut':
     case 'stun':
     case 'silence':
     case 'drain':
     case 'burn':
+    case 'purge':
       return true;
     case 'mod':
       return e.on === 'other';

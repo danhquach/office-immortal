@@ -1,9 +1,11 @@
-// The elite and boss skills (docs/design.md §5 Elite and boss skills): an
-// elite has one, from the demon it is a variant of, a boss two, a regular
-// demon none. Every one winds up first (WIND_UP unless it sets its own), so
-// the cultivator's defensive and stun skills can answer it.
+// The elite, boss and Tribulation skills (docs/design.md §5 Elite and boss
+// skills, §5 Tribulation skills): an elite has one, from the demon it is a
+// variant of, a boss two, a Tribulation its signature skill plus Heavenly
+// Lightning below half HP, a regular demon none. Every one winds up first
+// (WIND_UP unless it sets its own), so the cultivator's defensive and stun
+// skills can answer it.
 
-import { BOSSES, DEMONS, type Enemy } from './floors.ts';
+import { BOSSES, DEMONS, TRIBULATIONS, type Enemy } from './floors.ts';
 import type { SkillContext, SkillDef } from './skills.ts';
 
 /** Quarterly Judgement Palm's long wind-up, in seconds. */
@@ -143,21 +145,140 @@ const BOSS_SKILLS: Readonly<Record<(typeof BOSSES)[number], readonly SkillDef[]>
   ],
 };
 
+/** Heavenly Lightning comes below this share of a Tribulation's max HP. */
+export const LIGHTNING_HP_SHARE = 0.5;
+/** Heavenly Lightning's wind-up before each of its three strikes, in seconds. */
+export const LIGHTNING_WIND_UP = 3;
+/** Final Judgement's long wind-up, in seconds. */
+export const FINAL_JUDGEMENT_WIND_UP = 3;
+/** Asset Seizure waits for the cultivator to hold at least this much qi. */
+export const SEIZURE_MIN_QI = 30;
+
+/** Heavenly Lightning's name, which the strip flashes the stage for as each strike lands. */
+export const LIGHTNING_NAME = 'Heavenly Lightning';
+
+/** Heavenly Lightning: every Tribulation gains it below LIGHTNING_HP_SHARE of its max HP. */
+const LIGHTNING: SkillDef = {
+  id: 'heavenlyLightning',
+  name: LIGHTNING_NAME,
+  qi: 30,
+  cooldown: 30,
+  kind: 'damage',
+  windUp: LIGHTNING_WIND_UP,
+  strikes: 3,
+  effects: [{ type: 'hit', mult: 1.5 }],
+  when: (ctx: SkillContext) => ctx.self.hp < ctx.self.maxHp * LIGHTNING_HP_SHARE,
+};
+
+/** Each Tribulation's signature skill. */
+const SIGNATURES: Readonly<Record<(typeof TRIBULATIONS)[number], SkillDef>> = {
+  'Probation Review': {
+    id: 'finalWarning',
+    name: 'Final Warning',
+    qi: 30,
+    cooldown: 0,
+    kind: 'damage',
+    // 150% at full HP, up to 300% near 0.
+    effects: [{ type: 'hit', mult: 1.5, missing: 1 }],
+    when: always,
+  },
+  'Annual Appraisal': {
+    id: 'bellCurve',
+    name: 'Bell Curve',
+    qi: 30,
+    cooldown: 0,
+    kind: 'damage',
+    effects: [{ type: 'cut', share: 0.2, of: 'current' }],
+    when: always,
+  },
+  Restructuring: {
+    id: 'redundancy',
+    name: 'Redundancy',
+    qi: 40,
+    cooldown: 20,
+    kind: 'other',
+    effects: [{ type: 'purge' }],
+    when: (ctx: SkillContext) => ctx.other.buffs > 0,
+  },
+  'Hostile Takeover': {
+    id: 'assetSeizure',
+    name: 'Asset Seizure',
+    qi: 30,
+    cooldown: 10,
+    kind: 'other',
+    effects: [{ type: 'drain', amount: 60, steal: true }],
+    when: (ctx: SkillContext) => ctx.other.qi >= SEIZURE_MIN_QI,
+  },
+  'Shareholder Revolt': {
+    id: 'noConfidence',
+    name: 'Vote of No Confidence',
+    qi: 40,
+    // Longer than the silence, so it is never cast over one still running.
+    cooldown: 15,
+    kind: 'other',
+    effects: [{ type: 'silence', duration: 5 }],
+    when: always,
+  },
+  'Board Inquiry': {
+    id: 'underInvestigation',
+    name: 'Under Investigation',
+    qi: 40,
+    // Longer than the burn, so it is never cast over one still running.
+    cooldown: 12,
+    kind: 'damage',
+    effects: [{ type: 'burn', mult: 3, duration: 8 }],
+    when: always,
+  },
+  'Regulatory Probe': {
+    id: 'complianceFreeze',
+    name: 'Compliance Freeze',
+    qi: 40,
+    cooldown: 12,
+    kind: 'other',
+    effects: [{ type: 'stun', duration: 2 }],
+    when: always,
+  },
+  'Market Crash': {
+    id: 'freefall',
+    name: 'Freefall',
+    qi: 60,
+    cooldown: 20,
+    kind: 'damage',
+    effects: [{ type: 'cut', share: 0.15, of: 'max', hits: 3 }],
+    when: always,
+  },
+  'Heavenly Audit': {
+    id: 'finalJudgement',
+    name: 'Final Judgement',
+    qi: 60,
+    cooldown: 0,
+    kind: 'damage',
+    windUp: FINAL_JUDGEMENT_WIND_UP,
+    effects: [{ type: 'hit', mult: 4 }],
+    when: always,
+  },
+};
+
 // Maps, so a name read from a save never reaches an object's prototype.
 const ELITE_BY_DEMON: ReadonlyMap<string, SkillDef> = new Map(Object.entries(ELITES));
 const BOSS_BY_NAME: ReadonlyMap<string, readonly SkillDef[]> = new Map(Object.entries(BOSS_SKILLS));
+const TRIBULATION_BY_NAME: ReadonlyMap<string, readonly SkillDef[]> = new Map(
+  // Lightning first: it wins a tie with a signature skill of the same cost.
+  Object.entries(SIGNATURES).map(([name, def]) => [name, [LIGHTNING, def]]),
+);
 
 const ELITE_PREFIX = 'Elite ';
 
 /**
  * The skills `enemy` may cast, in priority order for ties; `uses` counts its
- * casts this fight by skill id. Regular demons and Tribulations have none here.
+ * casts this fight by skill id. Regular demons have none.
  */
 export function enemySkills(
   enemy: Pick<Enemy, 'kind' | 'name'>,
   uses: Readonly<Record<string, number>>,
 ): readonly SkillDef[] {
   if (enemy.kind === 'boss') return BOSS_BY_NAME.get(enemy.name) ?? [];
+  if (enemy.kind === 'tribulation') return TRIBULATION_BY_NAME.get(enemy.name) ?? [];
   if (enemy.kind !== 'elite' || !enemy.name.startsWith(ELITE_PREFIX)) return [];
   const demon = enemy.name.slice(ELITE_PREFIX.length);
   if (demon === 'Reply-All Swarm') {
@@ -167,9 +288,11 @@ export function enemySkills(
   return def ? [def] : [];
 }
 
-/** Every elite and boss skill's name, for the language packs. */
+/** Every elite, boss and Tribulation skill's name, for the language packs. */
 export const ENEMY_SKILL_NAMES: readonly string[] = [
   ...Object.values(ELITES).map((d) => d.name),
   replyAll(0).name,
   ...Object.values(BOSS_SKILLS).flatMap((list) => list.map((d) => d.name)),
+  ...Object.values(SIGNATURES).map((d) => d.name),
+  LIGHTNING.name,
 ];

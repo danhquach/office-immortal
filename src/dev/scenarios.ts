@@ -24,6 +24,7 @@ import {
   MAX_BAG_SIZE,
   pickUp,
 } from '../core/economy.ts';
+import { LIGHTNING_HP_SHARE } from '../core/enemy-skills.ts';
 import { maxQi, type EnemyKind } from '../core/floors.ts';
 import {
   ARRAY_IDS,
@@ -53,6 +54,7 @@ import {
   activePlan,
   canEquip,
   equip,
+  faceTribulation,
   newGame,
   restartFloor,
   tick,
@@ -243,6 +245,20 @@ export function setTrialLosses(state: GameState, losses: number): GameState {
     lostMaxHp: lost ? d.maxHp : 0,
   };
   return restartFloor(s);
+}
+
+/**
+ * The next realm's Tribulation (kept when one is due already) faced now, with
+ * `share` of its max HP and full qi, so it casts at once: its signature skill,
+ * or Heavenly Lightning below LIGHTNING_HP_SHARE.
+ */
+export function faceTribulationAt(state: GameState, share: number): GameState {
+  const due = readyForTribulation(state.cultivator) ? state : skipToTribulation(state);
+  const s = due.enemies[0]?.kind === 'tribulation' ? structuredClone(due) : faceTribulation(due);
+  const trial = s.enemies[0] as (typeof s.enemies)[number];
+  trial.hp = Math.max(1, Math.floor(trial.maxHp * share));
+  trial.qi = maxQi('tribulation');
+  return s;
 }
 
 /** The next realm's Tribulation due and set aside after TRIAL_LOSS_LIMIT losses just now. */
@@ -500,6 +516,10 @@ export const SCENARIOS = {
   tribulationPaused: setTribulationAside,
   /** The same, one loss before it is set aside. */
   tribulationLastTry: (s: GameState) => setTrialLosses(s, TRIAL_LOSS_LIMIT - 1),
+  /** The next Tribulation faced now at full HP and qi: it casts its signature skill at once. */
+  tribulationSkill: (s: GameState) => faceTribulationAt(s, 1),
+  /** The same just under half HP: Heavenly Lightning winds up at once. */
+  tribulationLightning: (s: GameState) => faceTribulationAt(s, LIGHTNING_HP_SHARE - 0.01),
   /** This floor's elite next, at full HP and qi. */
   eliteFight: (s: GameState) => setQi(setHp(jumpToFight(s, 'elite', s.floor), 'full'), 'full'),
   /** This floor's boss next, at full HP and qi. */
