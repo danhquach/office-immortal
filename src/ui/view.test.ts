@@ -18,7 +18,7 @@ import {
   rerollCost,
   spendPoints,
 } from '../core/economy.ts';
-import type { EquipSlotId, Item } from '../core/loot.ts';
+import { EQUIP_SLOTS, type EquipSlotId, type Item } from '../core/loot.ts';
 import {
   equip,
   faceTribulation,
@@ -118,6 +118,9 @@ import {
   SKILL_FLASH_SECONDS,
   skillLabel,
   skillTip,
+  DOLL_COLUMNS,
+  REALM_MIST,
+  realmMist,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
 import { DEFAULT_LANG, PACKS, setLang, t, tn, yellText } from './i18n.ts';
@@ -139,6 +142,23 @@ const stapler: Item = {
     { id: 'maxHp', roll: 1 },
   ],
 };
+
+describe('paper doll', () => {
+  it('puts every slot in one of two columns of five, worn gear left, trinkets right', () => {
+    const [left, right] = DOLL_COLUMNS;
+    expect(left).toEqual(['head', 'chest', 'boots', 'weapon', 'sideArm']);
+    expect(right).toEqual(['accessory1', 'accessory2', 'attachment', 'charm1', 'charm2']);
+    expect([...left, ...right].sort()).toEqual(Object.keys(EQUIP_SLOTS).sort());
+  });
+
+  it('has a mist colour for every realm, and keeps the last past the list', () => {
+    expect(REALM_MIST).toHaveLength(REALMS.length);
+    for (const c of REALM_MIST) expect(c).toMatch(/^#[0-9a-f]{6}$/);
+    expect(realmMist(0)).toBe(REALM_MIST[0]);
+    expect(realmMist(REALMS.length + 3)).toBe(REALM_MIST[REALMS.length - 1]);
+    expect(realmMist(-1)).toBe(REALM_MIST[0]);
+  });
+});
 
 describe('formatBonus', () => {
   it('shows flat stats as numbers and shares as percents', () => {
