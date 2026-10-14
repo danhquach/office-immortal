@@ -919,9 +919,12 @@ select {
     margin-bottom: 0.2rem;
     padding-block: 0.15rem;
   }
-  /* Each fighter as one line of name and HP over a thin bar, so the names
-     and HP cover only the stage's top edge and the zone and sprites show under
-     them. The name ends in an ellipsis; its title attribute holds the full name. */
+  /* Each fighter as one line of name (and the cultivator's HP) over a thin
+     bar, so the names and HP cover only the stage's top edge and the zone and
+     sprites show under them. The enemy's name has the whole line, so the
+     longest Tribulation name fits; its HP goes beside its qi bar, a row the
+     cultivator's skill icons already make as tall, so the strip keeps its
+     height. The ellipsis is only a safety net; the title holds the full name. */
   .game .strip > .fighters {
     padding-block: 0.1rem 0;
   }
@@ -932,7 +935,8 @@ select {
   }
   .game .foe {
     grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'hp name' 'bar bar' 'qi qi';
+    grid-template-areas: 'name name' 'bar bar' 'hp qi';
+    column-gap: 0.5rem;
   }
   /* The skill icons only, on the qi bar's row. */
   .game .fighter.you {
@@ -2816,6 +2820,13 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 }
 .tab-dot[hidden] {
   display: none;
+}
+/* The Character tabs fill their 275 px bar in English, so they sit a little
+   closer; the Stats tab's dot then stays on its label's line instead of
+   dropping under it. */
+.character > .tabs > .tab {
+  padding-inline: 0.4rem;
+  white-space: nowrap;
 }
 /* A group that folds: its heading is a button with an arrow, its count
    after the title while folded. The button holds the count while it is

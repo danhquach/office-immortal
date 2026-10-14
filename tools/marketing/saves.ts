@@ -9,7 +9,12 @@
 //   npm run marketing:saves
 
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { derive, readyForTribulation, type Cultivator } from '../../src/core/cultivator.ts';
+import {
+  derive,
+  readyForTribulation,
+  type Cultivator,
+  type PathId,
+} from '../../src/core/cultivator.ts';
 import { bulkTake } from '../../src/core/economy.ts';
 import { slotsFor, type EquipSlotId } from '../../src/core/loot.ts';
 import { buyPassive, passiveCost, type PassiveId } from '../../src/core/prestige.ts';
@@ -34,6 +39,12 @@ const DAY = 24 * 60 * 60;
 function power(c: Cultivator): number {
   const d = derive(c);
   return (d.damage / d.attackInterval) * d.maxHp * (1 + d.defence / 50);
+}
+
+/** A new run with Auto-assign on, so level-up points go where a player would put them. */
+function start(seed: number, path: PathId): GameState {
+  const state = newGame(seed, path);
+  return { ...state, statPlan: { ...state.statPlan, auto: true } };
 }
 
 /** Equips the bag item that makes the cultivator strongest, again and again, until none helps. */
@@ -81,12 +92,15 @@ function spend(state: GameState, order: readonly PassiveId[]): GameState {
 /**
  * The first seed, from 1 up, whose next `seconds` of play drop an Immortal
  * item into the bag, so the capture can play on until it lands. Played as the
- * page plays it: the store's stock is rolled on load and after every step, and
- * each roll draws from the same random numbers as the fight.
+ * page plays it: from the save as the page loads it (the fight's skill state is
+ * never saved, so a loaded fight plays on afresh), the store's stock rolled on
+ * load and after every step, each roll drawing from the same random numbers as
+ * the fight.
  */
 function immortalSoon(state: GameState, seconds: number): GameState {
   for (let s = 1; s < 1_000_000; s++) {
-    const seeded = { ...state, rng: { s } };
+    const seeded = decodeSave(encodeSave({ ...state, rng: { s } }, SAVED_AT))?.state;
+    if (!seeded) throw new Error('immortal-drop: the save does not load');
     let later = syncStore(seeded);
     for (let t = 0; t < seconds; t++) later = syncStore(tick(later, 1));
     if (later.inventory.some((item) => item.grade === 'immortal')) return seeded;
@@ -96,7 +110,7 @@ function immortalSoon(state: GameState, seconds: number): GameState {
 
 /** A Sword Cultivator's second run, climbed far enough for high-grade gear. */
 const late = playUntil(
-  spend(retire(playUntil(newGame(20261001, 'sword'), (s) => s.highestFloor >= 20, DAY)), [
+  spend(retire(playUntil(start(20261001, 'sword'), (s) => s.highestFloor >= 20, DAY)), [
     'xp',
     'treasure',
   ]),
@@ -106,13 +120,13 @@ const late = playUntil(
 
 const saves: Record<string, GameState> = {
   // A new run on its first floors.
-  'early-floor': playUntil(newGame(7, 'sword'), (s) => s.floor >= 3, DAY),
+  'early-floor': playUntil(start(7, 'sword'), (s) => s.floor >= 3, DAY),
   // The late run with room in the bag; an Immortal item drops within the minute.
   'immortal-drop': immortalSoon(bulkTake(late, 'sell', 'heaven'), 60),
   // A Body Refiner held at the Foundation Establishment cap (level 20), the Tribulation started.
   tribulation: faceTribulation(
     playUntil(
-      newGame(1, 'body'),
+      start(1, 'body'),
       (s) => s.cultivator.level >= 20 && readyForTribulation(s.cultivator) && canFaceTribulation(s),
       5 * DAY,
     ),
@@ -121,7 +135,7 @@ const saves: Record<string, GameState> = {
   inventory: late,
   // A Talisman Master on a second run, with Dao Insight spent and more to come.
   reincarnation: playUntil(
-    spend(retire(playUntil(newGame(55, 'talisman'), (s) => s.highestFloor >= 20, DAY)), [
+    spend(retire(playUntil(start(55, 'talisman'), (s) => s.highestFloor >= 20, DAY)), [
       'points',
       'xp',
     ]),

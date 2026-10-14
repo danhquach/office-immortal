@@ -1306,6 +1306,11 @@ save and its cloud save in a **storage frame**: a page without visible content
   itch.io game that opens our itch.io page in a popup can script our game
   (they share an origin) and act through it: upload over or delete the cloud
   save. It can't read the token, read a link code or link on its own (above).
+  Refusing the frames when our page has an opener (`top.opener`) doesn't help
+  (#154): the attacker opens a blank popup, sets its `opener` to null and only
+  then loads our page in it, keeping its handle, so the frames see no opener.
+  Only a Cross-Origin-Opener-Policy from itch.io would close this, and the
+  check would cost players opened from another site their cloud save.
   It can still fake or cover the frames to trick the player: a look-alike
   field on its own origin that catches a typed code, a fake code of its own,
   or text dragged into a hidden link frame. Each needs the attack running

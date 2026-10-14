@@ -456,6 +456,12 @@ describe('Full view layout', () => {
     expect((bag - PANEL_CHROME - THIN_SCROLLBAR - CELL_GAPS) / 8).toBeGreaterThanOrEqual(38.5);
   });
 
+  it('keeps each Character tab on one line, the Stats dot beside its label', () => {
+    const tab = rule(code, '.character > .tabs > .tab');
+    expect(tab).toMatch(/white-space:\s*nowrap/);
+    expect(tab).toMatch(/padding-inline:\s*0\.4rem/);
+  });
+
   it('makes the page the window’s height, the panels taking the rest', () => {
     const fit = media(FIT);
     expect(rule(fit, 'main > .game')).toMatch(/flex:\s*1 1 0/);
@@ -510,7 +516,13 @@ describe('Full view layout', () => {
     expect(rule(shortest, '.game .fighter')).toMatch(
       /grid-template-areas:\s*'name hp'\s*'bar bar'/,
     );
-    expect(rule(shortest, '.game .foe')).toMatch(/grid-template-areas:\s*'hp name'\s*'bar bar'/);
+    // The enemy's name has its whole line (the longest Tribulation name fits at
+    // 940 px); its HP sits beside its qi bar, a row the skill icons already make
+    // as tall on the cultivator's side.
+    expect(rule(shortest, '.game .foe')).toMatch(
+      /grid-template-areas:\s*'name name'\s*'bar bar'\s*'hp qi'/,
+    );
+    expect(rule(shortest, '.game .fighter.you')).toMatch(/'qi skills'/);
     expect(rule(shortest, '.game .fighter .name')).toMatch(/text-overflow:\s*ellipsis/);
     // The tier is a badge icon before the name; its label stays for screen readers.
     expect(rule(shortest, '.game .fighter .enemy-tier')).toMatch(/font-size:\s*0/);
