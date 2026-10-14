@@ -175,6 +175,7 @@ const messages = {
   'kpi.realm': 'Realm',
   'kpi.stones': 'Spirit Stones',
   'kpi.essence': 'Spirit Essence',
+  'kpi.tip': '{label}: {value}',
   'realm.withTitle': '{realm} · {title}',
   'realm.current': '(current)',
   'realm.levels': 'Lv {from}–{to}',
