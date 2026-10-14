@@ -273,6 +273,7 @@ import {
   stripEvents,
   castCallouts,
   CALLOUT_SECONDS,
+  lightningStrikes,
   windUpOf,
   tribulationBanner,
   tribulationCall,
@@ -297,6 +298,8 @@ const MAX_CALLOUTS = 4;
 const CALLOUT_MS = CALLOUT_SECONDS * 1000;
 /** How long the cultivator's yell bubble shows. */
 const YOU_YELL_MS = 1000;
+/** How long a Heavenly Lightning strike's flash shows. */
+const STRIKE_MS = 350;
 /** Item icon frame in the atlas, in px. */
 const ICON_PX = 32;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
@@ -3235,6 +3238,7 @@ function play(
         const yelled = i === lastYell && call.yell !== null && showYouYell(call.yell);
         if (!yelled) callout(f, call.text, call.cast);
       });
+      if (lightningStrikes(prev, state) > 0) strikeFlash();
     }
     showEnemy();
     drawSprites();
@@ -3442,6 +3446,14 @@ function play(
     n.style.bottom = `${Math.round(f.size * 1.05)}px`;
     stage.append(n);
     setTimeout(() => n.remove(), CALLOUT_MS);
+  }
+
+  /** A Heavenly Lightning strike flashes the stage, drawn in code; reduced motion shows none. */
+  function strikeFlash(): void {
+    const n = el('span', 'strike');
+    n.setAttribute('aria-hidden', 'true');
+    stage.append(n);
+    setTimeout(() => n.remove(), STRIKE_MS);
   }
 
   function drawSummary(): void {

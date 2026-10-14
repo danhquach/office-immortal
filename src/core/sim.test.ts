@@ -8,6 +8,7 @@ import {
   QI_BASE_REGEN,
   QI_PER_SPIRIT,
   readyForTribulation,
+  REALM_CAPS,
   xpToNext,
   type PathId,
   type Stats,
@@ -44,6 +45,7 @@ import {
   ENEMY_QI_REGEN,
   equip,
   faceTribulation,
+  gameSkills,
   loadedFightAt,
   mitigate,
   newGame,
@@ -665,6 +667,30 @@ describe('faceTribulation', () => {
     // The old state is untouched.
     expect(s.enemies[0]).toBe(interrupted);
     expect(s.cultivator.hp).toBe(1);
+  });
+
+  it('faced early, starts whole: full HP and qi, and the signature skill before any Heavenly Lightning', () => {
+    const s = until(newGame(7, 'sword'), firstDue);
+    s.cultivator.hp = 1;
+    s.cultivator.qi = 0;
+    const next = faceTribulation(s);
+    const trial = next.enemies[0]!;
+    expect(trial.hp).toBe(trial.maxHp);
+    const d = derive(next.cultivator);
+    expect(next.cultivator.hp).toBe(d.maxHp);
+    expect(next.cultivator.qi).toBe(d.maxQi);
+    // Nobody hits it, so it stays above half HP: it casts its own skill only.
+    // Its normal hit is softened so the fight lasts until it has the qi.
+    next.cultivator.nextAttackAt = Infinity;
+    trial.damage = 1;
+    const foeOnly: TickOptions = {
+      loadout: (x, side) => (side === 'foe' ? gameSkills(x, side) : []),
+    };
+    const casts = tick(next, 20, foeOnly).combat.log.flatMap((n) =>
+      'skill' in n && n.who === 'foe' ? [n.skill] : [],
+    );
+    expect(casts[0]).toBe('Final Warning');
+    expect(casts).not.toContain('Heavenly Lightning');
   });
 
   it('draws no randomness, and plays the same after it in one big step as in small ones', () => {
@@ -1324,11 +1350,20 @@ describe('Path balance', () => {
     talisman: { body: 30, agility: 10, spirit: 60 },
   };
 
-  /** A player who checks in every minute, equips every upgrade and empties the bag. */
-  function play(seed: number, path: PathId, minutes: number): GameState {
+  /**
+   * A player who checks in every minute, equips every upgrade and empties the
+   * bag, for `minutes` or until `done` holds after a check-in.
+   */
+  function play(
+    seed: number,
+    path: PathId,
+    minutes: number,
+    opts: TickOptions = {},
+    done: (s: GameState) => boolean = () => false,
+  ): GameState {
     let s = setAutoAssign(setPlanRatio(newGame(seed, path), path, REFERENCE[path]), true);
-    for (let m = 0; m < minutes; m++) {
-      s = tick(s, 60);
+    for (let m = 0; m < minutes && !done(s); m++) {
+      s = tick(s, 60, opts);
       for (let i = 0; i < s.inventory.length; i++) {
         const item = s.inventory[i] as Item;
         if (!canEquip(s.cultivator, item)) continue;
@@ -1361,6 +1396,39 @@ describe('Path balance', () => {
         });
         expect(Math.max(...floors) / Math.min(...floors)).toBeLessThan(1.15);
       }
+    },
+    BALANCE_MS,
+  );
+
+  /** The game's skills, but a Tribulation casts none: how it played before #146. */
+  const quietTribulations: TickOptions = {
+    loadout: (s, side) =>
+      side === 'foe' && s.enemies[0]?.kind === 'tribulation' ? [] : gameSkills(s, side),
+  };
+  /** The first three Tribulations, the ones a reference run reaches within TRIAL_MINUTES. */
+  const PAST_THIRD = (REALM_CAPS[2] as number) + 1;
+  const TRIAL_MINUTES = 240;
+  const TRIAL_SEEDS = 16;
+
+  it.each(PATH_IDS)(
+    'keeps the Tribulations winnable for %s with the gear found on the way',
+    (path) => {
+      const passed = (s: GameState) => s.cultivator.level >= PAST_THIRD;
+      const minutes = (opts: TickOptions) => {
+        let sum = 0;
+        for (let seed = 1; seed <= TRIAL_SEEDS; seed++) {
+          const s = play(seed, path, TRIAL_MINUTES, opts, passed);
+          // Every seed breaks through all three, so none is stuck.
+          expect(passed(s), `seed ${seed}`).toBe(true);
+          sum += s.time / 60;
+        }
+        return sum / TRIAL_SEEDS;
+      };
+      const withSkills = minutes({});
+      const without = minutes(quietTribulations);
+      // The skills play (they cost some time) and cost under 30% more.
+      expect(withSkills).toBeGreaterThan(without);
+      expect(withSkills / without).toBeLessThan(1.3);
     },
     BALANCE_MS,
   );

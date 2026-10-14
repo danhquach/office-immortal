@@ -108,6 +108,7 @@ import {
   statTip,
   castCallouts,
   yelledSkills,
+  lightningStrikes,
   windUpOf,
 } from './view.ts';
 import { makeEnemy, makeTribulation } from '../core/floors.ts';
@@ -2415,14 +2416,32 @@ describe('skill callouts', () => {
   it('says every effect in each language', () => {
     for (const code of Object.keys(PACKS)) {
       setLang(code);
-      const effects = ['stunned', 'silenced', 'shielded', 'interrupted'] as const;
+      const effects = ['stunned', 'silenced', 'shielded', 'interrupted', 'dispelled'] as const;
       const [prev, next] = noted(
         ...effects.map((effect) => ({ at: 1, who: 'you' as const, effect })),
       );
       const texts = castCallouts(prev, next).map((c) => c.text);
-      expect(new Set(texts).size).toBe(4);
+      expect(new Set(texts).size).toBe(5);
       for (const text of texts) expect(text).not.toMatch(/^callout\./);
     }
+  });
+
+  it('flashes for each Heavenly Lightning strike that lands, not its wind-ups or other skills', () => {
+    const [prev, next] = noted(
+      { at: 1, who: 'foe', skill: 'Heavenly Lightning', windUp: true },
+      { at: 1, who: 'foe', skill: 'Freefall', windUp: false },
+      { at: 1, who: 'you', skill: 'Heavenly Lightning', windUp: false },
+    );
+    expect(lightningStrikes(prev, next)).toBe(0);
+    const [before, after] = noted(
+      { at: 1, who: 'foe', skill: 'Heavenly Lightning', windUp: false },
+      { at: 1, who: 'foe', skill: 'Heavenly Lightning', windUp: true },
+    );
+    expect(lightningStrikes(before, after)).toBe(1);
+    // None again for the same notes, and none once over after a long step.
+    expect(lightningStrikes(after, structuredClone(after))).toBe(0);
+    after.time = 10;
+    expect(lightningStrikes(before, after)).toBe(0);
   });
 
   it('floats nothing as a wind-up starts: its yell bubble says it', () => {

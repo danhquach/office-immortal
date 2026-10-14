@@ -242,17 +242,18 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi regen/s.
-- **Follow-ups:** a signature skill for each Tribulation, a skill bar on the
-  strip, and skills on the Stats tab, breakthrough banner, Path choice, Realm
-  chip and Help. Each has its own ticket. The Path skills and the elite and
-  boss skills are in (§5 Path skills, §5 Elite and boss skills).
+- **Follow-ups:** a skill bar on the strip, and skills on the Stats tab,
+  breakthrough banner, Path choice, Realm chip and Help. Each has its own
+  ticket. The Path skills, the elite and boss skills and the Tribulation
+  skills are in (§5 Path skills, §5 Elite and boss skills, §5 Tribulation
+  skills).
 
 ### Skills
 
 The engine that spends qi, shared by the cultivator and enemies. The
 simulation casts every skill itself, so offline play casts as live play does.
-The Path skills and the elite and boss skills (below) plug into it; the
-Tribulation skills follow.
+The Path skills, the elite and boss skills and the Tribulation skills
+(below) plug into it.
 
 - **A skill** has a qi cost, an optional cooldown, a kind (damage, defensive
   or other), its effects, and its own "uses it when" rule.
@@ -286,6 +287,19 @@ Tribulation skills follow.
     second through defence (no crit, qi, lifesteal or reflect). A new burn
     replaces the last one unless burns stack: then each runs its own timer,
     3 at most, a fourth replacing the oldest.
+  The Tribulation skills added:
+  - a hit may deal more the more of its target's max HP is gone: ×(1 +
+    share × the share lost), checked hit by hit;
+  - a cut takes a share of the other side's current or max HP a hit, past
+    its defence (a shield and damage-taken buffs and debuffs still count; no
+    crit, qi or lifesteal; reflect answers it as any skill hit);
+  - a purge ends the other side's buffs: its mods that help it (more of a
+    stat, or less damage taken), its shield (no burst), reflect, "can't drop
+    below 1" and dodges; its debuffs stay. "Dispelled" floats over it. A dodge
+    turns a purge aside like any skill;
+  - an enemy skill may land as several strikes, paid for once: each strike
+    winds up and lands on its own, the next winding up as the last lands; a
+    stun cancels the wind-up and the strikes left.
 - **Spirit bonus:** every cultivator skill's damage (hits, spills, burns,
   counters and the max-HP part) gains +0.1% per point of Spirit, after the realm bonus, on
   every Path alike (+10% at 100 Spirit). A shield burst is its own value.
@@ -334,7 +348,7 @@ Tribulation skills follow.
   started long ago (never early, a fight-start rule is past).
 - **On the strip:** the skill's name floats over its caster as it lands, in
   the tier gold, with the attack pose as the cast pose; an effect's word
-  ("Stunned", "Silenced", "Shielded", "Interrupted") floats over the fighter it
+  ("Stunned", "Silenced", "Shielded", "Interrupted", "Dispelled") floats over the fighter it
   hit. While an enemy winds up, it yells the skill in a gold speech bubble
   ("Paper-Binding Seal!") at the top of the stage, its right edge on the
   enemy's sprite and its tail pointing down at it, and a gold cast bar fills over its
@@ -453,6 +467,51 @@ never crits.
   the player's language (EN and VI) (§5 Skills). Every one, EN and VI, fits
   the bubble whole within 2 lines at 320 px, 375 px, 479 px, 960 x 640 and
   1280 px.
+
+### Tribulation skills
+
+Each Tribulation has one signature skill, and every Tribulation gains
+Heavenly Lightning below 50% of its max HP. Lightning is listed first, so it
+wins a tie with a signature skill of the same cost; at 30 qi it comes before
+any costlier one. Like the elite and boss skills,
+each winds up first (1 s unless listed), deals a share of the Tribulation's
+normal hit through the cultivator's defence unless listed, never crits, and
+follows the shared rules (§5 Skills): the costliest it may cast, a damage
+skill held when its next normal hit kills.
+
+| Tribulation | Skill | Qi | Cooldown | Effect | Uses it when |
+|---|---|---|---|---|---|
+| Probation Review | Final Warning | 30 | — | one hit at 150%, ×(1 + the share of max HP the cultivator has lost): 225% at half HP | whenever ready |
+| Annual Appraisal | Bell Curve | 30 | — | damage equal to 20% of the cultivator's current HP, past defence | whenever ready |
+| Restructuring | Redundancy | 40 | 20 s | removes the cultivator's active buffs (a purge) | the cultivator has a buff |
+| Hostile Takeover | Asset Seizure | 30 | 10 s | steals up to 60 of the cultivator's qi | the cultivator holds 30 qi or more |
+| Shareholder Revolt | Vote of No Confidence | 40 | 15 s | silences the cultivator (no skills) for 5 s | whenever ready |
+| Board Inquiry | Under Investigation | 40 | 12 s | burns for 300% over 8 s | whenever ready |
+| Regulatory Probe | Compliance Freeze | 40 | 12 s | stuns the cultivator for 2 s | whenever ready |
+| Market Crash | Freefall | 60 | 20 s | 3 hits, each 15% of the cultivator's max HP, past defence | whenever ready |
+| Heavenly Audit | Final Judgement | 60 | — | one hit at 400%, 3 s wind-up | whenever ready |
+| Every Tribulation | Heavenly Lightning | 30 | 30 s | 3 strikes at 150%, each after its own 3 s wind-up; a stun cancels the rest | below 50% of its max HP |
+
+- **Starting:** a Tribulation steps up at full HP and 0 qi like any enemy, so
+  Heavenly Lightning never comes at the start, faced early or reached in
+  turn; the cultivator starts it at full HP and qi (§5 Qi and skills).
+  The first Tribulation often falls before it has the qi for Final Warning.
+- **On the strip:** each Heavenly Lightning strike yells its name in the
+  wind-up bubble and flashes the whole stage once, pale gold, as it lands
+  (drawn in code, at most one flash every 3 s). Reduced motion, Discreet and
+  the Mini view show no flash.
+- **Balance:** a test per Path plays the reference run (§3) with every skill
+  cast, 16 seeds, through the first three Tribulations (the ones a run
+  reaches in four hours), and again with the Tribulations casting nothing:
+  every seed breaks through all three with the skills, and they cost under
+  30% more time. Measured: Sword 1.04×, Body 1.04×, Talisman Master 1.22×
+  (60.1, 136.1 and 81.6 min against 57.6, 130.3 and 66.9). The signature
+  skills cost almost nothing; Heavenly Lightning is the cost, most for the
+  Talisman Master's small HP pool. As one 450% burst it cost the Talisman
+  Master 1.57×, so its strikes come one at a time, each after a 3 s wind-up
+  that a stun can answer. The Path balance test (§3) is unchanged.
+- **Names** are yelled and float in the player's language (EN and VI), and
+  fit the bubble as the elite and boss skills do.
 
 ## 6. Loot
 

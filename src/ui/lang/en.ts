@@ -60,6 +60,7 @@ const messages = {
   'callout.silenced': 'Silenced',
   'callout.shielded': 'Shielded',
   'callout.interrupted': 'Interrupted',
+  'callout.dispelled': 'Dispelled',
   'strip.wave': 'Wave {n} / {of}',
   'strip.elite': 'Elite',
   'strip.boss': 'Boss',

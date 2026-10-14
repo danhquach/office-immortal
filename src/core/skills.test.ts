@@ -4,6 +4,7 @@ import { makeEnemy, makeTribulation, type EnemyKind } from './floors.ts';
 import {
   bossOrTougher,
   buffed,
+  buffsOn,
   BURN_TICK,
   CAST_PAUSE,
   chooseSkill,
@@ -11,6 +12,7 @@ import {
   DEFENSIVE_HP_SHARE,
   freshCombat,
   freshStatus,
+  helps,
   HOLD_WITHIN_QI,
   LOG_SIZE,
   MAX_BURNS,
@@ -106,6 +108,7 @@ function view(over: Partial<FighterView> = {}): FighterView {
     fightTime: 5,
     burning: false,
     evades: 0,
+    buffs: 0,
     ...over,
   };
 }
@@ -953,6 +956,176 @@ describe('effects the Path skills brought', () => {
       front(burnt).hp = 1;
       burnt.cultivator.nextAttackAt = burnt.time + 0.1;
       expect(tick(burnt, 0.2, book([])).combat.foe.burns).toEqual([]);
+    });
+  });
+});
+
+describe('effects the Tribulation skills brought', () => {
+  /** A quiet arena with no Body, so no HP regen between hits; HP full. */
+  function still(): GameState {
+    const s = arena();
+    s.cultivator.stats.body = 0;
+    s.cultivator.hp = derive(s.cultivator).maxHp;
+    return s;
+  }
+
+  /** The enemy casts one skill of these effects once, from a still arena; nobody attacks. */
+  function foeCast(effects: Effect[], s = still(), seconds = 3, over: Partial<SkillDef> = {}) {
+    return tick(s, seconds, book([], [skill({ effects, cooldown: 100, ...over })]));
+  }
+
+  it("hit with missing: deals more the more of its target's max HP is gone", () => {
+    const s = still();
+    const d = derive(s.cultivator);
+    const hit: Effect = { type: 'hit', mult: 1, missing: 1 };
+    expect(foeCast([hit], s).cultivator.hp).toBe(d.maxHp - mitigate(front(s).damage, d.defence));
+    s.cultivator.hp = Math.round(d.maxHp / 2);
+    const lost = 1 - s.cultivator.hp / d.maxHp;
+    expect(foeCast([hit], s).cultivator.hp).toBe(
+      s.cultivator.hp - mitigate(front(s).damage * (1 + lost), d.defence),
+    );
+  });
+
+  it('cut: a share of current or max HP, past defence; a shield still soaks it', () => {
+    const s = still();
+    const d = derive(s.cultivator);
+    s.cultivator.hp = 50;
+    expect(foeCast([{ type: 'cut', share: 0.2, of: 'current' }], s).cultivator.hp).toBe(40);
+    s.cultivator.hp = d.maxHp;
+    const max = foeCast([{ type: 'cut', share: 0.1, of: 'max', hits: 3 }], s);
+    expect(max.cultivator.hp).toBe(d.maxHp - 3 * Math.round(d.maxHp * 0.1));
+    s.combat.you.shield = 1e6;
+    s.combat.you.shieldUntil = OFF;
+    expect(foeCast([{ type: 'cut', share: 0.1, of: 'max' }], s).cultivator.hp).toBe(d.maxHp);
+  });
+
+  it("cut by the cultivator: a share of the enemy's HP, and it can kill", () => {
+    const s = still();
+    const after = tick(
+      s,
+      2,
+      book([skill({ effects: [{ type: 'cut', share: 0.25, of: 'max' }], cooldown: 100 })]),
+    );
+    expect(front(after).hp).toBe(1e6 - 2.5e5);
+    front(s).hp = 10;
+    const kill = tick(
+      s,
+      2,
+      book([skill({ effects: [{ type: 'cut', share: 1, of: 'current' }], cooldown: 100 })]),
+    );
+    expect(kill.kills).toBe(1);
+  });
+
+  it('a cut ends the fight at a loss, and stops its hits there', () => {
+    const s = still();
+    s.cultivator.hp = 1;
+    const after = foeCast([{ type: 'cut', share: 1, of: 'max', hits: 3 }], s);
+    expect(after.deaths).toBe(s.deaths + 1);
+  });
+
+  it("purge: ends the other side's buffs and keeps its debuffs", () => {
+    const s = still();
+    const you = s.combat.you;
+    you.mods = [
+      { stat: 'damage', amount: 0.3, until: OFF, source: 'mine' },
+      { stat: 'damageTaken', amount: -0.5, until: OFF, source: 'mine' },
+      { stat: 'damage', amount: -0.25, until: OFF, source: 'theirs' },
+      { stat: 'damageTaken', amount: 0.2, until: OFF, source: 'theirs' },
+    ];
+    you.shield = 50;
+    you.shieldUntil = OFF;
+    you.shieldBurst = 50;
+    you.reflect = 0.3;
+    you.reflectUntil = OFF;
+    you.endureUntil = OFF;
+    you.endureHeal = 0.2;
+    expect(buffsOn(you, s.time)).toBe(5);
+    const after = foeCast([{ type: 'purge' }], s).combat.you;
+    expect(after.mods.map((m) => m.source)).toEqual(['theirs', 'theirs']);
+    expect(after).toMatchObject({
+      shield: 0,
+      shieldBurst: 0,
+      reflect: 0,
+      endureHeal: 0,
+      evades: 0,
+    });
+    expect(buffsOn(after, OFF - 1)).toBe(0);
+    const log = foeCast([{ type: 'purge' }], s).combat.log;
+    expect(log.at(-1)).toMatchObject({ who: 'you', effect: 'dispelled' });
+  });
+
+  it('a dodge turns a purge aside whole, using its dodges up', () => {
+    const s = still();
+    s.combat.you.evades = 2;
+    s.combat.you.shield = 50;
+    s.combat.you.shieldUntil = OFF;
+    const after = foeCast([{ type: 'purge' }], s).combat.you;
+    expect(after.evades).toBe(0);
+    expect(after.shield).toBe(50);
+  });
+
+  it('helps: more of a stat, or less damage taken', () => {
+    expect(helps({ stat: 'damage', amount: 0.1, until: 1 })).toBe(true);
+    expect(helps({ stat: 'damage', amount: -0.1, until: 1 })).toBe(false);
+    expect(helps({ stat: 'damageTaken', amount: -0.1, until: 1 })).toBe(true);
+    expect(helps({ stat: 'damageTaken', amount: 0.1, until: 1 })).toBe(false);
+  });
+
+  describe('strikes', () => {
+    const bolt = (over: Partial<SkillDef> = {}) =>
+      skill({
+        id: 'bolt',
+        name: 'Heavenly Lightning',
+        qi: 30,
+        cooldown: 100,
+        windUp: 1,
+        strikes: 3,
+        effects: [{ type: 'hit', mult: 1 }],
+        ...over,
+      });
+
+    it('lands each strike after its own wind-up, its qi paid once', () => {
+      const s = still();
+      const d = derive(s.cultivator);
+      const after = tick(s, 5, book([], [bolt()]));
+      const notes = casts(after).filter((n) => n.who === 'foe');
+      expect(notes.map((n) => n.windUp)).toEqual([true, false, true, false, true, false]);
+      for (let i = 0; i < 6; i += 2) {
+        expect((notes[i + 1]?.at ?? 0) - (notes[i]?.at ?? 0)).toBeCloseTo(1, 9);
+      }
+      // Each next wind-up starts as the last strike lands.
+      expect(notes[2]?.at).toBe(notes[1]?.at);
+      expect(after.cultivator.hp).toBe(d.maxHp - 3 * mitigate(front(s).damage, d.defence));
+      expect(after.combat.foe.uses.bolt).toBe(1);
+      expect(front(after).qi).toBeGreaterThanOrEqual(60 - 30);
+      expect(front(after).qi).toBeLessThan(60 - 30 + 6);
+    });
+
+    it('a stun between strikes cancels the ones left', () => {
+      const s = still();
+      const d = derive(s.cultivator);
+      const stun = skill({
+        id: 'stun',
+        qi: 1,
+        cooldown: 100,
+        effects: [{ type: 'stun', duration: 3 }],
+        // Only once hurt: after the first strike lands.
+        when: (ctx) => ctx.other.windingUp && ctx.self.hp < ctx.self.maxHp,
+      });
+      const after = tick(s, 8, book([stun], [bolt()]));
+      const lands = casts(after).filter((n) => n.who === 'foe' && !n.windUp);
+      expect(lands).toHaveLength(1);
+      expect(after.combat.foe.windUp).toBeNull();
+      expect(after.cultivator.hp).toBe(d.maxHp - mitigate(front(s).damage, d.defence));
+      expect(after.combat.log.some((n) => 'effect' in n && n.effect === 'interrupted')).toBe(true);
+    });
+
+    it('stops at a loss: no strike carries into the next fight', () => {
+      const s = still();
+      s.cultivator.hp = 1;
+      const after = tick(s, 5, book([], [bolt()]));
+      expect(after.deaths).toBe(s.deaths + 1);
+      expect(after.combat.foe.windUp).toBeNull();
     });
   });
 });
