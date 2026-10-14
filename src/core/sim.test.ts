@@ -44,8 +44,10 @@ import {
   ENEMY_QI_REGEN,
   equip,
   faceTribulation,
+  loadedFightAt,
   mitigate,
   newGame,
+  noSkills,
   QI_PER_ATTACK,
   QI_PER_HIT_TAKEN,
   QI_TICK,
@@ -880,9 +882,22 @@ describe('Formation Disc arrays', () => {
       expect(end.cultivator.hp).toBeLessThan(s.cultivator.hp);
     });
 
+    it('tells a loaded save a fight start at or before the real one', () => {
+      const s = standoff(atFirstKill(wearing(disc('killing'))));
+      const start = s.combat.fightAt;
+      // In the pause: exact.
+      expect(loadedFightAt(s)).toBe(start);
+      // In the fight, never later than the real start, so a fight-start rule is never early.
+      expect(loadedFightAt(tick(s, ENEMY_ARRIVAL + 0.5, { loadout: noSkills }))).toBe(0);
+      const later = tick(s, ENEMY_ARRIVAL + 3.5, { loadout: noSkills });
+      expect(later.combat.fightAt).toBe(start);
+      expect(loadedFightAt(later)).toBe(0);
+    });
+
     it('does nothing without a Killing Array', () => {
       const s = standoff(atFirstKill(wearing(disc('binding'))));
-      const end = tick(s, 100);
+      // No Path skills either: they would hit it.
+      const end = tick(s, 100, { loadout: noSkills });
       expect((end.enemies[0] as { hp: number }).hp).toBe(1e12);
     });
 
@@ -1171,7 +1186,8 @@ describe('qi', () => {
     const s = quiet(newGame(7, path), { you: true, foe: true, regen: true });
     const max = derive(s.cultivator).maxQi;
     s.cultivator.qi = max - 1;
-    const next = tick(s, 60);
+    // No Path skills to spend it.
+    const next = tick(s, 60, { loadout: noSkills });
     expect(next.cultivator.qi).toBe(max);
   });
 
@@ -1352,7 +1368,9 @@ describe('Tribulation retry limit', () => {
     const losses = state.trial.losses;
     const s =
       state.enemies[0]?.kind === 'tribulation' ? structuredClone(state) : faceTribulation(state);
+    // Unbeatable, so the Path skills can't win it first.
     s.enemies[0]!.damage = 1e9;
+    s.enemies[0]!.hp = s.enemies[0]!.maxHp = 1e12;
     return until(s, (x) => x.trial.losses > losses, 60);
   }
 

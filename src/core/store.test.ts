@@ -4,7 +4,7 @@ import { GRADES, rollGrade, type GradeId } from './loot.ts';
 import { catchUp } from './offline.ts';
 import { retirePreview } from './prestige.ts';
 import { createRng } from './rng.ts';
-import { newGame, retire, tick, type GameState } from './sim.ts';
+import { newGame, noSkills, retire, tick, type GameState } from './sim.ts';
 import { setLevel } from '../dev/scenarios.ts';
 import {
   BOOST_BONUS,
@@ -202,9 +202,11 @@ describe('timed boosts', () => {
     xpOn.boosts.xp = 1e6;
     const stonesOn = structuredClone(base);
     stonesOn.boosts.stones = 1e6;
-    const plain = tick(base, 300);
-    const xp = tick(xpOn, 300);
-    const stones = tick(stonesOn, 300);
+    // No Path skills: a boost that brings a breakthrough sooner would also bring new skills.
+    const opts = { loadout: noSkills };
+    const plain = tick(base, 300, opts);
+    const xp = tick(xpOn, 300, opts);
+    const stones = tick(stonesOn, 300, opts);
     expect(xp.kills).toBe(plain.kills);
     const totalXp = (st: GameState) => st.cultivator.level * 1e9 + st.cultivator.xp;
     expect(totalXp(xp)).toBeGreaterThan(totalXp(plain));

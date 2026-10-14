@@ -75,6 +75,7 @@ import {
   ARRAY_TICK,
   defaultStatPlan,
   ENEMY_ARRIVAL,
+  loadedFightAt,
   newTrial,
   QI_TICK,
   startFloor,
@@ -430,6 +431,9 @@ function readState(v: unknown, version: number): GameState {
         : fail('freeReset'),
     combat: freshCombat(),
   };
+  // The fight's skill state starts afresh, from when the loaded fight started:
+  // nobody casts in an arrival pause, and fight-start rules read the right time.
+  state.combat = freshCombat(loadedFightAt(state));
   if (oldCaps) toNewRealms(state);
   return state;
 }

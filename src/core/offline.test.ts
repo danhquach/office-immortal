@@ -129,6 +129,7 @@ describe('catchUp and the Tribulation retry limit', () => {
       const losses = s.trial.losses;
       s = s.enemies[0]?.kind === 'tribulation' ? structuredClone(s) : faceTribulation(s);
       s.enemies[0]!.damage = 1e9;
+      s.enemies[0]!.hp = s.enemies[0]!.maxHp = 1e12;
       while (s.trial.losses === losses) s = tick(s, 1);
     }
     return s;

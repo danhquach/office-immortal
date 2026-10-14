@@ -37,13 +37,17 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
 | Path | Role | Primary stat | Path Mastery |
 |---|---|---|---|
 | Sword Cultivator | Fast hits, crit, a little lifesteal (5%) | Agility | Flowing Sword |
-| Body Refiner | Tanky, lifesteal (15%) | Body | Iron Body |
+| Body Refiner | Tanky, lifesteal (15%), +15% damage | Body | Iron Body |
 | Talisman Master | Burst (every 5th attack ×5), area damage | Spirit | Talisman Resonance |
 
 - **Balance:** no Path is much stronger than the others; a test plays each
   Path with a fixed reference build (its Auto-assign plan: Sword 30 / 60 / 10,
   Body 70 / 20 / 10, Talisman 30 / 10 / 60 Body / Agility / Spirit) and keeps
-  each within 15% of the others on the floor reached, at 10 and 60 minutes.
+  each within 15% of the others on the floor reached, at 10 and 60 minutes,
+  with the Path skills (§5) cast as in play. The skills let the Sword
+  Cultivator and Talisman Master clear the first Tribulations much sooner, while
+  the Body Refiner's first skill is defensive, so the Body Refiner deals
+  +15% damage (all of its damage, after gear and realm bonuses).
 - **Stats: every stat helps every Path.** Each stat's effects are full for
   the Path whose main stat it is and **half** for the other two (the Path
   share). The numbers below are the full share:
@@ -237,17 +241,17 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi regen/s.
-- **Follow-ups:** four Path skills learned at realm breakthroughs, elite and
-  boss skills, a signature skill for each Tribulation, a skill bar on the
-  strip, and skills on the Stats tab, breakthrough banner, Path choice, Realm
-  chip and Help. Each has its own ticket.
+- **Follow-ups:** elite and boss skills, a signature skill for each
+  Tribulation, a skill bar on the strip, and skills on the Stats tab,
+  breakthrough banner, Path choice, Realm chip and Help. Each has its own
+  ticket. The Path skills are in (§5 Path skills).
 
 ### Skills
 
 The engine that spends qi, shared by the cultivator and enemies. The
 simulation casts every skill itself, so offline play casts as live play does.
-The game has no skills yet: the Path, elite, boss and Tribulation skills
-plug into it.
+The Path skills (below) are the first to plug into it; the elite, boss and
+Tribulation skills follow.
 
 - **A skill** has a qi cost, an optional cooldown, a kind (damage, defensive
   or other), its effects, and its own "uses it when" rule.
@@ -257,15 +261,50 @@ plug into it.
   defence, crit chance, damage taken, lifesteal), a shield (a share of max HP),
   a heal, a stun, a silence, qi drain or steal, a damage reflect, and "HP
   can't drop below 1". A waiting enemy a spill kills pays out like any kill.
-  Skill hits give no qi and no lifesteal.
+  Skill hits give no qi and no lifesteal. The Path skills added:
+  - a hit may deal more to an enemy below a share of its max HP (checked hit
+    by hit), add a share of the caster's max HP to each hit (never a crit),
+    and give back a share of the skill's qi at its first kill (a spill kill
+    counts; clearing the floor still empties qi);
+  - a spill with no limit reaches the whole wave (every enemy left on the
+    floor, never a waiting Tribulation);
+  - a buff may be relative: +100% lifesteal adds the caster's own lifesteal,
+    doubling it;
+  - a shield may burst: the hit that breaks it (not running out) deals the
+    shield's full value to the other side, past its defence, once, at once,
+    whatever broke it (an attack, a skill, a reflect or the other side's own
+    burst, which can set off a chain);
+  - "HP can't drop below 1" may heal a share of max HP as it ends, if the
+    fight is still on;
+  - an evade turns aside the next normal attacks (after the dodge roll, so
+    only hits that would land use one), or the other side's next skill whole,
+    which uses them all up (that skill's effects on its caster still land);
+    it may answer each with a counter: a crit at the normal hit (a skill
+    hit, so it gets the Spirit bonus);
+  - a burn deals a share of the normal hit over its duration, a tick a
+    second through defence (no crit, qi, lifesteal or reflect). A new burn
+    replaces the last one unless burns stack: then each runs its own timer,
+    3 at most, a fourth replacing the oldest.
+- **Spirit bonus:** every cultivator skill's damage (hits, spills, burns,
+  counters and the max-HP part) gains +0.1% per point of Spirit, after the realm bonus, on
+  every Path alike (+10% at 100 Spirit). A shield burst is its own value.
 - **When a skill is cast:** after every combat event, each side that is not
   already casting picks the costliest skill it may cast now: enough qi, off
-  cooldown, not stunned or silenced, its own rule, and three shared rules:
+  cooldown, not stunned or silenced, its own rule, and four shared rules:
   1. the cultivator holds a cheap skill (not a defensive one) while a bigger
-     skill off cooldown is within 20 qi, against an elite or tougher;
+     skill is within 20 qi, against an elite or tougher, but only a bigger
+     skill that would be cast once its qi is there: off cooldown, and rules
+     2 to 4 and its own rule holding for it now (read as if it had its qi).
+     A bigger skill whose rule is false, or held by its running buff, holds
+     nothing;
   2. don't spend a damage skill when the next normal hit kills;
   3. defensive skills wait for HP at or below 60%, or the other side winding
-     up.
+     up; a skill may name an urgent case that skips this wait (Vajra Body);
+  4. a skill made only of buffs on its caster isn't cast again while one of
+     them still works: its own buff not run out, a shield not broken or run
+     out, a reflect or "can't drop below 1" running, dodges left. A broken
+     shield can be cast again at once, and a skill that also heals or hits
+     (Blood Qi Surge) is never held by the buff it gives.
   Ties go to the skill listed first. Nobody casts in the pause before a fight.
   Choices are only made at combat events, so a skill whose cooldown or stun
   ends between them waits for the next one; the qi regen step makes one at
@@ -283,10 +322,15 @@ plug into it.
   (§3), at most 95%; enemies' run in full. Dodge and Iron Body's reflect work
   on skills as on attacks: a dodge turns aside only normal attacks, and Iron
   Body sends back a share of skill hits too, adding to a skill's reflect.
-- **Fight end:** buffs, debuffs, shields, cooldowns and wind-ups end with the
+- **Fight end:** buffs, debuffs, shields, burns, dodges, cooldowns and wind-ups end with the
   fight (a kill, a loss, a Tribulation faced early); nothing reaches the next
   one. This skill state is never saved: a save made mid-fight loads with none,
-  and an attack a stun or slow had pushed back loads at the normal limit.
+  and an attack a stun or slow had pushed back loads at the normal limit. A
+  load keeps when the fight started, read from the array timer (set a second
+  after each fight starts): nobody casts in an arrival pause it was saved in,
+  and fight-start rules read the right time. Under a Killing Array mid-fight
+  that timer tells the last hit, not the start, so the fight is taken to have
+  started long ago (never early, a fight-start rule is past).
 - **On the strip:** the skill's name floats over its caster as it lands, in
   the tier gold, with the attack pose as the cast pose; an effect's word
   ("Stunned", "Silenced", "Shielded", "Interrupted") floats over the fighter it
@@ -296,6 +340,62 @@ plug into it.
   stay. Reduced motion shows the text in place with no rise and the bar with
   no glide. Discreet hides callouts and cast bars, and the Mini view leaves
   callouts out. Screen readers are not told about each cast.
+
+### Path skills
+
+Each Path has four skills. The first is learned in Qi Condensation, and each
+of the nine breakthroughs brings one new skill or an upgrade, so every realm
+gives something. None has a cooldown: the qi cost is the limit. Skill damage
+is a share of the normal hit (so it follows the Path's main stat), plus the
+Spirit bonus (§5 Skills).
+
+| Realm | Sword Cultivator | Body Refiner | Talisman Master |
+|---|---|---|---|
+| Qi Condensation | Flying Sword (30 qi): one hit at 250%, always a crit | Iron Skin (30 qi): +60% defence for 6 s | Fire Talisman (30 qi): one hit at 220%, then a burn for 50% over 3 s |
+| Foundation Establishment | Sword Intent (45 qi): +40% attack speed for 6 s | Mountain Fist (40 qi): one hit at 200%, stuns 1 s | Thunder Talisman (45 qi): 180% to the enemy in front, 90% to the next one waiting |
+| Golden Core | Flying Sword: two swords, 2 × 150% (still always crits) | Iron Skin: also reflects 25% of damage taken for 6 s | Spirit Shield (40 qi): a shield worth 20% of max HP for 8 s |
+| Nascent Soul | Lightning Step (35 qi): dodges the next 2 hits or the next enemy skill | Blood Qi Surge (55 qi): heals 25% of max HP | Fire Talisman: burns stack (up to 3) |
+| Spirit Transformation | Sword Intent: also +15% crit chance | Mountain Fist: stuns 1.5 s, adds 10% of max HP as damage | Sealing Talisman (50 qi): empties the enemy's qi and silences it for 5 s |
+| Void Refinement | Ten Thousand Swords (90 qi): 6 × 100%, double on an enemy below 30% HP | Vajra Body (80 qi): HP can't drop below 1 for 4 s, then heals 10% | Thunder Talisman: also hits the 2 enemies after it (90% each) |
+| Body Integration | Lightning Step: each dodge answers with a crit | Blood Qi Surge: also doubles lifesteal for 6 s | Spirit Shield: bursts for its full value when it breaks |
+| Mahayana | Flying Sword: a kill gives back half its qi | Iron Skin: costs 20 qi | Sealing Talisman: 8 s, and steals the qi |
+| Tribulation Transcendence | Ten Thousand Swords: 8 hits | Vajra Body: lasts 6 s | Fire Talisman: costs 20 qi |
+| Immortal Ascension | Sword Intent: lasts 10 s, costs 35 qi | Mountain Fist becomes Mountain-Toppling Palm: 300% + 15% of max HP, stuns 1.5 s | Thunder Talisman becomes Heavenly Thunder Array: 200% to the whole wave, the enemy in front included |
+
+**Uses it when** (on top of the shared rules; ties go to the skill learned
+first):
+
+- **Flying Sword:** whenever ready; shared rule 1 holds it while Ten Thousand
+  Swords is within 20 qi and would be cast (an elite below 30% HP, a boss or
+  Tribulation). Rule 1 holds it the same way for a Sword Intent that would be
+  cast, never for one whose buff is running or whose rule is false.
+- **Sword Intent:** in the first second of a fight against an elite or
+  tougher, or while the enemy is above 50% of its max HP.
+- **Lightning Step and Iron Skin** (defensive): when the enemy winds up, or
+  HP is low: at or below 60% of max HP, the shared threshold. Neither is cast
+  again while it still works (rule 4: dodges left, the defence buff or the
+  reflect running).
+- **Ten Thousand Swords:** against an elite below 30% of its max HP, or a
+  boss or Tribulation.
+- **Mountain Fist:** to interrupt a wind-up, otherwise when qi is full.
+- **Blood Qi Surge** (defensive): HP below 40%.
+- **Vajra Body** (defensive): the enemy's next normal hit (after defence)
+  would take HP below 20% (urgent: even from above 60% HP, against a
+  one-shot), or a boss or Tribulation winds up.
+- **Fire Talisman:** when the enemy isn't already burning; once burns stack
+  (Nascent Soul), whenever ready.
+- **Thunder Talisman:** two or more enemies its spill can reach (the one in
+  front and those waiting on the floor; a Tribulation waiting at the end
+  doesn't count), or a boss or Tribulation.
+- **Spirit Shield** (defensive): HP at or below 60%, or a wind-up; again as
+  soon as the last shield broke or ran out.
+- **Sealing Talisman:** an elite or tougher with qi above 70% of its own max.
+
+Skills follow the current Path and realm: they are worked out from them at
+every combat event and never saved. A Path change or a Reincarnation (level
+1, Qi Condensation) has the right skills at once, and an older save loads
+with the skills for its Path and realm. A skill's name floats over the
+cultivator as it lands (§5 Skills), in the player's language.
 
 ## 6. Loot
 

@@ -3,6 +3,7 @@
 
 import { PATHS, REALMS } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, TRIBULATIONS } from '../core/floors.ts';
+import { PATH_SKILL_NAMES } from '../core/path-skills.ts';
 import { ARRAYS, CHARM_LINES, EQUIP_SLOTS, GRADES, SLOTS, UNIQUES } from '../core/loot.ts';
 import { PASSIVES } from '../core/prestige.ts';
 
@@ -20,8 +21,8 @@ export const NAME_KINDS = {
   passive: Object.values(PASSIVES).map((p) => p.name),
   passiveRank: Object.values(PASSIVES).map((p) => p.perRankText),
   enemy: [...DEMONS, ...BOSSES, ...TRIBULATIONS],
-  // The skills' names arrive with the skills (#144, #145, #146).
-  skill: [] as readonly string[],
+  // The Path skills' names; the enemy skills' arrive with #145 and #146.
+  skill: PATH_SKILL_NAMES,
 } as const satisfies Record<string, readonly string[]>;
 
 export type NameKind = keyof typeof NAME_KINDS;

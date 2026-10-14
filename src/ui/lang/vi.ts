@@ -759,7 +759,22 @@ const vi: Pack = {
       'Market Crash': 'Thị Trường Sụp Đổ',
       'Heavenly Audit': 'Thiên Đình Kiểm Toán',
     },
-    skill: {},
+    skill: {
+      'Flying Sword': 'Phi Kiếm',
+      'Sword Intent': 'Kiếm Ý',
+      'Lightning Step': 'Lôi Quang Bộ',
+      'Ten Thousand Swords': 'Vạn Kiếm',
+      'Iron Skin': 'Thiết Bì',
+      'Mountain Fist': 'Sơn Nhạc Quyền',
+      'Mountain-Toppling Palm': 'Đảo Sơn Chưởng',
+      'Blood Qi Surge': 'Huyết Khí Bộc Phát',
+      'Vajra Body': 'Kim Cang Thân',
+      'Fire Talisman': 'Hỏa Phù',
+      'Thunder Talisman': 'Lôi Phù',
+      'Heavenly Thunder Array': 'Thiên Lôi Trận',
+      'Spirit Shield': 'Linh Thuẫn',
+      'Sealing Talisman': 'Phong Ấn Phù',
+    },
   },
 };
 
