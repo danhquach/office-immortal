@@ -763,6 +763,106 @@
       "prompt": "game UI rank badge icon, heavenly tribulation: a large bold silhouette of a human cultivator in flowing white robes soaring straight upward with both arms raised high, the figure filling most of a round deep violet medallion with a thick silver rim, three big thick jagged bright yellow lightning bolts striking around the figure, clean bold cartoon game art with thick black outline and flat colours with simple shading, front view, centered, plain flat magenta background #FF00FF, no text, no letters, no shadow"
     }
   ],
+  "skills": [
+    {
+      "id": "flying-sword",
+      "source": "skills/flying-sword.jpg",
+      "seed": 8102,
+      "prompt": "game skill icon, a rounded square frame with a thick polished azure blue and silver metal border, inside on a deep navy background: a single glowing flying sword with a bright steel blade and gold hilt streaking diagonally upward, trailing a sweep of cyan qi light and small sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "sword-intent",
+      "source": "skills/sword-intent.jpg",
+      "seed": 8122,
+      "prompt": "game skill icon, a rounded square frame with a thick polished azure blue and silver metal border, inside on a deep navy background: a single glowing upright sword wrapped in a fierce rising aura of sharp white and cyan sword qi flames, bright light rays behind it, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "lightning-step",
+      "source": "skills/lightning-step.jpg",
+      "seed": 8132,
+      "prompt": "game skill icon, a rounded square frame with a thick polished azure blue and silver metal border, inside on a deep navy background: a single swift cloth boot leaping forward, trailing crackling bright yellow lightning bolts and white motion streaks, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "ten-thousand-swords",
+      "source": "skills/ten-thousand-swords.jpg",
+      "seed": 8142,
+      "prompt": "game skill icon, a rounded square frame with a thick polished azure blue and silver metal border, inside on a deep navy background: a storm of many small glowing steel flying swords raining down diagonally in a dense volley, cyan light trails behind each sword, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "iron-skin",
+      "source": "skills/iron-skin.jpg",
+      "seed": 8211,
+      "prompt": "game skill icon, a rounded square frame with a thick polished bronze and gold metal border, inside on a deep maroon red background: a muscular flexed arm covered in shining dark iron armour plates with rivets and a bright metallic gleam, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "mountain-fist",
+      "source": "skills/mountain-fist.jpg",
+      "seed": 8223,
+      "prompt": "game skill icon, a rounded square frame with a thick polished bronze and gold metal border, inside on a deep maroon red background: a big brown rocky mountain peak standing in the background behind, and in front of it a big clenched fist punching forward toward the viewer, orange impact burst lines around the fist, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "mountain-toppling-palm",
+      "source": "skills/mountain-toppling-palm.jpg",
+      "seed": 8231,
+      "prompt": "game skill icon, a rounded square frame with a thick polished bronze and gold metal border, inside on a deep maroon red background: a huge glowing golden open palm slamming down and shattering a brown stone mountain, golden shockwave rings and flying rock chunks, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "blood-qi-surge",
+      "source": "skills/blood-qi-surge.jpg",
+      "seed": 8241,
+      "prompt": "game skill icon, a rounded square frame with a thick polished bronze and gold metal border, inside on a deep maroon red background: a glowing bright crimson heart wrapped in a swirling surge of red blood qi energy, bright red droplets and white sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "vajra-body",
+      "source": "skills/vajra-body.jpg",
+      "seed": 8251,
+      "prompt": "game skill icon, a rounded square frame with a thick polished bronze and gold metal border, inside on a deep maroon red background: a radiant golden warrior monk figure sitting cross-legged in meditation, his body shining like solid gold, a blazing golden halo behind him, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "fire-talisman",
+      "source": "skills/fire-talisman.jpg",
+      "seed": 8311,
+      "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a single yellow paper talisman strip with red ink seal patterns bursting into bright orange and red flames, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "thunder-talisman",
+      "source": "skills/thunder-talisman.jpg",
+      "seed": 8322,
+      "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a single yellow paper talisman strip crackling with bright blue and white lightning bolts, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "heavenly-thunder-array",
+      "source": "skills/heavenly-thunder-array.jpg",
+      "seed": 8332,
+      "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a glowing golden circular magic array of concentric rings and geometric patterns, many bright blue and white lightning bolts striking down into it from dark storm clouds, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "spirit-shield",
+      "source": "skills/spirit-shield.jpg",
+      "seed": 8341,
+      "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a glowing translucent cyan spirit barrier shield made of hexagon tiles, a yellow paper talisman at its centre, white sparkles, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    },
+    {
+      "id": "sealing-talisman",
+      "source": "skills/sealing-talisman.jpg",
+      "seed": 8352,
+      "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a yellow paper talisman with a red seal mark wrapped around a heavy iron chain locked with a big iron padlock, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
+      "shadow": true
+    }
+  ],
   "icon_size": 32,
   "icon_scale": 2
 }

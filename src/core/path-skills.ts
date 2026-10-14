@@ -307,27 +307,48 @@ function rankAt(ladder: Ladder, realm: number): number {
   return ladder.steps.filter((r) => r <= realm).length;
 }
 
+/** A skill a cultivator knows, its rank (1 once learned, 2 after the first upgrade, …) and its top rank. */
+export interface RankedSkill {
+  def: SkillDef;
+  rank: number;
+  maxRank: number;
+}
+
 /** Every Path's skills at every realm, built once: the sim asks at every event. */
-function build(path: PathId): readonly (readonly SkillDef[])[] {
+function build(path: PathId): readonly (readonly RankedSkill[])[] {
   return REALMS.map((_, realm) =>
     LADDERS[path].flatMap((l) => {
       const rank = rankAt(l, realm);
-      return rank > 0 ? [l.make(rank)] : [];
+      return rank > 0 ? [{ def: l.make(rank), rank, maxRank: l.steps.length }] : [];
     }),
   );
 }
 
-const BUILT: Readonly<Record<PathId, readonly (readonly SkillDef[])[]>> = {
+const RANKED: Readonly<Record<PathId, readonly (readonly RankedSkill[])[]>> = {
   sword: build('sword'),
   body: build('body'),
   talisman: build('talisman'),
 };
 
+const BUILT: Readonly<Record<PathId, readonly (readonly SkillDef[])[]>> = {
+  sword: RANKED.sword.map((skills) => skills.map((k) => k.def)),
+  body: RANKED.body.map((skills) => skills.map((k) => k.def)),
+  talisman: RANKED.talisman.map((skills) => skills.map((k) => k.def)),
+};
+
+/** A realm as an index into REALMS, clamped. */
+function realmIndex(realm: number): number {
+  return Math.min(REALMS.length - 1, Math.max(0, Math.floor(realm)));
+}
+
 /** The skills a cultivator of `path` knows in realm `realm` (an index into REALMS), learned order. */
 export function pathSkills(path: PathId, realm: number): readonly SkillDef[] {
-  const byRealm = BUILT[path];
-  const r = Math.min(REALMS.length - 1, Math.max(0, Math.floor(realm)));
-  return byRealm[r] ?? [];
+  return BUILT[path][realmIndex(realm)] ?? [];
+}
+
+/** pathSkills with each skill's rank, for the strip's skill bar. */
+export function rankedPathSkills(path: PathId, realm: number): readonly RankedSkill[] {
+  return RANKED[path][realmIndex(realm)] ?? [];
 }
 
 /** What a realm brings a Path: the skill learned or upgraded there, and its rank (1 = learned). */

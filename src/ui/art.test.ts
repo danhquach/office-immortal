@@ -5,6 +5,7 @@ import { FAMILIES, GRADES } from '../../tools/art/weapons.mjs';
 import { derive, PATHS, type PathId } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, makeFloor, TRIBULATIONS, ZONES, type Enemy } from '../core/floors.ts';
 import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
+import { PATH_SKILL_NAMES } from '../core/path-skills.ts';
 import { createRng } from '../core/rng.ts';
 import { newGame, type GameState } from '../core/sim.ts';
 import { artUrl } from './art.ts';
@@ -13,6 +14,7 @@ import {
   ICON_COLUMNS,
   ICON_ROWS,
   iconCell,
+  skillCell,
   SPRITE_SIZE,
   stripEvents,
   STORE_ICONS,
@@ -39,6 +41,7 @@ const manifest = JSON.parse(manifestText) as {
   summary: { id: string; source: string }[];
   store: { id: string; source: string }[];
   ranks: { id: string; source: string }[];
+  skills: { id: string; source: string }[];
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -57,6 +60,7 @@ describe('shipped art', () => {
       'summary',
       'store',
       'ranks',
+      'skills',
     ];
     for (const name of sheets) expect(exists(name), name).toBe(true);
   });
@@ -152,6 +156,22 @@ describe('rank badges', () => {
     const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
     const cell = manifest.icon_size * manifest.icon_scale;
     expect([u32(16), u32(20)]).toEqual([cell * RANKS.length, cell]);
+  });
+});
+
+describe('skill icons', () => {
+  it('has one icon per skill name, renamed upgrades included, in PATH_SKILL_NAMES order', () => {
+    const slug = (name: string) => name.toLowerCase().replace(/[^a-z]+/g, '-');
+    expect(manifest.skills.map((s) => s.id)).toEqual(PATH_SKILL_NAMES.map(slug));
+    expect(manifest.skills).toHaveLength(14);
+    PATH_SKILL_NAMES.forEach((name, i) => expect(skillCell(name)).toBe(i));
+  });
+
+  it('is one row of item icon cells, one per skill name', () => {
+    const png = atob((INLINE['../assets/art/skills.png'] ?? '').split(',')[1] ?? '');
+    const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect([u32(16), u32(20)]).toEqual([cell * PATH_SKILL_NAMES.length, cell]);
   });
 });
 

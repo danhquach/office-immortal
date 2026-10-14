@@ -83,8 +83,21 @@ import {
   trialSetAside,
   type GameState,
 } from '../core/sim.ts';
-import { pathSkills } from '../core/path-skills.ts';
-import type { CastNote, EffectNote, Side } from '../core/skills.ts';
+import { pathSkills, PATH_SKILL_NAMES, rankedPathSkills } from '../core/path-skills.ts';
+import {
+  enduring,
+  MAX_BURNS,
+  reflectShare,
+  shieldLeft,
+  silenced,
+  stunned,
+  type CastNote,
+  type Effect,
+  type EffectNote,
+  type ModStat,
+  type Side,
+  type SkillDef,
+} from '../core/skills.ts';
 import {
   BOOST_BONUS,
   BOOST_IDS,
@@ -1265,6 +1278,251 @@ export function castCallouts(prev: GameState, next: GameState): Callout[] {
     const yell = n.who === 'you' && yelled.has(n.skill) ? yellText(n.skill) : null;
     return [{ who: n.who, text: tn('skill', n.skill), cast: true, yell }];
   });
+}
+
+/** Seconds a skill's icon flashes after its cast lands. */
+export const SKILL_FLASH_SECONDS = 0.6;
+
+/** A skill level's border colour. */
+export type SkillTier = 'base' | 'mid' | 'max';
+
+/** What a skill icon says it is, for its accessible name. */
+export type SkillReadiness = 'ready' | 'charging' | 'blocked';
+
+/** One icon of the cultivator's skill bar (docs/design.md §5 Skills). */
+export interface SkillIcon {
+  /** The skill's id, and its English (sim) name, which can change with an upgrade. */
+  id: string;
+  name: string;
+  /** Its cell in skills.png: one per name, PATH_SKILL_NAMES order. */
+  cell: number;
+  qi: number;
+  /** Qi held over the cost, 0 to 1. */
+  fill: number;
+  /** Its qi is there and nothing blocks it: it glows. */
+  ready: boolean;
+  /** Stunned or silenced: greyed out with a lock. */
+  blocked: boolean;
+  state: SkillReadiness;
+  /** What is left of the buff or shield it put up, 0 to 1; 0 for none. */
+  ring: number;
+  /** Its level (1 once learned) and top level: the border's colour and the tip say it. */
+  level: number;
+  maxLevel: number;
+  /** The border's colour: green at level 1, azure between, gold at the top. */
+  tier: SkillTier;
+  /** The id of its latest cast's callout while the icon flashes; null otherwise. */
+  flash: number | null;
+}
+
+/** The skill bar's cell for a skill name: PATH_SKILL_NAMES order, as skills.png is built. */
+export function skillCell(name: string): number {
+  return PATH_SKILL_NAMES.indexOf(name);
+}
+
+/**
+ * What is left of the buff a skill put on the cultivator, 0 to 1: its own
+ * mods by time, a shield, a "can't drop below 1" or a reflect by time (only
+ * one skill each gives those), dodges by count. 0 when none works now.
+ */
+function buffLeft(def: SkillDef, state: GameState): number {
+  const you = state.combat.you;
+  const now = state.time;
+  let left = 0;
+  for (const e of def.effects) {
+    switch (e.type) {
+      case 'mod': {
+        if (e.on !== 'self') break;
+        for (const m of you.mods) {
+          if (m.source === def.id && m.stat === e.stat && m.until > now) {
+            left = Math.max(left, (m.until - now) / e.duration);
+          }
+        }
+        break;
+      }
+      case 'shield':
+        if (shieldLeft(you, now) > 0) left = Math.max(left, (you.shieldUntil - now) / e.duration);
+        break;
+      case 'endure':
+        if (enduring(you, now)) left = Math.max(left, (you.endureUntil - now) / e.duration);
+        break;
+      case 'reflect':
+        if (reflectShare(you, now) > 0) {
+          left = Math.max(left, (you.reflectUntil - now) / e.duration);
+        }
+        break;
+      case 'evade':
+        if (you.evades > 0) left = Math.max(left, you.evades / e.hits);
+        break;
+      default:
+        break;
+    }
+  }
+  return Math.max(0, Math.min(1, left));
+}
+
+/**
+ * The cultivator's skill bar: its Path skills at its realm, learned order,
+ * each with how close its qi is, whether it is ready or blocked, the buff it
+ * still has up, its level and whether it just landed. Worked out from
+ * the state alone, so it follows a breakthrough, a Path change or a
+ * Reincarnation at once.
+ */
+export function skillBar(state: GameState): SkillIcon[] {
+  const c = state.cultivator;
+  const you = state.combat.you;
+  const blocked = stunned(you, state.time) || silenced(you, state.time);
+  return rankedPathSkills(c.path, realmOf(c.level)).map(({ def, rank, maxRank }) => {
+    const fill = def.qi > 0 ? Math.max(0, Math.min(1, c.qi / def.qi)) : 1;
+    const ready = fill >= 1 && !blocked;
+    let flash: number | null = null;
+    for (const n of state.combat.log) {
+      if (
+        'skill' in n &&
+        n.who === 'you' &&
+        n.skill === def.name &&
+        n.at <= state.time &&
+        n.at > state.time - SKILL_FLASH_SECONDS
+      ) {
+        flash = n.id;
+      }
+    }
+    return {
+      id: def.id,
+      name: def.name,
+      cell: skillCell(def.name),
+      qi: def.qi,
+      fill,
+      ready,
+      blocked,
+      state: blocked ? 'blocked' : ready ? 'ready' : 'charging',
+      ring: buffLeft(def, state),
+      level: rank,
+      maxLevel: maxRank,
+      tier: rank >= maxRank ? 'max' : rank > 1 ? 'mid' : 'base',
+      flash,
+    };
+  });
+}
+
+const READINESS: Readonly<Record<SkillReadiness, MessageKey>> = {
+  ready: 'skill.ready',
+  charging: 'skill.charging',
+  blocked: 'skill.blocked',
+};
+
+/** A skill's level, e.g. "Level 2 / 3". */
+export function skillLevel(icon: SkillIcon): string {
+  return t('skill.level', { level: icon.level, max: icon.maxLevel });
+}
+
+/** A skill icon's accessible name, e.g. "Flying Sword, Level 2 / 3: ready". */
+export function skillLabel(icon: SkillIcon): string {
+  return t('skill.label', {
+    name: tn('skill', icon.name),
+    level: skillLevel(icon),
+    state: t(READINESS[icon.state]),
+  });
+}
+
+const MOD_STATS: Readonly<Record<ModStat, MessageKey>> = {
+  attackSpeed: 'bonus.attackSpeed',
+  damage: 'bonus.damage',
+  defence: 'bonus.defence',
+  critChance: 'bonus.critChance',
+  damageTaken: 'skill.damageTaken',
+  lifesteal: 'bonus.lifesteal',
+};
+
+const pct = (share: number): string => num(share * 100, 1);
+
+/** One effect in words, lower case, e.g. "250% damage, always a crit". */
+function effectText(e: Effect): string[] {
+  switch (e.type) {
+    case 'hit': {
+      const hits = e.hits ?? 1;
+      const parts: string[] = [];
+      if (e.spill && !Number.isFinite(e.spill.count)) {
+        parts.push(t('skill.hitWave', { mult: pct(e.mult) }));
+      } else {
+        parts.push(
+          hits > 1
+            ? t('skill.hits', { hits, mult: pct(e.mult) })
+            : t('skill.hit', { mult: pct(e.mult) }),
+        );
+        if (e.spill) {
+          parts.push(
+            e.spill.count === 1
+              ? t('skill.spillOne', { mult: pct(e.spill.mult) })
+              : t('skill.spill', { count: e.spill.count, mult: pct(e.spill.mult) }),
+          );
+        }
+      }
+      if (e.crit === 'always') parts.push(t('skill.crit'));
+      if (e.maxHp) parts.push(t('skill.maxHp', { share: pct(e.maxHp) }));
+      if (e.low) parts.push(t('skill.low', { mult: num(e.low.mult, 1), below: pct(e.low.below) }));
+      if (e.refund) parts.push(t('skill.refund', { share: pct(e.refund) }));
+      return parts;
+    }
+    case 'mod': {
+      const stat = t(MOD_STATS[e.stat]);
+      if (e.relative) {
+        return [t('skill.modTimes', { times: num(1 + e.amount, 1), stat, s: num(e.duration, 1) })];
+      }
+      return [t('skill.mod', { amount: pct(e.amount), stat, s: num(e.duration, 1) })];
+    }
+    case 'evade':
+      return [t('skill.evade', { hits: e.hits }), ...(e.counter ? [t('skill.counter')] : [])];
+    case 'reflect':
+      return [t('skill.reflect', { share: pct(e.share), s: num(e.duration, 1) })];
+    case 'heal':
+      return [t('skill.heal', { share: pct(e.share) })];
+    case 'endure':
+      return [
+        e.heal
+          ? t('skill.endureHeal', { s: num(e.duration, 1), share: pct(e.heal) })
+          : t('skill.endure', { s: num(e.duration, 1) }),
+      ];
+    case 'stun':
+      return [t('skill.stun', { s: num(e.duration, 1) })];
+    case 'silence':
+      return [t('skill.silence', { s: num(e.duration, 1) })];
+    case 'burn':
+      return [
+        t('skill.burn', { mult: pct(e.mult), s: num(e.duration, 1) }),
+        ...(e.stack ? [t('skill.burnStack', { max: MAX_BURNS })] : []),
+      ];
+    case 'shield':
+      return [
+        t('skill.shield', { share: pct(e.share), s: num(e.duration, 1) }),
+        ...(e.burst ? [t('skill.burst', { share: pct(e.burst) })] : []),
+      ];
+    case 'drain':
+      return [t(e.steal ? 'skill.drainSteal' : 'skill.drain')];
+    default:
+      return [];
+  }
+}
+
+/** What a skill does, in words, e.g. "250% damage, always a crit". */
+export function skillEffect(def: Pick<SkillDef, 'effects'>): string {
+  const text = def.effects.flatMap(effectText).join(t('skill.and'));
+  return text.charAt(0).toLocaleUpperCase(lang().code) + text.slice(1);
+}
+
+/** A skill icon's tip: its name, level, qi cost and what it does. */
+export function skillTip(
+  icon: SkillIcon,
+  state: GameState,
+): { name: string; level: string; cost: string; effect: string } {
+  const c = state.cultivator;
+  const def = pathSkills(c.path, realmOf(c.level)).find((k) => k.id === icon.id);
+  return {
+    name: tn('skill', icon.name),
+    level: skillLevel(icon),
+    cost: t('skill.cost', { qi: icon.qi }),
+    effect: def ? skillEffect(def) : '',
+  };
 }
 
 /** Heavenly Lightning strikes landed between two states, for the stage's flash. */
