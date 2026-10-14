@@ -55,8 +55,8 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
     600 (off-Path, half the gain over 1). Crit chance 5% + 45% · A / (A + 150):
     23% at 100, 35% at 300 (off-Path, half the part above 5%). Dodge
     27.5% · A / (A + 450): 5% at 100, 11% at 300; a dodged attack misses.
-    Skill cooldown reduction 50% · A / (A + 250): 14% at 100, 27% at 300
-    (skills, a later ticket, use it).
+    Skill cooldown reduction 50% · A / (A + 250): 14% at 100, 27% at 300,
+    cutting the cultivator's skill cooldowns (§5 Skills).
   - **Spirit:** defence pierce 48.5% · S / (S + 185): 17% at 100, 30% at 300;
     that share of each hit ignores the enemy's defence. Max qi and qi regen
     (§5 Qi and skills) follow the same Path share. A Soul Banner works as
@@ -237,11 +237,65 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi regen/s.
-- **Follow-ups:** the skill engine that spends qi (auto-cast rules, wind-ups,
-  cast callouts), four Path skills learned at realm breakthroughs, elite and
+- **Follow-ups:** four Path skills learned at realm breakthroughs, elite and
   boss skills, a signature skill for each Tribulation, a skill bar on the
   strip, and skills on the Stats tab, breakthrough banner, Path choice, Realm
   chip and Help. Each has its own ticket.
+
+### Skills
+
+The engine that spends qi, shared by the cultivator and enemies. The
+simulation casts every skill itself, so offline play casts as live play does.
+The game has no skills yet: the Path, elite, boss and Tribulation skills
+plug into it.
+
+- **A skill** has a qi cost, an optional cooldown, a kind (damage, defensive
+  or other), its effects, and its own "uses it when" rule.
+- **Effects:** hits (several hits, a crit that is rolled, always or never,
+  and a spill onto the next enemies waiting in the wave, never onto a waiting
+  Tribulation), buffs and debuffs with a duration (attack speed, damage,
+  defence, crit chance, damage taken, lifesteal), a shield (a share of max HP),
+  a heal, a stun, a silence, qi drain or steal, a damage reflect, and "HP
+  can't drop below 1". A waiting enemy a spill kills pays out like any kill.
+  Skill hits give no qi and no lifesteal.
+- **When a skill is cast:** after every combat event, each side that is not
+  already casting picks the costliest skill it may cast now: enough qi, off
+  cooldown, not stunned or silenced, its own rule, and three shared rules:
+  1. the cultivator holds a cheap skill (not a defensive one) while a bigger
+     skill off cooldown is within 20 qi, against an elite or tougher;
+  2. don't spend a damage skill when the next normal hit kills;
+  3. defensive skills wait for HP at or below 60%, or the other side winding
+     up.
+  Ties go to the skill listed first. Nobody casts in the pause before a fight.
+  Choices are only made at combat events, so a skill whose cooldown or stun
+  ends between them waits for the next one; the qi regen step makes one at
+  least every second.
+- **A seeded pause** of 0 to 0.8 s comes before every cast; the skill is
+  checked again when the pause ends and dropped if it no longer may be cast.
+  Randomness is only drawn when a skill is picked, so the same seed always
+  plays the same, in one big step or many small ones.
+- **Wind-ups:** the cultivator's skills land at once. An enemy pays the qi,
+  then winds up for 1 s (a skill may set its own time) before the skill lands.
+  A stun cancels a wind-up; the qi stays spent. A silence stops new casts
+  but lets a wind-up already under way land. A stunned fighter attacks
+  again only once the stun wears off.
+- **Cooldowns:** the cultivator's are cut by Agility's cooldown reduction
+  (§3), at most 95%; enemies' run in full. Dodge and Iron Body's reflect work
+  on skills as on attacks: a dodge turns aside only normal attacks, and Iron
+  Body sends back a share of skill hits too, adding to a skill's reflect.
+- **Fight end:** buffs, debuffs, shields, cooldowns and wind-ups end with the
+  fight (a kill, a loss, a Tribulation faced early); nothing reaches the next
+  one. This skill state is never saved: a save made mid-fight loads with none,
+  and an attack a stun or slow had pushed back loads at the normal limit.
+- **On the strip:** the skill's name floats over its caster as it lands, in
+  the tier gold, with the attack pose as the cast pose; an effect's word
+  ("Stunned", "Silenced", "Shielded", "Interrupted") floats over the fighter it
+  hit. While an enemy winds up, its name line shows the skill ("Paper Jam…",
+  one line, cut with an ellipsis if it must be) and a gold cast bar fills over
+  its qi bar, so the strip never changes height; the rank badge and tier label
+  stay. Reduced motion shows the text in place with no rise and the bar with
+  no glide. Discreet hides callouts and cast bars, and the Mini view leaves
+  callouts out. Screen readers are not told about each cast.
 
 ## 6. Loot
 

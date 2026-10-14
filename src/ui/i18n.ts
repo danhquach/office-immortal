@@ -123,6 +123,8 @@ export interface NamePart {
   readonly text: string;
   /** Set on the tier unit only. */
   readonly tier?: EnemyTier;
+  /** Set on the skill an enemy winds up, shown in its name's place. */
+  readonly windUp?: true;
 }
 
 /**
@@ -139,6 +141,16 @@ export function enemyNameParts(kind: string, name: string): readonly NamePart[] 
 }
 
 /**
+ * An enemy's name line while it winds up a skill: the tier unit stays, the
+ * skill's name ("Paper Jam…") takes the name's place.
+ */
+export function windUpNameParts(kind: string, name: string, skill: string): readonly NamePart[] {
+  const parts = enemyNameParts(kind, name);
+  const cast: NamePart = { text: t('strip.windUp', { name: tn('skill', skill) }), windUp: true };
+  return [...parts.slice(0, -1), cast];
+}
+
+/**
  * The spans a name is drawn as, in order: the tier unit's classes pick its line
  * and colour in page.css (`.fighter .enemy-tier`), the name's span has none.
  */
@@ -146,7 +158,7 @@ export function nameSpans(
   parts: readonly NamePart[],
 ): readonly { readonly className: string; readonly text: string }[] {
   return parts.map((p) => ({
-    className: p.tier ? `enemy-tier enemy-tier--${p.tier}` : '',
+    className: p.tier ? `enemy-tier enemy-tier--${p.tier}` : p.windUp ? 'wind-up' : '',
     text: p.text,
   }));
 }

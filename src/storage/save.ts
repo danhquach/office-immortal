@@ -82,6 +82,7 @@ import {
   type StatPlan,
   type TrialState,
 } from '../core/sim.ts';
+import { freshCombat } from '../core/skills.ts';
 import {
   BOOST_CAP_SECONDS,
   BOOST_IDS,
@@ -125,6 +126,17 @@ const MAX_TIME = 1e12;
  * seconds; a next-attack time is never further off.
  */
 const MAX_INTERVAL = 2 + ENEMY_ARRIVAL;
+/**
+ * How much further off a stun or a slowing debuff may have pushed an attack.
+ * Those end with the fight's skill state, which is never saved, so such a
+ * timer loads pulled back to MAX_INTERVAL.
+ */
+export const SKILL_SLACK = 60;
+
+/** A next-attack time within `limit` of `time`, or one a skill pushed further, pulled back to it. */
+function attackAt(v: unknown, time: number, limit: number): number {
+  return Math.min(num(v, time, time + limit + SKILL_SLACK), time + limit);
+}
 
 /** The parts of `Storage` the save uses, so tests can pass a plain object. */
 export type SaveStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
@@ -144,8 +156,11 @@ export function browserStorage(): SaveStorage | null {
   }
 }
 
+/** The fight's skill state is left out: it ends with the fight, so it is never saved (docs/design.md §5). */
 export function encodeSave(state: GameState, savedAt: number): string {
-  return JSON.stringify({ v: SAVE_VERSION, savedAt, state });
+  const saved: Partial<GameState> = { ...state };
+  delete saved.combat;
+  return JSON.stringify({ v: SAVE_VERSION, savedAt, state: saved });
 }
 
 /** The save in `raw`, or null if it is missing, too big, not JSON or fails any check. */
@@ -378,7 +393,7 @@ function readState(v: unknown, version: number): GameState {
       oldCaps !== null,
       before13,
     ),
-    enemyNextAttackAt: num(o.enemyNextAttackAt, time, time + MAX_INTERVAL + MAX_BINDING),
+    enemyNextAttackAt: attackAt(o.enemyNextAttackAt, time, MAX_INTERVAL + MAX_BINDING),
     // Left behind while no Killing Array is equipped, so it may be in the past.
     arrayNextAt: before5
       ? time + ARRAY_TICK
@@ -413,6 +428,7 @@ function readState(v: unknown, version: number): GameState {
       : typeof o.freeReset === 'boolean'
         ? o.freeReset
         : fail('freeReset'),
+    combat: freshCombat(),
   };
   if (oldCaps) toNewRealms(state);
   return state;
@@ -610,7 +626,7 @@ function readCultivator(
     equipment,
     hp: 0,
     qi: 0,
-    nextAttackAt: num(o.nextAttackAt, time, time + MAX_INTERVAL),
+    nextAttackAt: attackAt(o.nextAttackAt, time, MAX_INTERVAL),
     attackCount: int(o.attackCount, 0, Number.MAX_SAFE_INTEGER),
   };
   // Never above the max the stats allow; that max may carry another engine's rounding.
