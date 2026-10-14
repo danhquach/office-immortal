@@ -4,7 +4,7 @@ import { renders } from '../../tools/art/render-weapons.mjs';
 import { FAMILIES, GRADES } from '../../tools/art/weapons.mjs';
 import { derive, PATHS, type PathId } from '../core/cultivator.ts';
 import { BOSSES, DEMONS, makeFloor, TRIBULATIONS, ZONES, type Enemy } from '../core/floors.ts';
-import { SLOTS, type Item, type SlotId } from '../core/loot.ts';
+import { EQUIP_SLOTS, SLOTS, type Item, type SlotId } from '../core/loot.ts';
 import { PATH_SKILL_NAMES } from '../core/path-skills.ts';
 import { createRng } from '../core/rng.ts';
 import { newGame, type GameState } from '../core/sim.ts';
@@ -42,6 +42,10 @@ const manifest = JSON.parse(manifestText) as {
   store: { id: string; source: string }[];
   ranks: { id: string; source: string }[];
   skills: { id: string; source: string }[];
+  slots: { id: string; source: string }[];
+  figures: { id: string; source: string }[];
+  figure_size: [number, number];
+  plinth: { size: [number, number] };
   icon_size: number;
   icon_scale: number;
   sprites: { id: string; size?: number; base?: string }[];
@@ -55,8 +59,10 @@ describe('shipped art', () => {
       ...BOSSES.map((b) => enemySprite('boss', b)),
       ...TRIBULATIONS.map((b) => enemySprite('tribulation', b)),
       ...ZONES.map((z) => `bg-${z.id}`),
+      ...(Object.keys(PATHS) as PathId[]).map((p) => `doll-${p}`),
       'icons',
-      'paperdoll',
+      'plinth',
+      'slots',
       'summary',
       'store',
       'ranks',
@@ -156,6 +162,55 @@ describe('rank badges', () => {
     const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
     const cell = manifest.icon_size * manifest.icon_scale;
     expect([u32(16), u32(20)]).toEqual([cell * RANKS.length, cell]);
+  });
+});
+
+/** Width and height from a PNG's header. */
+function pngSize(name: string): [number, number] {
+  const png = atob((INLINE[`../assets/art/${name}.png`] ?? '').split(',')[1] ?? '');
+  const u32 = (at: number) => [0, 1, 2, 3].reduce((n, i) => n * 256 + png.charCodeAt(at + i), 0);
+  return [u32(16), u32(20)];
+}
+
+describe('paper doll art', () => {
+  it('has one front-facing figure per Path, in PATHS order', () => {
+    expect(manifest.figures.map((f) => f.id)).toEqual(Object.keys(PATHS));
+  });
+
+  it('builds each figure as a 4-frame loop at figure_size, as page.css draws it (96 x 128)', () => {
+    expect(manifest.figure_size).toEqual([96, 128]);
+    const [w, h] = manifest.figure_size;
+    for (const f of manifest.figures) expect(pngSize(`doll-${f.id}`), f.id).toEqual([w * 4, h]);
+  });
+
+  it('finds no figure for a hostile or unknown Path name (no URL, so nothing reaches the CSS)', () => {
+    for (const bad of [
+      '../x',
+      '"),url(x',
+      'sword\u202e',
+      'sword ',
+      '__proto__',
+      'x'.repeat(5000),
+    ]) {
+      expect(artUrl(`doll-${bad}`), bad.slice(0, 20)).toBe('');
+    }
+  });
+
+  it('builds the plinth at twice its shown size', () => {
+    const [w, h] = manifest.plinth.size;
+    expect(pngSize('plinth')).toEqual([w * 2, h * 2]);
+  });
+
+  it('has one empty slot icon per item type, in the icon atlas column order', () => {
+    expect(manifest.slots.map((s) => s.id)).toEqual(ICON_COLUMNS);
+    const cell = manifest.icon_size * manifest.icon_scale;
+    expect(pngSize('slots')).toEqual([cell * ICON_COLUMNS.length, cell]);
+  });
+
+  it('shows a slot icon for every equipment slot, Accessories and Charms sharing one', () => {
+    const types = Object.values(EQUIP_SLOTS).map((s) => s.takes);
+    for (const t of types) expect(ICON_COLUMNS).toContain(t);
+    expect(new Set(types).size).toBe(manifest.slots.length);
   });
 });
 

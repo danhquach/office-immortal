@@ -55,6 +55,8 @@
   --offence: #b0246e;
   --defence: #4040c0;
   --utility: #5c7000;
+  /* The empty slots' pale icons, darkened so they read on the light panels. */
+  --slot-hint: brightness(0.45);
 }
 /* Dark is the default (before any script runs, too); light shows only when
    Settings resolves to it (data-theme, set by app.ts). */
@@ -87,6 +89,7 @@
   --offence: #ff7fbf;
   --defence: #9b9bff;
   --utility: #c6e04a;
+  --slot-hint: none;
 }
 
 /* Discreet mode (docs/design.md §14; app.ts sets data-discreet): every grade
@@ -1989,92 +1992,166 @@ select {
   --tab-tone: var(--sell);
 }
 
-/* Paper doll: the figure is 64 x 80 pixel art at 4x and the box is its size,
-   so it stays whole-pixel; each slot is placed in % where it is worn. The
-   wearer's right hand is on the viewer's left. */
+/* Paper doll: two even columns of five slots, labels under each, with the
+   Path's figure between them on a jade plinth, so nothing is drawn over the
+   figure. The wearer's gear is on the viewer's left, trinkets on the right. */
 .doll {
-  position: relative;
-  width: 256px;
-  height: 320px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  /* One row per slot pair, so the slots line up across the figure even when
+     a name wraps onto a second line; dense fills each column from the top. */
+  grid-template-rows: repeat(5, auto);
+  grid-auto-flow: dense;
+  align-items: start;
+  gap: 3px 0.25rem;
+  max-width: 18rem;
   margin: 0 auto 0.25rem;
+  padding: 0.25rem 0;
+  border: 1px solid var(--line);
   border-radius: 4px;
+  background: var(--bg);
+}
+/* The columns only keep each side's slots together in the DOM (and in tab
+   order); the slots sit in the doll's own grid. */
+.slot-col {
+  display: contents;
+}
+.slot-col:first-child > .slot {
+  grid-column: 1;
+}
+.slot-col:last-child > .slot {
+  grid-column: 3;
+}
+.slot {
+  display: grid;
+  /* One track the column's width: the cell is centred and a long name wraps under it. */
+  grid-template-columns: 100%;
+  justify-items: center;
+  gap: 1px;
+  text-align: center;
+  border-radius: 4px;
+}
+.slot .cell {
+  width: 44px;
+  background: var(--panel);
+}
+.slot-name {
+  max-width: 100%;
+  font-size: 0.7rem;
+  line-height: 1.15;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+/* An empty slot: the bag's cell frame with a faint icon of what goes there. */
+.slot .cell.empty .icon {
+  opacity: 0.4;
+  filter: var(--slot-hint);
+}
+/* A filled slot glows inside in its grade colour, stronger with each grade;
+   the border and the initial still say the grade. */
+.slot .cell:not(.empty) {
+  box-shadow: inset 0 0 var(--glow, 4px)
+    color-mix(in srgb, currentColor var(--glow-mix, 35%), transparent);
+}
+.slot .cell.grade-spirit {
+  --glow: 6px;
+  --glow-mix: 45%;
+}
+.slot .cell.grade-earth {
+  --glow: 8px;
+  --glow-mix: 55%;
+}
+.slot .cell.grade-heaven {
+  --glow: 10px;
+  --glow-mix: 65%;
+}
+.slot .cell.grade-immortal {
+  --glow: 13px;
+  --glow-mix: 80%;
+}
+/* Equipping pulses the slot once. */
+.slot.pulse > .cell {
+  animation: slot-pulse 0.6s ease-out;
+}
+@keyframes slot-pulse {
+  40% {
+    transform: scale(1.12);
+    filter: brightness(1.35);
+  }
+}
+/* The figure: 96 x 128 frames at 1x, breathing through 4 frames; the plinth
+   under its feet and the realm's qi mist (app.ts sets --mist) around them. */
+.stand {
+  grid-column: 2;
+  grid-row: 1 / -1;
+  align-self: center;
+  position: relative;
+  width: 112px;
+  height: 172px;
 }
 .figure {
   position: absolute;
-  inset: 0;
-  width: 256px;
-  height: 320px;
+  left: 8px;
+  /* Feet in the middle of the plinth's top. */
+  bottom: 44px;
+  width: 96px;
+  height: 128px;
+  background: no-repeat 0 0 / 384px 128px;
   image-rendering: pixelated;
+  /* A thin light edge keeps the dark outline readable on the dark theme. */
+  filter: drop-shadow(0 0 1px color-mix(in srgb, var(--ink) 35%, transparent));
+  animation: figure-breathe 2.4s steps(4) infinite;
 }
-.slot {
+@keyframes figure-breathe {
+  to {
+    background-position-x: -384px;
+  }
+}
+.plinth {
   position: absolute;
-  width: 18%;
-  display: grid;
-  /* One track the slot's width: a long name overflows it instead of stretching the cell. */
-  grid-template-columns: 100%;
-  gap: 2px;
-  text-align: center;
-  transform: translate(-50%, -50%);
+  left: 0;
+  bottom: 0;
+  width: 112px;
+  height: 64px;
+  background: no-repeat 0 0 / 100% 100%;
 }
-.slot-head {
-  left: 50%;
-  top: 11%;
+.mist {
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  bottom: 30px;
+  height: 64px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--mist, #9ad7c4), transparent);
+  opacity: 0.8;
+  animation: mist-drift 4s ease-in-out infinite alternate;
 }
-.slot-accessory1 {
-  left: 13%;
-  top: 12%;
+@keyframes mist-drift {
+  to {
+    opacity: 0.4;
+    transform: scaleX(1.12);
+  }
 }
-.slot-accessory2 {
-  left: 87%;
-  top: 12%;
+/* Full under 720 px tall: smaller slots, so the Equipment tab fits without
+   scrolling. Narrow pages scroll as a whole, so they keep the 44 px cells. */
+@media (min-width: 940px) and (max-height: 719px) {
+  .doll {
+    padding-block: 0.15rem;
+  }
+  /* 38 px: still room for the 32 px icon, as in the bag's smallest cells. */
+  .slot .cell {
+    width: 38px;
+  }
+  .slot-name {
+    font-size: 0.65rem;
+  }
 }
-.slot-chest {
-  left: 50%;
-  top: 36%;
-}
-.slot-weapon {
-  left: 13%;
-  top: 44%;
-}
-.slot-sideArm {
-  left: 87%;
-  top: 44%;
-}
-.slot-attachment {
-  /* Hangs off the hip, beside the leg. */
-  left: 74%;
-  top: 64%;
-}
-.slot-boots {
-  left: 50%;
-  top: 82%;
-}
-.slot-charm1 {
-  left: 13%;
-  top: 86%;
-}
-.slot-charm2 {
-  left: 87%;
-  top: 88%;
-}
-.slot .cell {
-  width: 100%;
-  background: var(--panel);
-}
-.slot .cell.empty {
-  color: var(--muted);
-  border-style: dashed;
-}
-.slot-name {
-  /* Wider than the cell when it needs to be, centred under it. */
-  justify-self: center;
-  font-size: 0.7rem;
-  color: var(--muted);
-  white-space: nowrap;
-  /* It can sit on the figure: on a panel chip, so it keeps its contrast. */
-  padding: 0 0.2rem;
-  border-radius: 2px;
-  background: var(--panel);
+@media (prefers-reduced-motion: reduce) {
+  .figure,
+  .mist,
+  .slot.pulse > .cell {
+    animation: none;
+  }
 }
 .character.drop-ok .doll {
   outline: 2px dashed var(--accent);
@@ -3090,7 +3167,7 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .store-icon,
     .game .strip,
     .kpi-icon,
-    .figure,
+    .stand,
     .cell .icon,
     .item-head .icon,
     .callout,
@@ -3100,6 +3177,10 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
     .skill-icon
   ) {
   display: none;
+}
+/* Plain slots: no grade glow. */
+:root[data-discreet] .slot .cell {
+  box-shadow: none;
 }
 :root[data-discreet] .cell .grade {
   inset: 0;

@@ -625,11 +625,33 @@
       "extra": ["6cb8e0", "9ccfea", "d4e2ee", "b8c4d4", "c9a43a", "3a9ad8", "2f80c0", "e0b850"]
     }
   ],
-  "doll": {
-    "id": "paperdoll",
-    "seed": 5201,
-    "size": [64, 80],
-    "prompt": "pixel art game sprite, a plain featureless grey mannequin figure, full body, straight front view, arms slightly away from the body with open hands level with the hips, legs slightly apart, no face, no clothes, bold dark outline, magenta background"
+  "figures": [
+    {
+      "id": "sword",
+      "source": "doll/doll-sword.jpg",
+      "seed": 7501,
+      "prompt": "edit of the path-sword idle generation: Same character, same outfit, same pixel art style, same colours, same magenta background, same outline weight. New pose: standing upright and calm, straight FRONT view facing the viewer, full body from head to shoes, feet slightly apart, arms relaxed at the sides, right hand holding the glowing jade green sword pointing down beside the leg, necktie hanging straight, calm confident face looking at the viewer. Centered, whole body visible with space around it, plain flat magenta background #FF00FF, no shadow, no floor, no text."
+    },
+    {
+      "id": "body",
+      "source": "doll/doll-body.jpg",
+      "seed": 7701,
+      "prompt": "edit of the path-body idle generation: Same character, same outfit, same pixel art style, same colours, same magenta background, same outline weight. New pose: standing upright and calm, straight FRONT view facing the viewer, full body from head to boots, feet apart shoulder width, arms relaxed at the sides with loose fists, faint orange qi glow on both fists, red headband, calm confident face looking at the viewer. Centered, whole body visible with space around it, plain flat magenta background #FF00FF, no shadow, no floor, no text."
+    },
+    {
+      "id": "talisman",
+      "source": "doll/doll-talisman.jpg",
+      "seed": 7841,
+      "prompt": "edit of the path-talisman idle generation: Same character, same outfit with grey hoodie, navy pleated skirt and black tights, same pixel art style, same colours, same magenta background, same outline weight. New pose: standing upright and calm, straight FRONT view facing the viewer, full body from head to sneakers, feet slightly apart, left arm relaxed at the side, right hand held at chest height holding a fan of three yellow paper talismans glowing blue, round glasses, high ponytail, calm face looking at the viewer. Centered, whole body visible with space around it, plain flat magenta background #FF00FF, no shadow, no floor, no text."
+    }
+  ],
+  "figure_size": [96, 128],
+  "plinth": {
+    "id": "plinth",
+    "source": "doll/plinth.jpg",
+    "seed": 9109,
+    "size": [112, 64],
+    "prompt": "game art asset, a small low round jade stone plinth pedestal seen from slightly above the front, a short wide disc of polished green jade with a gold trim band around its rim and simple carved cloud pattern on the side, wide and flat, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow, nothing on top"
   },
   "summary": [
     {
@@ -861,6 +883,56 @@
       "seed": 8352,
       "prompt": "game skill icon, a rounded square frame with a thick polished jade green and gold metal border, inside on a dark teal background: a yellow paper talisman with a red seal mark wrapped around a heavy iron chain locked with a big iron padlock, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF outside the frame, no text, no letters, no shadow",
       "shadow": true
+    }
+  ],
+  "slots": [
+    {
+      "id": "head",
+      "source": "doll/slot-head.jpg",
+      "seed": 9101,
+      "prompt": "game inventory icon, a simple closed helmet-style cultivator headpiece silhouette shape, a scholar's crown cap, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "chest",
+      "source": "doll/slot-chest.jpg",
+      "seed": 9102,
+      "prompt": "game inventory icon, a simple flowing cultivator robe with wide sleeves seen from the front, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "boots",
+      "source": "doll/slot-boots.jpg",
+      "seed": 9103,
+      "prompt": "game inventory icon, a simple pair of traditional cloth cultivator boots side by side, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "attachment",
+      "source": "doll/slot-attachment.jpg",
+      "seed": 9116,
+      "prompt": "game inventory icon, a calabash bottle gourd: a small round top bulb, a narrow pinched waist tied with a cord, a big round bottom bulb, a little stopper on top, like the number 8 shape, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "weapon",
+      "source": "doll/slot-weapon.jpg",
+      "seed": 9104,
+      "prompt": "game inventory icon, a simple straight jian sword pointing diagonally up to the top right, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "sideArm",
+      "source": "doll/slot-sideArm.jpg",
+      "seed": 9115,
+      "prompt": "game inventory icon, three small throwing knives (kunai darts) with sharp pointed diamond shaped tips and ring pommels, fanned out like a hand of cards with the points up, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "accessory",
+      "source": "doll/slot-accessory.jpg",
+      "seed": 9107,
+      "prompt": "game inventory icon, a simple round pendant amulet hanging on a cord loop, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no text, no shadow"
+    },
+    {
+      "id": "charm",
+      "source": "doll/slot-charm.jpg",
+      "seed": 9108,
+      "prompt": "game inventory icon, a simple paper talisman charm, a vertical paper strip with a knotted tassel at the bottom and swirl marks, single object, monochrome pale silver grey only, clean bold cartoon game art with thick black outline and flat colours with simple shading, centered, plain flat magenta background #FF00FF, no letters, no text, no shadow"
     }
   ],
   "icon_size": 32,

@@ -242,11 +242,13 @@ import {
   passiveRow,
   pathBlurb,
   soulsLine,
+  DOLL_COLUMNS,
   enemySprite,
   ICON_COLUMNS,
   ICON_ROWS,
   iconCell,
   realmLabel,
+  realmMist,
   realmBoost,
   realmBoostTip,
   realmRows,
@@ -1677,16 +1679,31 @@ function tabs(
   return { bar, panels, show };
 }
 
-/** The figure behind the equipment slots: pixel art at 4x, slots placed over it in %. */
-function figure(): HTMLImageElement {
-  const img = el('img', 'figure');
-  img.src = artUrl('paperdoll');
-  img.alt = '';
-  img.width = 256;
-  img.height = 320;
-  return img;
+/**
+ * The paper doll's middle column: the Path's figure (a 4-frame breathing loop,
+ * set by drawGear) on a jade plinth, in a qi mist of the realm's colour.
+ * Decoration only, so screen readers skip it.
+ */
+function stand(): { box: HTMLElement; figure: HTMLElement } {
+  const box = el('div', 'stand');
+  box.setAttribute('aria-hidden', 'true');
+  const plinth = el('div', 'plinth');
+  plinth.style.backgroundImage = cssUrl(artUrl('plinth'));
+  const figure = el('div', 'figure');
+  box.append(el('div', 'mist'), plinth, figure);
+  return { box, figure };
 }
 
+/** Shows the faint icon of item type `type` from the slot icon atlas on an empty slot's icon. */
+function setSlotIcon(icon: HTMLElement, type: SlotId): void {
+  const s = icon.style;
+  s.backgroundImage = cssUrl(artUrl('slots'));
+  s.backgroundSize = `${ICON_PX * ICON_COLUMNS.length}px ${ICON_PX}px`;
+  s.backgroundPosition = `${-ICON_COLUMNS.indexOf(type) * ICON_PX}px 0`;
+}
+
+/** How long an equipped slot's pulse plays (page.css slot-pulse). */
+const PULSE_MS = 600;
 const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const osDark = matchMedia('(prefers-color-scheme: dark)');
 /** The theme picked this visit: kept across runs even where storage is blocked. */
@@ -2123,24 +2140,31 @@ function play(
     () => state.cultivator.path,
   );
 
-  // Character: a paper doll with each slot where it is worn (the drop target), then stats
+  // Character: a paper doll, the Path's figure between two columns of slots
+  // (the drop targets), then stats
   const character = panel('character', 'character.title');
   const slots = el('div', 'doll');
   slots.setAttribute('role', 'group');
   attr(slots, 'aria-label', 'character.equipped');
-  slots.append(figure());
+  const doll = stand();
   const slotCells = {} as Record<EquipSlotId, HTMLButtonElement>;
-  for (const slot of SLOT_IDS) {
-    const box = el('div', `slot slot-${slot}`);
-    const b = cell();
-    b.dataset.slot = slot;
-    b.addEventListener('click', () => select(state.cultivator.equipment[slot] ? { slot } : null));
-    slotCells[slot] = b;
-    const slotName = el('span', 'slot-name');
-    say(() => (slotName.textContent = tn('equipSlot', EQUIP_SLOTS[slot].name)));
-    box.append(b, slotName);
-    slots.append(box);
-  }
+  const slotColumn = (column: readonly EquipSlotId[]): HTMLElement => {
+    const col = el('div', 'slot-col');
+    for (const slot of column) {
+      const box = el('div', 'slot');
+      const b = cell();
+      b.dataset.slot = slot;
+      b.addEventListener('click', () => select(state.cultivator.equipment[slot] ? { slot } : null));
+      slotCells[slot] = b;
+      const slotName = el('span', 'slot-name');
+      say(() => (slotName.textContent = tn('equipSlot', EQUIP_SLOTS[slot].name)));
+      box.append(b, slotName);
+      col.append(box);
+    }
+    return col;
+  };
+  const [left, right] = DOLL_COLUMNS;
+  slots.append(slotColumn(left), doll.box, slotColumn(right));
   // Stats: two sub-tabs. Stats has the base stats with their spend buttons on
   // the same row, Auto-assign, then the derived numbers and boosts in groups
   // that fold; Respec has the stat reset and Path change.
@@ -3944,6 +3968,16 @@ function play(
   /** Cells and details are built once and refilled in place, so focus never drops. */
   function drawGear(): void {
     const c = state.cultivator;
+    // The figure follows the Path at once (a Path change or Reincarnation), the mist the realm.
+    if (doll.figure.dataset.path !== c.path) {
+      doll.figure.dataset.path = c.path;
+      doll.figure.style.backgroundImage = cssUrl(artUrl(`doll-${c.path}`));
+    }
+    const mist = realmMist(realmOf(c.level));
+    if (slots.dataset.mist !== mist) {
+      slots.dataset.mist = mist;
+      slots.style.setProperty('--mist', mist);
+    }
     // The panel ignores the bag's length (drops only append), so a drop never
     // rebuilds it and takes focus off its Equip button. A worn item's panel
     // redraws only when a drop fills the bag, which turns its Unequip off.
@@ -3981,7 +4015,9 @@ function play(
     for (const slot of SLOT_IDS) {
       const b = slotCells[slot];
       const name = tn('equipSlot', EQUIP_SLOTS[slot].name);
-      fillCell(b, c.equipment[slot], t('inventory.emptySlot', { slot: name }));
+      const item = c.equipment[slot];
+      fillCell(b, item, t('inventory.emptySlot', { slot: name }));
+      if (!item) setSlotIcon(b.children[1] as HTMLElement, EQUIP_SLOTS[slot].takes);
       // fillCell resets classes; a drag in progress keeps its target slots marked.
       b.classList.toggle('target', !!drag?.ghost && canDrop(state.inventory[drag.index], slot));
       b.setAttribute(
@@ -4164,6 +4200,16 @@ function play(
     const at = to ?? defaultSlot(state.cultivator.equipment, item);
     selected = { slot: at };
     act(equip(state, index, at));
+    // The slot pulses once when the item lands (restarted for an equip right
+    // after the last). The class goes when it ends, or showing the tab again
+    // would replay it.
+    const box = slotCells[at].parentElement;
+    if (box && state.cultivator.equipment[at]?.name === item.name) {
+      box.classList.remove('pulse');
+      void box.offsetWidth;
+      box.classList.add('pulse');
+      window.setTimeout(() => box.classList.remove('pulse'), PULSE_MS);
+    }
     if (fromDetails) {
       charTabs.show('gear');
       slotCells[at].focus();
