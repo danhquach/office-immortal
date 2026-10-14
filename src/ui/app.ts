@@ -180,6 +180,7 @@ import {
   type PopStyle,
   writePopStyle,
 } from './pop-style.ts';
+import { placeYell, type Box } from './yell.ts';
 import {
   BAG_SORT_DIRS,
   BAG_SORT_NAMES,
@@ -294,6 +295,8 @@ const DAMAGE_NUMBER_MS = 900;
 /** Skill callouts on the stage at once, and how long each shows. */
 const MAX_CALLOUTS = 4;
 const CALLOUT_MS = CALLOUT_SECONDS * 1000;
+/** How long the cultivator's yell bubble shows. */
+const YOU_YELL_MS = 1000;
 /** Item icon frame in the atlas, in px. */
 const ICON_PX = 32;
 /** Shorter times away (a reload, a quick tab switch) get no summary. */
@@ -1859,7 +1862,17 @@ function play(
   yell.hidden = true;
   // The layout the bubble was last placed for; '' while hidden.
   let yellPlacedFor = '';
-  stage.append(yell);
+  // The cultivator's costliest skill, yelled in a bubble over it as it lands,
+  // for YOU_YELL_MS; one at a time, placed clear of the sprites and the
+  // enemy's bubble (yell.ts).
+  const youYell = el('p', 'yell you');
+  youYell.setAttribute('aria-hidden', 'true');
+  youYell.hidden = true;
+  let youYellTimer = 0;
+  // The fight the cultivator's bubble was yelled in, and the layout it was placed for.
+  let youYellFight = 0;
+  let youYellPlacedFor = '';
+  stage.append(yell, youYell);
   // XP to the next level, with the level at its left end. The text is drawn
   // twice: light on the dark track, and dark on the yellow fill, which is
   // clipped to the XP so far. Screen readers get aria-valuetext instead.
@@ -3162,6 +3175,11 @@ function play(
       foe.cast.style.width = `${(windUp?.progress ?? 0) * 100}%`;
       showYell(windUp?.skill ?? null);
     } else showYell(null);
+    // The cultivator's bubble ends with its fight, and moves (or goes) for the enemy's.
+    if (!youYell.hidden) {
+      if (state.combat.fight !== youYellFight) hideYouYell();
+      else placeYouYell();
+    }
     const z = zoneOf(state.floor);
     if (z !== zone) {
       zone = z;
@@ -3205,13 +3223,18 @@ function play(
       if (before && (e.foeHit || e.foeDied)) {
         damageNumber(foe, before.hp - (e.foeDied ? 0 : (enemy?.hp ?? 0)));
       }
-      for (const call of castCallouts(prev, state)) {
+      const calls = castCallouts(prev, state);
+      // Only the last yell of a step gets the bubble; any earlier one floats.
+      const lastYell = calls.findLastIndex((c) => c.yell !== null);
+      calls.forEach((call, i) => {
         const f = call.who === 'you' ? you : foe;
         // The attack pose is the cast pose.
         if (call.cast && !(call.who === 'you' ? e.youDied : e.foeDied))
           playAction(f, 'attack', now);
-        callout(f, call.text, call.cast);
-      }
+        // A yell that finds no room floats as a plain callout instead.
+        const yelled = i === lastYell && call.yell !== null && showYouYell(call.yell);
+        if (!yelled) callout(f, call.text, call.cast);
+      });
     }
     showEnemy();
     drawSprites();
@@ -3268,6 +3291,91 @@ function play(
     yell.classList.add('beside');
     yell.style.right = `${Math.max(0, stage.clientWidth - sprite.offsetLeft)}px`;
     yell.style.top = `${Math.max(top, sprite.offsetTop)}px`;
+  }
+
+  /**
+   * The cultivator yells `text` in its bubble for YOU_YELL_MS, replacing one
+   * already up. False when it fits nowhere clear of the sprites and the
+   * enemy's bubble (then nothing shows).
+   */
+  function showYouYell(text: string): boolean {
+    setText(youYell, text);
+    youYell.hidden = false;
+    // Restarts the pop, even for the same skill twice.
+    youYell.style.animation = 'none';
+    void youYell.offsetWidth;
+    youYell.style.animation = '';
+    youYellFight = state.combat.fight;
+    youYellPlacedFor = '';
+    clearTimeout(youYellTimer);
+    if (!placeYouYell()) return false;
+    youYellTimer = window.setTimeout(hideYouYell, YOU_YELL_MS);
+    return true;
+  }
+
+  function hideYouYell(): void {
+    clearTimeout(youYellTimer);
+    youYell.hidden = true;
+    youYellPlacedFor = '';
+  }
+
+  /**
+   * Places the cultivator's bubble (yell.ts): above its sprite under any
+   * names drawn over the stage, else beside it; hidden when neither fits.
+   * Placed again only when the layout or the enemy's bubble changed.
+   */
+  function placeYouYell(): boolean {
+    const foeYell = yell.hidden ? null : stageBox(yell);
+    const sprite = you.sprite;
+    const placeFor = `${stage.clientWidth}x${stage.clientHeight}x${window.innerHeight}x${you.size}x${sprite.offsetLeft}x${foe.size}x${foe.sprite.offsetLeft}x${youYell.textContent ?? ''}x${foeYell ? Object.values(foeYell).join(',') : ''}`;
+    if (placeFor === youYellPlacedFor) return true;
+    youYellPlacedFor = placeFor;
+    const s = stage.getBoundingClientRect();
+    const f = fighters.getBoundingClientRect();
+    const over = f.top < s.bottom && f.bottom > s.top ? f.bottom - s.top : 0;
+    // Bounding boxes are in page pixels; the stage may be zoomed (page.css --z).
+    const z = s.height > 0 && stage.offsetHeight > 0 ? s.height / stage.offsetHeight : 1;
+    // The same gap as the enemy's bubble keeps from the stage's top, and its tail.
+    const gap = Math.ceil(6 / z);
+    const top = over > 0 ? Math.ceil(over / z) : 0;
+    const style = youYell.style;
+    style.left = '0px';
+    style.top = '0px';
+    // Two lines at most, like the enemy's: page.css sets the line height to
+    // 1.2; padding and borders are read, so a style change keeps the count.
+    const cs = getComputedStyle(youYell);
+    const px = (v: string): number => parseFloat(v) || 0;
+    const lineHeight = px(cs.fontSize) * 1.2;
+    const frame =
+      px(cs.paddingTop) + px(cs.paddingBottom) + px(cs.borderTopWidth) + px(cs.borderBottomWidth);
+    const maxHeight = lineHeight * 2.5 + frame;
+    const place = placeYell({
+      width: stage.clientWidth,
+      top: top > 0 ? top : gap,
+      gap,
+      you: stageBox(sprite),
+      avoid: foeYell ? [stageBox(foe.sprite), foeYell] : [stageBox(foe.sprite)],
+      measure: (maxWidth) => {
+        style.maxWidth = `min(${10.5 / z}rem, ${Math.floor(maxWidth)}px)`;
+        const h = youYell.offsetHeight;
+        return h > maxHeight ? null : { w: youYell.offsetWidth, h };
+      },
+    });
+    if (!place) {
+      hideYouYell();
+      return false;
+    }
+    youYell.classList.toggle('beside', place.beside);
+    style.left = `${place.box.x}px`;
+    style.top = `${place.box.y}px`;
+    // The tail points at the middle of the sprite, kept inside a short bubble.
+    style.setProperty('--tail', `${Math.min(you.size / 2, place.box.w - gap * 2)}px`);
+    return true;
+  }
+
+  /** An element's box in the stage's own pixels. */
+  function stageBox(n: HTMLElement): Box {
+    return { x: n.offsetLeft, y: n.offsetTop, w: n.offsetWidth, h: n.offsetHeight };
   }
 
   /** Shows an array's set-up under the fighters for the pause before a fight; null does nothing. */

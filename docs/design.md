@@ -344,7 +344,19 @@ Tribulation skills follow.
   screens) it starts just under them, and when it can't fit above the enemy
   it sits on the enemy's left instead, tail pointing right, so it never covers
   the enemy or its name. The name line keeps the enemy's name, so
-  the strip never changes height. Reduced motion shows the text in place with
+  the strip never changes height. The cultivator yells too, for its costliest
+  skill at its Path and realm (every skill tied for the highest qi cost): a
+  speech bubble in the qi cyan, never the enemy's gold, with "Ten Thousand
+  Swords!" for about 1 s as it lands, instead of the floating name. It sits at
+  the top of the stage with its left edge on the cultivator's sprite and its
+  tail pointing down at it, or beside the sprite on its right (tail pointing
+  left) when there is no room above, and in either place drops just under the
+  enemy's bubble when that one is in the way. It never covers a sprite, the
+  enemy's bubble or the names and bars; the enemy's bubble keeps its place, and
+  the cultivator's narrows (2 lines at most), moves or, mid-yell, goes. When it
+  fits nowhere (both long names on the short 960 x 640 stage), the name floats
+  as a callout instead. One at a time: a new yell replaces the last, and a
+  fight's end clears it. Reduced motion shows the text in place with
   no rise or pop and the bar with no glide. Discreet hides callouts, bubbles
   and cast bars, and the Mini view leaves callouts and bubbles out. Screen
   readers are not told about each cast.
@@ -403,7 +415,8 @@ Skills follow the current Path and realm: they are worked out from them at
 every combat event and never saved. A Path change or a Reincarnation (level
 1, Qi Condensation) has the right skills at once, and an older save loads
 with the skills for its Path and realm. A skill's name floats over the
-cultivator as it lands (§5 Skills), in the player's language.
+cultivator as it lands (§5 Skills), in the player's language; its costliest
+one is yelled in a cyan bubble instead.
 
 ### Elite and boss skills
 
