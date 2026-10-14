@@ -908,7 +908,8 @@ select {
   .game .strip .dmg {
     z-index: 2;
   }
-  /* The name keeps its own row (two lines kept); HP sits beside the bar. */
+  /* The name keeps its own row (two lines kept); HP sits beside the bar.
+     Under 720 px tall the block below redraws both. */
   .game .fighter {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: 'name name' 'bar hp' 'qi .';
@@ -931,13 +932,31 @@ select {
     white-space: nowrap;
   }
 }
-/* Under 720 px tall (such as the 960 x 640 itch.io frame): the stage at 0.5
-   (107 px), a slimmer header bar and fewer drop lines, so the strip row stays
-   short enough for the character and bag panels to fit without scrolling. */
+/* Under 720 px tall (such as the 960 x 640 itch.io frame): a slimmer header
+   bar and fewer drop lines, so the strip row stays short enough for the
+   character and bag panels to fit without scrolling. The strip rises over the
+   title bar's file name (the stamp and the tools stay clear of it) and gives
+   those 40 px to the stage, at 0.7 (146 px), so both sprites show whole under
+   the names and HP. */
 @media (min-width: 940px) and (min-height: 600px) and (max-height: 719px) {
+  /* 2.5rem is the title bar on one line (36 px) plus its 0.25rem margin
+     above; recheck at 940 px wide with the Vietnamese labels if either changes. */
+  .game .top > .strip {
+    margin-top: -2.5rem;
+  }
   .game .strip > .stage {
-    zoom: 0.5;
-    --z: 0.5;
+    zoom: 0.7;
+    --z: 0.7;
+  }
+  /* A tighter stamp and tools, so the stamp starts right of the strip even
+     with the longer Vietnamese labels. */
+  .titlebar .stamp {
+    margin-left: 0;
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+  }
+  .titlebar .tools {
+    gap: 0.3rem;
   }
   .game .top > .strip > .where {
     padding-block: 0;
@@ -952,34 +971,68 @@ select {
     margin-bottom: 0.2rem;
     padding-block: 0.15rem;
   }
-  /* Each fighter as one line of name (and the cultivator's HP) over a thin
-     bar, so the names and HP cover only the stage's top edge and the zone and
-     sprites show under them. The enemy's name has the whole line, so the
-     longest Tribulation name fits; its HP goes beside its qi bar, a row the
-     cultivator's skill icons already make as tall, so the strip keeps its
-     height. The ellipsis is only a safety net; the title holds the full name. */
+  /* Each fighter as its HP bar with the HP written inside, then the qi bar,
+     so the overlay covers only the stage's top edge and the zone and sprites
+     show under it. The cultivator's skill icons sit beside its qi bar and its
+     name moves to the XP bar (the Path); the enemy's name goes under its qi
+     bar, with the whole line, so the longest Tribulation name fits. The
+     ellipsis is only a safety net; the title holds the full name. */
   .game .strip > .fighters {
     padding-block: 0.1rem 0;
+    font-size: 0.75rem;
+  }
+  .game .skills {
+    --skill-size: 16px;
+    gap: 4px;
   }
   .game .fighter {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name hp' 'bar bar' 'qi qi';
-    row-gap: 0.1rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'bar' 'qi' 'name';
+    row-gap: 0.15rem;
   }
-  .game .foe {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'name name' 'bar bar' 'hp qi';
-    column-gap: 0.5rem;
-  }
-  /* The skill icons only, on the qi bar's row. */
   .game .fighter.you {
-    grid-template-areas: 'name hp' 'bar bar' 'qi skills';
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'bar bar' 'qi skills';
+  }
+  .game .fighter.you .name {
+    display: none;
   }
   .game .fighter .bar {
-    height: 5px;
+    height: 12px;
+  }
+  /* Over the bright green and red fills the light text needs a firm dark
+     outline (the strip's colour, dark in both themes) to stay readable. */
+  .game .fighter .hp {
+    grid-area: bar;
+    z-index: 1;
+    justify-self: center;
+    font-size: 0.7rem;
+    line-height: 12px;
+    text-shadow:
+      0 0 2px var(--strip-bg),
+      0 0 2px var(--strip-bg),
+      0 0 2px var(--strip-bg),
+      0 1px 1px var(--strip-bg);
   }
   .game .fighter .bar.qi {
-    height: 3px;
+    height: 2px;
+  }
+  .game .strip > .xp {
+    height: 0.9rem;
+    line-height: 0.9rem;
+    font-size: 0.7rem;
+  }
+  /* The level and the Path run on as one line at the left end. */
+  .game .strip .xp-level {
+    position: static;
+    margin-left: 0.5rem;
+  }
+  .game .strip .xp-path {
+    display: inline;
+  }
+  .game .strip .xp-path::before {
+    content: ' · ';
+    white-space: pre;
   }
   /* The Tribulation alert takes the XP bar's place (full while one is due, and
      saying the same) as one line, so it never makes the strip taller. */
@@ -993,8 +1046,8 @@ select {
     align-items: center;
     border-width: 0 1px;
     white-space: nowrap;
-    font-size: 0.75rem;
-    line-height: 1.45;
+    font-size: 0.7rem;
+    line-height: 0.9rem;
   }
   .game .strip > .trial-call > strong {
     text-transform: none;
@@ -1022,9 +1075,9 @@ select {
   .game .fighter .enemy-tier::before {
     content: '';
     display: inline-block;
-    width: 1.35rem;
-    height: 1.35rem;
-    vertical-align: -0.4rem;
+    width: 1.1rem;
+    height: 1.1rem;
+    vertical-align: -0.3rem;
     background: var(--rank-art) no-repeat 0 0 / 300% 100%;
   }
   .game .fighter .enemy-tier--boss::before {
@@ -3062,6 +3115,10 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 .xp-level {
   position: absolute;
   left: 0.5rem;
+}
+/* Shown only in the short sheet layout, where the strip drops the cultivator's name. */
+.xp-path {
+  display: none;
 }
 .xp-text {
   position: absolute;

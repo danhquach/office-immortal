@@ -502,27 +502,42 @@ describe('Full view layout', () => {
     // Damage numbers rise over the names.
     expect(rule(shorter, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
     expect(shorter).not.toMatch(/zoom/);
-    // Only the itch.io frame's height shrinks the stage to 0.5, with a slimmer
-    // header bar and fewer drop lines.
+    // Only the itch.io frame's height rises the strip over the title bar's file
+    // name and draws the stage at 0.7, with a slimmer header bar and fewer drop lines.
     const shortest = media(SHORTEST);
-    expect(rule(shortest, '.game .strip > .stage')).toMatch(/zoom:\s*0\.5;/);
+    expect(rule(shortest, '.game .top > .strip')).toMatch(/margin-top:\s*-2\.5rem/);
+    expect(rule(shortest, '.game .strip > .stage')).toMatch(/zoom:\s*0\.7;/);
+    expect(rule(shortest, '.game .strip > .stage')).toMatch(/--z:\s*0\.7;/);
     expect(rule(shortest, '.beside > .log')).toMatch(/min-height:\s*2\.5rem/);
     // The header bar's compact padding must outrank its base rule, which comes
     // later in the file with `.game .strip .where`.
     expect(rule(code, '.game .strip .where')).toMatch(/padding:/);
     expect(rule(shorter, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0\.1rem/);
     expect(rule(shortest, '.game .top > .strip > .where')).toMatch(/padding-block:\s*0;/);
-    // Each fighter is a thin name-and-HP line over its bar, so the stage shows.
+    // Each fighter is its HP bar with the HP inside, then its qi bar; the
+    // enemy's name has the whole line under them (the longest Tribulation name
+    // fits at 940 px), so the stage shows.
     expect(rule(shortest, '.game .fighter')).toMatch(
-      /grid-template-areas:\s*'name hp'\s*'bar bar'/,
+      /grid-template-areas:\s*'bar'\s*'qi'\s*'name'/,
     );
-    // The enemy's name has its whole line (the longest Tribulation name fits at
-    // 940 px); its HP sits beside its qi bar, a row the skill icons already make
-    // as tall on the cultivator's side.
-    expect(rule(shortest, '.game .foe')).toMatch(
-      /grid-template-areas:\s*'name name'\s*'bar bar'\s*'hp qi'/,
+    const hp = rule(shortest, '.game .fighter .hp');
+    expect(hp).toMatch(/grid-area:\s*bar/);
+    // The light HP text over the green and red fills keeps a dark outline.
+    expect(hp).toMatch(/text-shadow:[^;]*var\(--strip-bg\)/);
+    expect(rule(shortest, '.game .fighter .bar')).toMatch(/height:\s*12px/);
+    expect(rule(shortest, '.game .fighter .bar.qi')).toMatch(/height:\s*2px/);
+    expect(rule(shortest, '.game .skills')).toMatch(/--skill-size:\s*16px/);
+    expect(rule(shortest, '.game .strip > .xp')).toMatch(/height:\s*0\.9rem/);
+    // The stamp keeps clear of the risen strip.
+    expect(rule(shortest, '.titlebar .stamp')).toMatch(/margin-left:\s*0/);
+    // The cultivator's skill icons sit beside its qi bar; its name (the Path)
+    // moves to the XP bar, which shows it only here.
+    expect(rule(shortest, '.game .fighter.you')).toMatch(
+      /grid-template-areas:\s*'bar bar'\s*'qi skills'/,
     );
-    expect(rule(shortest, '.game .fighter.you')).toMatch(/'qi skills'/);
+    expect(rule(shortest, '.game .fighter.you .name')).toMatch(/display:\s*none/);
+    expect(code).toMatch(/^\.xp-path\s*{\s*display:\s*none;/m);
+    expect(rule(shortest, '.game .strip .xp-path')).toMatch(/display:\s*inline/);
     expect(rule(shortest, '.game .fighter .name')).toMatch(/text-overflow:\s*ellipsis/);
     // The tier is a badge icon before the name; its label stays for screen readers.
     expect(rule(shortest, '.game .fighter .enemy-tier')).toMatch(/font-size:\s*0/);

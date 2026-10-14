@@ -2123,8 +2123,13 @@ function play(
   const xpFill = el('span', 'xp-fill');
   const xpFillLevel = el('span', 'xp-level');
   const xpFillText = el('span', 'xp-text');
-  xpFill.append(xpFillLevel, xpFillText);
-  xp.append(xpLevel, xpText, xpFill);
+  // The Path, after the level: shown only where the strip has no room for the
+  // cultivator's name over the stage (page.css). The name says it to screen readers.
+  const xpPath = el('span', 'xp-path');
+  const xpFillPath = el('span', 'xp-path');
+  for (const n of [xpPath, xpFillPath]) n.setAttribute('aria-hidden', 'true');
+  xpFill.append(xpFillLevel, xpFillPath, xpFillText);
+  xp.append(xpLevel, xpPath, xpText, xpFill);
   strip.append(where, trialCall, stage, fighters, xp);
   let zone = '';
 
@@ -3876,6 +3881,7 @@ function play(
     const bar = xpBar(c);
     xp.style.setProperty('--xp', `${bar.percent}%`);
     for (const n of [xpLevel, xpFillLevel]) setText(n, bar.level);
+    for (const n of [xpPath, xpFillPath]) setText(n, tn('path', PATHS[c.path].name));
     for (const n of [xpText, xpFillText]) setText(n, bar.text);
     xp.setAttribute('aria-valuenow', String(Math.round(bar.percent)));
     xp.setAttribute('aria-valuetext', bar.spoken);
