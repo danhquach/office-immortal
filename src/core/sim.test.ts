@@ -69,7 +69,7 @@ import {
   type TickOptions,
 } from './sim.ts';
 import type { Enemy } from './floors.ts';
-import { skipToTribulation } from '../dev/scenarios.ts';
+import { setLevel, skipToTribulation } from '../dev/scenarios.ts';
 
 /**
  * Per-test time limit for the long simulations below (hours of sim time, or
@@ -1350,6 +1350,28 @@ describe('Path balance', () => {
     talisman: { body: 30, agility: 10, spirit: 60 },
   };
 
+  /** A fresh run on `path` with its reference build on Auto-assign. */
+  function reference(seed: number, path: PathId): GameState {
+    return setAutoAssign(setPlanRatio(newGame(seed, path), path, REFERENCE[path]), true);
+  }
+
+  /** Equips every upgrade in the bag, then empties it. */
+  function gearUp(s: GameState): GameState {
+    for (let i = 0; i < s.inventory.length; i++) {
+      const item = s.inventory[i] as Item;
+      if (!canEquip(s.cultivator, item)) continue;
+      for (const to of slotsFor(item.slot)) {
+        const next = equip(s, i, to);
+        if (power(next) > power(s) * 1.001) {
+          s = next;
+          i = -1;
+          break;
+        }
+      }
+    }
+    return { ...s, inventory: [] };
+  }
+
   /**
    * A player who checks in every minute, equips every upgrade and empties the
    * bag, for `minutes` or until `done` holds after a check-in.
@@ -1360,24 +1382,10 @@ describe('Path balance', () => {
     minutes: number,
     opts: TickOptions = {},
     done: (s: GameState) => boolean = () => false,
+    from: GameState = reference(seed, path),
   ): GameState {
-    let s = setAutoAssign(setPlanRatio(newGame(seed, path), path, REFERENCE[path]), true);
-    for (let m = 0; m < minutes && !done(s); m++) {
-      s = tick(s, 60, opts);
-      for (let i = 0; i < s.inventory.length; i++) {
-        const item = s.inventory[i] as Item;
-        if (!canEquip(s.cultivator, item)) continue;
-        for (const to of slotsFor(item.slot)) {
-          const next = equip(s, i, to);
-          if (power(next) > power(s) * 1.001) {
-            s = next;
-            i = -1;
-            break;
-          }
-        }
-      }
-      s = { ...s, inventory: [] };
-    }
+    let s = from;
+    for (let m = 0; m < minutes && !done(s); m++) s = gearUp(tick(s, 60, opts));
     return s;
   }
 
@@ -1429,6 +1437,86 @@ describe('Path balance', () => {
       // The skills play (they cost some time) and cost under 30% more.
       expect(withSkills).toBeGreaterThan(without);
       expect(withSkills / without).toBeLessThan(1.3);
+    },
+    BALANCE_MS,
+  );
+
+  /** Tribulations 4 to 9: past what a test-length run reaches, so each starts at its realm cap. */
+  const LATE_CAPS = REALM_CAPS.slice(3);
+  const LATE_SEEDS = 8;
+  /** The climb to a cap's gear ends after this long with no new highest floor. */
+  const STALL_MINUTES = 30;
+  /** Time a Tribulation is given to fall, retries and farming included. */
+  const LATE_MINUTES = 600;
+
+  /**
+   * A reference cultivator at realm cap `cap` with the gear expected when its
+   * Tribulation falls due: set to the cap, it climbs from floor 1 keeping every
+   * upgrade until STALL_MINUTES pass with no new highest floor (its XP held
+   * below the Tribulation's price, as a run farms where it is stuck). Then the
+   * next level's XP is held, so the Tribulation is due on the floor it reached.
+   */
+  function atCap(seed: number, path: PathId, cap: number): GameState {
+    let s = setLevel(reference(seed, path), cap);
+    for (let best = 0, still = 0; still < STALL_MINUTES;) {
+      s = gearUp(tick(s, 60));
+      s = { ...s, cultivator: { ...s.cultivator, xp: 0 } };
+      if (s.highestFloor > best) [best, still] = [s.highestFloor, 0];
+      else still++;
+    }
+    return restartFloor({ ...s, cultivator: { ...s.cultivator, xp: xpToNext(cap) } });
+  }
+
+  it.each(PATH_IDS)(
+    'keeps Tribulations 4 to 9 winnable for %s with the gear expected at each cap',
+    (path) => {
+      let withSkills = 0;
+      let without = 0;
+      for (const cap of LATE_CAPS) {
+        const passed = (s: GameState) => s.cultivator.level > cap;
+        for (let seed = 1; seed <= LATE_SEEDS; seed++) {
+          const from = atCap(seed, path, cap);
+          // Still at the cap and never lost to it on the climb, so the timing starts clean.
+          expect(from.cultivator.level, `cap ${cap} seed ${seed}`).toBe(cap);
+          expect(from.trial.losses, `cap ${cap} seed ${seed}`).toBe(0);
+          const minutes = (opts: TickOptions) => {
+            const s = play(seed, path, LATE_MINUTES, opts, passed, from);
+            // Every seed breaks through, so none is stuck.
+            expect(passed(s), `cap ${cap} seed ${seed}`).toBe(true);
+            return (s.time - from.time) / 60;
+          };
+          withSkills += minutes({});
+          without += minutes(quietTribulations);
+        }
+      }
+      // From due to breakthrough, the skills cost under 50% more time.
+      expect(withSkills / without).toBeLessThan(1.5);
+    },
+    BALANCE_MS,
+  );
+
+  it.each(PATH_IDS)(
+    'lets Probation Review cast Final Warning in the first fight against a %s',
+    (path) => {
+      const seeds = 16;
+      let cast = 0;
+      for (let seed = 1; seed <= seeds; seed++) {
+        // Small steps, so the fight (seconds long) is watched from its start.
+        let s = reference(seed, path);
+        // Bounded, so a run that never reaches the cap fails instead of hanging.
+        for (let i = 1; s.enemies[0]?.kind !== 'tribulation' && i <= 3600; i++) {
+          s = tick(s, 0.5);
+          if (i % 120 === 0) s = gearUp(s);
+        }
+        expect(s.enemies[0]?.kind, `seed ${seed}`).toBe('tribulation');
+        let seen = false;
+        while (s.enemies[0]?.kind === 'tribulation' && s.cultivator.level === REALM_CAPS[0]) {
+          seen ||= s.combat.foe.windUp?.skill === 'finalWarning';
+          s = tick(s, 0.1);
+        }
+        if (seen) cast++;
+      }
+      expect(cast / seeds).toBeGreaterThanOrEqual(0.75);
     },
     BALANCE_MS,
   );

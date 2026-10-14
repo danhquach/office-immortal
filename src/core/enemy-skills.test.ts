@@ -306,17 +306,15 @@ describe('enemy skills in a fight', () => {
     return s;
   }
 
-  it('Final Warning: 150% at full HP, more the lower the player HP', () => {
+  it('Final Warning: 100% at full HP, more the lower the player HP', () => {
     const full = landing(trial('Probation Review', 30), 'Final Warning');
-    expect(full.after.cultivator.hp).toBe(
-      full.d.maxHp - mitigate(full.foe.damage * 1.5, full.d.defence),
-    );
+    expect(full.after.cultivator.hp).toBe(full.d.maxHp - mitigate(full.foe.damage, full.d.defence));
     const s = trial('Probation Review', 30);
     const hp = Math.round(full.d.maxHp * 0.6);
     s.cultivator.hp = hp;
     const low = landing(s, 'Final Warning');
     expect(low.after.cultivator.hp).toBe(
-      hp - mitigate(low.foe.damage * 1.5 * (1 + (1 - hp / low.d.maxHp)), low.d.defence),
+      hp - mitigate(low.foe.damage * (1 + (1 - hp / low.d.maxHp)), low.d.defence),
     );
   });
 
@@ -345,40 +343,38 @@ describe('enemy skills in a fight', () => {
     expect(after.combat.log.at(-1)).toMatchObject({ at, who: 'you', effect: 'dispelled' });
   });
 
-  it('Asset Seizure: steals 60 of the player qi', () => {
+  it('Asset Seizure: steals 40 of the player qi', () => {
     const { after, d } = landing(trial('Hostile Takeover', 30), 'Asset Seizure');
-    expect(after.cultivator.qi).toBe(d.maxQi - 60);
-    // 30 spent, a second of regen in the wind-up, 60 stolen.
-    expect(after.enemies[0]?.qi).toBeGreaterThanOrEqual(60);
-    expect(after.enemies[0]?.qi).toBeLessThanOrEqual(62);
+    expect(after.cultivator.qi).toBe(d.maxQi - 40);
+    // 30 spent, a second of regen in the wind-up, 40 stolen.
+    expect(after.enemies[0]?.qi).toBeGreaterThanOrEqual(40);
+    expect(after.enemies[0]?.qi).toBeLessThanOrEqual(42);
   });
 
-  it('Vote of No Confidence: blocks the player skills for 5 s', () => {
+  it('Vote of No Confidence: blocks the player skills for 2 s', () => {
     const { after, at } = landing(trial('Shareholder Revolt', 40), 'Vote of No Confidence');
-    expect(after.combat.you.silenceUntil).toBe(at + 5);
+    expect(after.combat.you.silenceUntil).toBe(at + 2);
     expect(after.combat.log.at(-1)).toMatchObject({ at, who: 'you', effect: 'silenced' });
   });
 
-  it('Under Investigation: damage over time for 8 s', () => {
+  it('Under Investigation: burns for 100% over 5 s', () => {
     const s = trial('Board Inquiry', 40);
     const { after, at, d, foe } = landing(s, 'Under Investigation');
-    expect(after.combat.you.burns).toEqual([
-      { damage: (foe.damage * 3) / 8, left: 8, next: at + 1 },
-    ]);
-    // Eight ticks through defence, then no more.
-    const later = tick(after, 9, { loadout: () => [] });
+    expect(after.combat.you.burns).toEqual([{ damage: foe.damage / 5, left: 5, next: at + 1 }]);
+    // Five ticks through defence, then no more.
+    const later = tick(after, 6, { loadout: () => [] });
     expect(later.combat.you.burns).toEqual([]);
-    expect(later.cultivator.hp).toBe(d.maxHp - 8 * mitigate((foe.damage * 3) / 8, d.defence));
+    expect(later.cultivator.hp).toBe(d.maxHp - 5 * mitigate(foe.damage / 5, d.defence));
   });
 
-  it('Compliance Freeze: stuns the player for 2 s', () => {
+  it('Compliance Freeze: stuns the player for 1.5 s', () => {
     const { after, at } = landing(trial('Regulatory Probe', 40), 'Compliance Freeze');
-    expect(after.combat.you.stunUntil).toBe(at + 2);
+    expect(after.combat.you.stunUntil).toBe(at + 1.5);
   });
 
-  it('Freefall: 3 hits, each 15% of the player max HP', () => {
+  it('Freefall: 3 hits, each 10% of the player max HP', () => {
     const { after, d } = landing(trial('Market Crash', 60), 'Freefall');
-    expect(after.cultivator.hp).toBe(d.maxHp - 3 * Math.round(d.maxHp * 0.15));
+    expect(after.cultivator.hp).toBe(d.maxHp - 3 * Math.round(d.maxHp * 0.1));
   });
 
   it(`Final Judgement: a 400% strike after a ${FINAL_JUDGEMENT_WIND_UP} s wind-up`, () => {
@@ -389,13 +385,14 @@ describe('enemy skills in a fight', () => {
   });
 
   it.each(TRIBULATIONS)(
-    '%s gains Heavenly Lightning below half HP: 3 telegraphed strikes',
+    '%s gains Heavenly Lightning below half HP: 3 telegraphed strikes, each 10% of max HP',
     (name) => {
       // Qi for Lightning only, or a tie with a 30 qi signature: Lightning is listed first.
       const s = trial(name, 30, LIGHTNING_HP_SHARE - 0.01);
       // A short horizon, so later casts never push the first out of the log.
       const third = landing(s, 'Heavenly Lightning', LIGHTNING_WIND_UP, 3, 12);
-      const strike = mitigate(third.foe.damage * 1.5, third.d.defence);
+      // Past defence: the same share of HP on every Path.
+      const strike = Math.round(third.d.maxHp * 0.1);
       const first = landing(s, 'Heavenly Lightning', LIGHTNING_WIND_UP, 1, 12);
       expect(first.after.cultivator.hp).toBe(first.d.maxHp - strike);
       expect(third.after.cultivator.hp).toBe(third.d.maxHp - 3 * strike);

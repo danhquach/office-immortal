@@ -236,9 +236,9 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   on each new floor (and when a floor is played again after a loss), and is
   full when a Tribulation starts, faced early or reached in turn.
 - **Enemies:** elites hold up to 60 qi, bosses 100, Tribulations 150, each
-  stepping up at 0 and gaining 10 per attack (one an Illusion Array turns
-  aside too) plus 1 a second from when it steps up. Regular
-  demons have no qi.
+  stepping up at 0 (the first Tribulation at 30, §5 Tribulation skills) and
+  gaining 10 per attack (one an Illusion Array turns aside too) plus 1 a
+  second from when it steps up. Regular demons have no qi.
 - **On the strip:** a thin cyan bar under each fighter's HP bar, read by
   screen readers as "Qi 42 / 100". A regular demon's qi row stays reserved
   but empty, so the strip never changes height. The Mini view shows HP bars
@@ -518,35 +518,67 @@ skill held when its next normal hit kills.
 
 | Tribulation | Skill | Qi | Cooldown | Effect | Uses it when |
 |---|---|---|---|---|---|
-| Probation Review | Final Warning | 30 | — | one hit at 150%, ×(1 + the share of max HP the cultivator has lost): 225% at half HP | whenever ready |
+| Probation Review | Final Warning | 30 | — | one hit at 100%, ×(1 + the share of max HP the cultivator has lost): 150% at half HP | whenever ready |
 | Annual Appraisal | Bell Curve | 30 | — | damage equal to 20% of the cultivator's current HP, past defence | whenever ready |
 | Restructuring | Redundancy | 40 | 20 s | removes the cultivator's active buffs (a purge) | the cultivator has a buff |
-| Hostile Takeover | Asset Seizure | 30 | 10 s | steals up to 60 of the cultivator's qi | the cultivator holds 30 qi or more |
-| Shareholder Revolt | Vote of No Confidence | 40 | 15 s | silences the cultivator (no skills) for 5 s | whenever ready |
-| Board Inquiry | Under Investigation | 40 | 12 s | burns for 300% over 8 s | whenever ready |
-| Regulatory Probe | Compliance Freeze | 40 | 12 s | stuns the cultivator for 2 s | whenever ready |
-| Market Crash | Freefall | 60 | 20 s | 3 hits, each 15% of the cultivator's max HP, past defence | whenever ready |
-| Heavenly Audit | Final Judgement | 60 | — | one hit at 400%, 3 s wind-up | whenever ready |
-| Every Tribulation | Heavenly Lightning | 30 | 30 s | 3 strikes at 150%, each after its own 3 s wind-up; a stun cancels the rest | below 50% of its max HP |
+| Hostile Takeover | Asset Seizure | 30 | 20 s | steals up to 40 of the cultivator's qi | the cultivator holds 30 qi or more |
+| Shareholder Revolt | Vote of No Confidence | 40 | 20 s | silences the cultivator (no skills) for 2 s | whenever ready |
+| Board Inquiry | Under Investigation | 40 | 20 s | burns for 100% over 5 s | whenever ready |
+| Regulatory Probe | Compliance Freeze | 40 | 20 s | stuns the cultivator for 1.5 s | whenever ready |
+| Market Crash | Freefall | 60 | 30 s | 3 hits, each 10% of the cultivator's max HP, past defence | whenever ready |
+| Heavenly Audit | Final Judgement | 60 | 30 s | one hit at 400%, 3 s wind-up | whenever ready |
+| Every Tribulation | Heavenly Lightning | 30 | 30 s | 3 strikes, each 10% of the cultivator's max HP past defence and after its own 3 s wind-up; a stun cancels the rest | below 50% of its max HP |
 
-- **Starting:** a Tribulation steps up at full HP and 0 qi like any enemy, so
-  Heavenly Lightning never comes at the start, faced early or reached in
-  turn; the cultivator starts it at full HP and qi (§5 Qi and skills).
-  The first Tribulation often falls before it has the qi for Final Warning.
+- **Starting:** a Tribulation steps up at full HP and 0 qi like any enemy,
+  faced early or reached in turn; the cultivator starts it at full HP and qi
+  (§5 Qi and skills). Probation Review alone steps up with 30 qi, enough for
+  Final Warning: a cultivator at the level 10 cap wins that fight in about 2
+  to 13 s, before the qi would build up, so without it most players never
+  saw the skill. Heavenly Lightning still never comes at the start (it waits
+  for half HP).
 - **On the strip:** each Heavenly Lightning strike yells its name in the
   wind-up bubble and flashes the whole stage once, pale gold, as it lands
   (drawn in code, at most one flash every 3 s). Reduced motion, Discreet and
   the Mini view show no flash.
-- **Balance:** a test per Path plays the reference run (§3) with every skill
-  cast, 16 seeds, through the first three Tribulations (the ones a run
-  reaches in four hours), and again with the Tribulations casting nothing:
-  every seed breaks through all three with the skills, and they cost under
-  30% more time. Measured: Sword 1.04×, Body 1.04×, Talisman Master 1.22×
-  (60.1, 136.1 and 81.6 min against 57.6, 130.3 and 66.9). The signature
-  skills cost almost nothing; Heavenly Lightning is the cost, most for the
-  Talisman Master's small HP pool. As one 450% burst it cost the Talisman
-  Master 1.57×, so its strikes come one at a time, each after a 3 s wind-up
-  that a stun can answer. The Path balance test (§3) is unchanged.
+- **Balance:** three tests per Path, each played with every skill cast and
+  again with the Tribulations casting nothing:
+  - *Tribulations 1–3:* the reference run (§3), 16 seeds, through the first
+    three (the ones a run reaches in four hours). Every seed breaks through
+    all three, and the skills cost under 30% more time. Measured: Sword
+    1.04×, Body 1.11×, Talisman Master 1.14× (59.8, 145.1 and 76.3 min
+    against 57.6, 130.3 and 66.9).
+  - *Tribulations 4–9:* past what a test-length run reaches, so each starts
+    from a reference cultivator built at its realm cap: set to the cap (stat
+    points by its plan), it climbs from floor 1 keeping every upgrade until 30
+    min pass with no new highest floor, its XP held below the Tribulation's
+    price (a run farms where it is stuck); then the Tribulation falls due on
+    that floor. The run plays on to the breakthrough, losses, retries and
+    farming included, 8 seeds each. Every seed breaks through each one within
+    10 hours, and the skills cost under 50% more time from due to
+    breakthrough. Measured: Sword 1.13×, Body 1.18×, Talisman Master 1.00×
+    (4.9, 29.7 and 7.9 min a Tribulation, against 4.3, 25.3 and 7.9).
+    Before these numbers: 1.42×, 2.85× and 2.57×.
+  - *Final Warning:* Probation Review winds up Final Warning in at least 75%
+    of a fresh reference run's first fight against it. Measured: 16 of 16
+    on every Path (before the opening qi: 0, 11 and 0 of 16).
+- **Why these numbers:** Heavenly Lightning was 3 strikes at 150% of the
+  Tribulation's hit, through defence, so it took the most from the Path with
+  the least HP: the Talisman Master needed 1.22× the time on Tribulations
+  1–3 and 2.57× on 4–9. A share of max HP past defence takes the same share
+  from every Path. The signature skills that act every 10 to 15 s cost most
+  in the Body Refiner's long fights (2 to 9 min at the realm caps), so their
+  cooldowns are 20 or 30 s and their effects smaller.
+- **The Talisman Master's gap:** on Tribulations 1–3 it still pays a little
+  more than the others (64 seeds: 1.08× against Sword 1.00× and Body 0.95×,
+  about 5 min in all; one standard error is about 0.03). It has no stun to
+  cancel a Lightning wind-up and no lifesteal to win back the HP, and at the
+  level 10 cap it reaches Probation Review hurt, so Final Warning wins about
+  1 first fight in 3 for the Tribulation (none before; a loss costs nothing
+  but the floor played again, §4). On Tribulations 4–9 its extra time (about
+  1 min a Tribulation, at 16 seeds and a 60 min stall) is within the
+  Sword's and the Body Refiner's (0.4 and 2.3 min).
+- **The Path balance test (§3)** still keeps every Path within 15%: 1.128
+  at 10 min and 1.127 at 60 min.
 - **Names** are yelled and float in the player's language (EN and VI), and
   fit the bubble as the elite and boss skills do.
 
