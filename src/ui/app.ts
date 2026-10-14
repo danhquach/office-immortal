@@ -1413,7 +1413,7 @@ function kpi(
 /**
  * A summary chip's tip with id `id`: its label and value, which a narrow chip
  * column hides behind the icon (page.css). Opens on hover, focus or a tap,
- * only while the label is hidden; `refresh` redraws it while open. The chip's
+ * and takes focus, only while the label is hidden; `refresh` redraws it while open. The chip's
  * own text says the same, so it is not described twice.
  */
 function kpiTip(
@@ -1421,7 +1421,6 @@ function kpiTip(
   label: MessageKey,
   id: string,
 ): { refresh: () => void } {
-  chip.box.tabIndex = 0;
   const tip = el('p', 'boost-tip');
   tip.id = id;
   const fill = (): void =>
@@ -1431,6 +1430,14 @@ function kpiTip(
   const hidden = (): boolean => !!name && getComputedStyle(name).position === 'absolute';
   const { isOpen } = hoverTip(chip.box, tip, fill, hidden);
   chip.box.removeAttribute('aria-describedby');
+  // A tab stop only while there is a tip to open: hiding or showing the label
+  // (a resize, Discreet mode) changes its size.
+  const stop = (): void => {
+    if (hidden()) chip.box.tabIndex = 0;
+    else chip.box.removeAttribute('tabindex');
+  };
+  stop();
+  if (name) new ResizeObserver(stop).observe(name);
   return {
     refresh: () => {
       if (isOpen()) fill();
