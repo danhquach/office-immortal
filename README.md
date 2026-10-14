@@ -91,7 +91,19 @@ npm run lint     # type check, ESLint, Prettier
 npm run format   # rewrite files with Prettier
 npm run build    # production build in dist/
 npm run preview  # serve the production build from dist/
+npm run check:version  # this branch's version is above main's (as CI wants)
 ```
+
+`npm ci` also points git at the hooks in `.githooks/`. Its pre-push hook stops
+a push to any branch but `main` when the pushed commit's version is not above
+`main`'s, the same check CI runs on every PR (see below), so a missed bump is
+caught before the push. It compares with `origin`'s `main` and blocks the
+push if it can't fetch it. Raise the version, commit and push again;
+`git push --no-verify` skips the check. Setting git's `core.hooksPath` for the
+repo means hooks in `.git/hooks` no longer run; if `core.hooksPath` already
+points elsewhere, `npm ci` leaves it alone and says so.
+The hook runs the checked-out branch's own `.githooks/` and `tools/` code, so
+review those before pushing a branch you didn't write.
 
 Unit tests sit next to the code they cover, as `src/**/*.test.ts`.
 
@@ -133,7 +145,7 @@ git tag v0.2.0 && git push origin v0.2.0
 The tag must name the version on that commit (`package.json`, shown in the
 status bar); CI refuses any other. Every PR to `main` raises that version
 (`npm version patch --no-git-tag-version`), and CI fails a PR that doesn't
-(Dependabot's PRs excepted).
+(Dependabot's PRs excepted); the pre-push hook checks the same before a push.
 
 One-time setup:
 

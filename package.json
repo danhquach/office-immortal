@@ -1,7 +1,7 @@
 {
   "name": "office-immortal",
   "private": true,
-  "version": "0.19.0",
+  "version": "0.20.0",
   "type": "module",
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -12,12 +12,14 @@
     "preview": "vite preview",
     "zip": "node tools/zip-build.mjs",
     "check:no-debug": "node tools/no-debug.mjs",
+    "check:version": "git fetch --quiet --no-tags origin main && node tools/version-check.mjs bump FETCH_HEAD",
     "marketing:saves": "node --experimental-strip-types tools/marketing/saves.ts",
     "marketing:screenshots": "node --experimental-strip-types tools/marketing/screenshots.ts",
     "marketing:trailer": "node --experimental-strip-types tools/marketing/trailer.ts",
     "test": "vitest run",
     "lint": "tsc --noEmit && eslint . && prettier --check .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepare": "node tools/install-hooks.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

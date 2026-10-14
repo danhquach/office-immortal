@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bumpProblems, tagProblems } from '../tools/version-checks.mjs';
+import { bumpProblems, pushedBranches, tagProblems } from '../tools/version-checks.mjs';
 
 describe('bumpProblems', () => {
   const bump = (base: string, head: string, locks = [head, head]): string[] =>
@@ -20,6 +20,11 @@ describe('bumpProblems', () => {
     expect(bump('0.6.10', '0.6.9')).toHaveLength(1);
   });
 
+  it("refuses when main's version is not x.y.z", () => {
+    expect(bump('', '0.6.2')).toHaveLength(1);
+    expect(bump(undefined as unknown as string, '0.6.2')).toHaveLength(1);
+  });
+
   it('refuses a version that is not x.y.z', () => {
     expect(bump('0.6.1', '0.6.2-beta')).toHaveLength(1);
     expect(bump('0.6.1', 'v0.6.2')).toHaveLength(1);
@@ -38,5 +43,43 @@ describe('tagProblems', () => {
     expect(tagProblems({ tag: 'v0.6.2', version: '0.6.2' })).toEqual([]);
     expect(tagProblems({ tag: 'v0.7.0', version: '0.6.2' })).toHaveLength(1);
     expect(tagProblems({ tag: '0.6.2', version: '0.6.2' })).toHaveLength(1);
+  });
+});
+
+describe('pushedBranches', () => {
+  const a = 'a'.repeat(40);
+  const b = 'b'.repeat(40);
+  const zero = '0'.repeat(40);
+  const line = (sha: string, remoteRef: string): string =>
+    `refs/heads/x ${sha} ${remoteRef} ${zero}`;
+
+  it('checks every commit pushed to a branch other than main', () => {
+    expect(pushedBranches(`${line(a, 'refs/heads/issue-1-x')}\n`)).toEqual([a]);
+    expect(
+      pushedBranches([line(a, 'refs/heads/issue-1-x'), line(b, 'refs/heads/issue-2-y')].join('\n')),
+    ).toEqual([a, b]);
+  });
+
+  it('leaves main, tags and branch deletes alone', () => {
+    expect(pushedBranches(line(a, 'refs/heads/main'))).toEqual([]);
+    expect(pushedBranches(line(a, 'refs/tags/v0.6.2'))).toEqual([]);
+    expect(pushedBranches(line(a, 'refs/for/main'))).toEqual([]);
+    expect(pushedBranches(line(zero, 'refs/heads/issue-1-x'))).toEqual([]);
+    // A branch merely named like main is still checked.
+    expect(pushedBranches(line(a, 'refs/heads/main-fix'))).toEqual([a]);
+  });
+
+  it('checks only full object names', () => {
+    const sha256 = 'c'.repeat(64);
+    expect(pushedBranches(line(sha256, 'refs/heads/issue-1-x'))).toEqual([sha256]);
+    for (const bad of ['--upload-pack=x', 'HEAD', 'a'.repeat(39), 'A'.repeat(40), `${a}:x`]) {
+      expect(pushedBranches(line(bad, 'refs/heads/issue-1-x'))).toEqual([]);
+    }
+  });
+
+  it('checks nothing on an empty or malformed push', () => {
+    expect(pushedBranches('')).toEqual([]);
+    expect(pushedBranches('\n\n')).toEqual([]);
+    expect(pushedBranches('refs/heads/x')).toEqual([]);
   });
 });
