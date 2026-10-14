@@ -5,28 +5,46 @@
 
 import { PATHS, type PathId } from '../core/cultivator.ts';
 import { GRADES, namesFor, SLOTS, SOUL_CAPS, type GradeId, type SlotId } from '../core/loot.ts';
-import type { GameState } from '../core/sim.ts';
+import { PASSIVE_IDS, PASSIVES, type PassiveId } from '../core/prestige.ts';
+import { setAutoTribulation, TRIAL_LOSS_LIMIT, type GameState } from '../core/sim.ts';
+import { BOOST_IDS, type BoostId } from '../core/store.ts';
 import { MAX_FLOOR, saveProblem } from '../storage/save.ts';
 import './debug.css';
 import {
   addEveryType,
   addItem,
   addResource,
+  awaySeconds,
   BAG_SIZES,
   debugStep,
   emptyBag,
   fillBag,
+  foeToOneHp,
+  freeStatReset,
   freshRun,
+  jumpToFight,
+  MAX_AWAY_HOURS,
   MAX_DEBUG_LEVEL,
+  readyToCast,
+  resetCooldowns,
+  restockStore,
+  retireReady,
   SCENARIO_IDS,
+  scenarioAway,
   scenarioFor,
   setBagSize,
+  setBoost,
   setFloors,
+  setFreeResetOffer,
   setHp,
   setLevel,
+  setPassive,
+  setQi,
   setSouls,
+  setTrialLosses,
   skipToTribulation,
   unequipAll,
+  type FightKind,
   type Resource,
   type ScenarioId,
 } from './scenarios.ts';
@@ -64,6 +82,9 @@ function readSpeed(): number {
 
 let speed = readSpeed();
 let forceDrop = false;
+let keepHp = false;
+/** Changes to the running fight, applied at the next tick without a reload. */
+let live: { label: string; fn: (s: GameState) => GameState }[] = [];
 
 declare global {
   interface Window {
@@ -104,7 +125,7 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
   box.className = 'debug';
   const summary = el('summary');
   const drawSummary = (): void => {
-    summary.textContent = speed > 1 ? `Debug ×${speed}` : 'Debug';
+    summary.textContent = `Debug${speed > 1 ? ` ×${speed}` : ''}${keepHp ? ' · HP kept full' : ''}`;
   };
   drawSummary();
   const status = el('p');
@@ -119,6 +140,8 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
     away = 0,
     clean = false,
   ): Promise<string> {
+    // A setup replaces the run: changes still queued for the old one are dropped.
+    live = [];
     let next: GameState;
     try {
       next = fn(host.state());
@@ -138,10 +161,46 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
     status.textContent = text;
     return text;
   }
-  function action(label: string, fn: (s: GameState) => GameState, away = 0): HTMLButtonElement {
+  function action(
+    label: string,
+    fn: (s: GameState) => GameState,
+    away: () => number = () => 0,
+  ): HTMLButtonElement {
     const b = el('button', label);
     b.type = 'button';
-    b.addEventListener('click', () => void run(label, fn, away));
+    b.addEventListener('click', () => {
+      let seconds: number;
+      try {
+        seconds = away();
+      } catch (e) {
+        say(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+        return;
+      }
+      void run(label, fn, seconds);
+    });
+    return b;
+  }
+  /** A change to the running fight (its skill state is never saved), kept at the next tick. */
+  /** `make` reads the panel's inputs at the click, so a later edit can't change what is queued. */
+  function liveAction(label: string, make: () => (s: GameState) => GameState): HTMLButtonElement {
+    const b = el('button', label);
+    b.type = 'button';
+    b.addEventListener('click', () => live.push({ label, fn: make() }));
+    return b;
+  }
+  function toggle(
+    label: string,
+    get: () => boolean,
+    set: (on: boolean) => void,
+  ): HTMLButtonElement {
+    const b = el('button', label);
+    b.type = 'button';
+    const draw = (): void => b.setAttribute('aria-pressed', String(get()));
+    b.addEventListener('click', () => {
+      set(!get());
+      draw();
+    });
+    draw();
     return b;
   }
   function section(title: string, ...rows: HTMLElement[][]): HTMLElement {
@@ -155,7 +214,8 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
     }
     return s;
   }
-  const int = (i: HTMLInputElement): number => Number(i.value);
+  // An empty field is refused (NaN), never read as 0.
+  const int = (i: HTMLInputElement): number => (i.value.trim() === '' ? NaN : Number(i.value));
 
   // Items
   const slotIds = Object.keys(SLOTS) as SlotId[];
@@ -261,13 +321,117 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
     drawDrop();
   });
   drawDrop();
+  const hours = numberInput(8, 1, MAX_AWAY_HOURS, 'Hours away');
   const time = section(
     'Time',
     [el('span', 'Speed'), speedPick, dropBtn],
     [
+      el('span', 'Away'),
+      hours,
+      el('span', 'h'),
+      action(
+        'Go',
+        (s) => s,
+        () => awaySeconds(int(hours)),
+      ),
+    ],
+  );
+
+  // Qi and skills: live, so the fight's cooldowns are not lost to a reload.
+  const qi = numberInput(0, 0, 10_000, 'Qi');
+  const skills = section(
+    'Qi and skills',
+    [
+      el('span', 'Qi'),
+      qi,
+      liveAction('Set Qi', () => {
+        const n = int(qi);
+        return (s) => setQi(s, n);
+      }),
+    ],
+    [
+      liveAction('Qi full', () => (s) => setQi(s, 'full')),
+      liveAction('Qi empty', () => (s) => setQi(s, 0)),
+      liveAction('Reset cooldowns', () => resetCooldowns),
+      liveAction('Ready to cast', () => readyToCast),
+    ],
+  );
+
+  // Fights
+  const fightKind = select<FightKind>([
+    ['elite', 'Elite'],
+    ['boss', 'Boss'],
+  ]);
+  fightKind.setAttribute('aria-label', 'Fight');
+  const fightFloor = numberInput(now.floor, 1, MAX_FLOOR, 'Fight floor');
+  const fights = section(
+    'Fights',
+    [
+      fightKind,
+      el('span', 'on floor'),
+      fightFloor,
+      action('Jump to fight', (s) => jumpToFight(s, fightKind.value as FightKind, int(fightFloor))),
+    ],
+    [
+      liveAction('Enemy to 1 HP', () => foeToOneHp),
+      toggle(
+        'Keep HP full',
+        () => keepHp,
+        (on) => {
+          keepHp = on;
+          drawSummary();
+        },
+      ),
+    ],
+  );
+
+  // Stats
+  const stats = section('Stats', [
+    action('Free stat reset', freeStatReset),
+    action('Offer free reset', (s) => setFreeResetOffer(s, true)),
+    action('Withdraw offer', (s) => setFreeResetOffer(s, false)),
+  ]);
+
+  // Tribulation
+  const losses = numberInput(0, 0, TRIAL_LOSS_LIMIT, 'Losses');
+  const tribulation = section(
+    'Tribulation',
+    [
       action('Tribulation due', skipToTribulation),
-      action('Away 1 h', (s) => s, 3600),
-      action('Away 8 h', (s) => s, 8 * 3600),
+      el('span', 'Losses'),
+      losses,
+      action('Set losses', (s) => setTrialLosses(s, int(losses))),
+    ],
+    [
+      action('Auto-Tribulation on', (s) => setAutoTribulation(s, true)),
+      action('Auto-Tribulation off', (s) => setAutoTribulation(s, false)),
+    ],
+  );
+
+  // Retirement and store
+  const passive = select(PASSIVE_IDS.map((id) => [id, PASSIVES[id].name] as [PassiveId, string]));
+  passive.setAttribute('aria-label', 'Passive');
+  const rank = numberInput(
+    0,
+    0,
+    Math.max(...PASSIVE_IDS.map((id) => PASSIVES[id].maxRank)),
+    'Rank',
+  );
+  const boost = select(BOOST_IDS.map((id) => [id, id] as [BoostId, string]));
+  boost.setAttribute('aria-label', 'Boost');
+  const retirement = section(
+    'Retirement and store',
+    [action('Retire-ready', retireReady), action('Restock store', restockStore)],
+    [
+      passive,
+      el('span', 'Rank'),
+      rank,
+      action('Set rank', (s) => setPassive(s, passive.value as PassiveId, int(rank))),
+    ],
+    [
+      boost,
+      action('Start boost', (s) => setBoost(s, boost.value as BoostId, true)),
+      action('End boost', (s) => setBoost(s, boost.value as BoostId, false)),
     ],
   );
 
@@ -291,21 +455,58 @@ export function mountDebug(root: HTMLElement, host: DebugHost, cloudOff: boolean
     } catch (e) {
       return Promise.resolve(say(e instanceof Error ? e.message : String(e)));
     }
-    return run(String(id), fn);
+    return run(String(id), fn, scenarioAway(id as ScenarioId));
   };
   const setups = section(
     'Setups',
-    [scenarioPick, action('Load', (s) => scenarioFor(scenarioPick.value)(s))],
+    [
+      scenarioPick,
+      action(
+        'Load',
+        (s) => scenarioFor(scenarioPick.value)(s),
+        () => scenarioAway(scenarioPick.value as ScenarioId),
+      ),
+    ],
     [path, resetBtn],
   );
 
-  box.append(summary, status, items, bag, cultivator, resources, gear, time, setups);
+  box.append(
+    summary,
+    status,
+    items,
+    bag,
+    cultivator,
+    resources,
+    gear,
+    time,
+    skills,
+    fights,
+    stats,
+    tribulation,
+    retirement,
+    setups,
+  );
   root.append(box);
   window.officeDebug = { scenarios: SCENARIO_IDS, scenario: scenarioRun };
 
   return {
     step(state, dt) {
-      const out = debugStep(state, dt, speed, forceDrop);
+      const changes = live;
+      live = [];
+      for (const { label, fn } of changes) {
+        try {
+          const next = fn(state);
+          const problem = saveProblem(next);
+          if (problem) say(`${label}: the save checker refuses it (${problem})`);
+          else {
+            state = next;
+            host.cheat();
+          }
+        } catch (e) {
+          say(`${label}: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+      const out = debugStep(state, dt, speed, forceDrop, keepHp);
       if (out.cheated) host.cheat();
       if (out.dropped) {
         forceDrop = false;

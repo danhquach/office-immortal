@@ -14,24 +14,51 @@ import {
   addEveryType,
   addItem,
   addResource,
+  awaySeconds,
   BAG_SIZES,
   debugStep,
   dropOnKill,
   emptyBag,
   fillBag,
+  foeToOneHp,
+  freeStatReset,
+  MAX_AWAY_HOURS,
   MAX_DEBUG_LEVEL,
   freshRun,
+  jumpToFight,
+  KEEP_HP_STEP,
+  readyToCast,
+  resetCooldowns,
+  restockStore,
+  retireReady,
   SCENARIO_IDS,
+  scenarioAway,
   scenarioFor,
   SCENARIOS,
   setBagSize,
+  setBoost,
   setFloors,
+  setFreeResetOffer,
   setHp,
   setLevel,
+  setPassive,
+  setQi,
   setSouls,
+  setTrialLosses,
   skipToTribulation,
   unequipAll,
+  type FightKind,
 } from './scenarios.ts';
+import { derive } from '../core/cultivator.ts';
+import { answerFreeReset, canResetStats } from '../core/economy.ts';
+import { canRetire, PASSIVES, POINTS_PER_RANK, type PassiveId } from '../core/prestige.ts';
+import {
+  characterStatus,
+  setAutoTribulation,
+  trialSetAside,
+  TRIAL_LOSS_LIMIT,
+} from '../core/sim.ts';
+import { BOOST_CAP_SECONDS, boostLeft, storeStale, syncStore } from '../core/store.ts';
 import { withoutCombat } from '../storage/save-fakes.ts';
 
 // The fight's skill state is never saved: states compare without it.
@@ -318,3 +345,233 @@ describe('debug setups', () => {
     expect(SCENARIOS.twoPages(game()).inventory.length).toBeGreaterThan(INVENTORY_SIZE);
   });
 });
+
+/** Plays until the enemy in front is no longer the one it was, at most `limit` seconds. */
+function fightOut(s: GameState, limit = 600): GameState {
+  const kills = s.kills;
+  const deaths = s.deaths;
+  let t = s;
+  for (let i = 0; i < limit && t.kills === kills && t.deaths === deaths; i++) t = tick(t, 1);
+  return t;
+}
+
+describe('debug setups for fights, skills, stats and retirement', () => {
+  it('jumps to the elite or boss of any floor reached, keeping HP and qi', () => {
+    const base = setQi(setHp(game(), 'low'), 7);
+    for (const [kind, left] of [
+      ['elite', ['elite', 'boss']],
+      ['boss', ['boss']],
+    ] as const) {
+      for (const floor of [1, 12, 30]) {
+        const s = jumpToFight(base, kind, floor);
+        expect(s.floor).toBe(floor);
+        expect(s.highestFloor).toBe(30);
+        expect(s.enemies.map((e) => e.kind)).toEqual(left);
+        expect(characterStatus(s).kind).toBe(kind);
+        expect(s.cultivator.hp).toBe(1);
+        expect(s.cultivator.qi).toBe(7);
+        loads(s);
+      }
+    }
+    expect(() => jumpToFight(base, 'boss', 31)).toThrow(/highest floor/);
+    expect(() => jumpToFight(base, 'boss', 0)).toThrow(/highest floor/);
+    expect(() => jumpToFight(base, 'demon' as FightKind, 1)).toThrow(/elite or boss/);
+  });
+
+  it('plays a jumped boss fight on as normal: the kill clears the floor', () => {
+    const s = setLevel(game(), 60);
+    const boss = jumpToFight(s, 'boss', 1);
+    const after = fightOut(boss);
+    expect(after.kills).toBe(boss.kills + 1);
+    expect(after.floor).toBe(2);
+    expect(after.enemies[0]?.kind).toBe('demon');
+  });
+
+  it('keeps a due Tribulation at the end of a jumped floor', () => {
+    const s = jumpToFight(skipToTribulation(game()), 'boss', 5);
+    expect(s.enemies.map((e) => e.kind)).toEqual(['boss', 'tribulation']);
+    loads(s);
+  });
+
+  it('sets qi to a whole number up to the max, or exactly full', () => {
+    const s = game();
+    const max = derive(s.cultivator).maxQi;
+    expect(setQi(s, 'full').cultivator.qi).toBe(max);
+    expect(setQi(s, 0).cultivator.qi).toBe(0);
+    expect(setQi(s, Math.floor(max)).cultivator.qi).toBe(Math.floor(max));
+    for (const bad of [-1, Math.floor(max) + 1, 1.5, NaN]) {
+      expect(() => setQi(s, bad)).toThrow(RangeError);
+    }
+    loads(setQi(s, 'full'));
+  });
+
+  it('resets cooldowns mid-fight, and readies the next cast', () => {
+    // No Path skill has a cooldown yet; one set by hand stands in for an enemy's or a later one.
+    const s = tick(game(), 3);
+    s.combat.you.cooldowns = { flyingSword: s.time + 30 };
+    expect(resetCooldowns(s).combat.you.cooldowns).toEqual({});
+    const ready = readyToCast(s);
+    expect(ready.combat.you.cooldowns).toEqual({});
+    expect(ready.cultivator.qi).toBe(derive(ready.cultivator).maxQi);
+    expect(s.combat.you.cooldowns).not.toEqual({});
+  });
+
+  it('brings the enemy in front to 1 HP, and the next hit kills it through the rules', () => {
+    const s = jumpToFight(game(), 'boss', 30);
+    const hit = foeToOneHp(s);
+    expect(hit.enemies[0]?.hp).toBe(1);
+    loads(hit);
+    const after = fightOut(hit, 10);
+    expect(after.kills).toBe(s.kills + 1);
+  });
+
+  it('keeps HP full through a fight it would lose, and cheats doing it', () => {
+    // Level 1 against floor 8's boss loses, though no one hit beats its max HP.
+    const s = jumpToFight(setLevel(game(), 1), 'boss', 8);
+    const lost = fightOut(s, 120);
+    expect(lost.deaths).toBe(s.deaths + 1);
+    const out = debugStep(s, 120, 1, false, true);
+    expect(out.cheated).toBe(true);
+    // It never falls, so it wears the boss down and climbs on.
+    expect(out.state.deaths).toBe(s.deaths);
+    expect(out.state.floor).toBeGreaterThan(8);
+    expect(KEEP_HP_STEP).toBeLessThan(1);
+    loads(out.state);
+  });
+
+  it('gives back every spent stat point for free, leaving the offer as it was', () => {
+    const s = setLevel(game(), 30);
+    const spent = answerFreeReset(setFreeResetOffer(s, true), false);
+    // Spend points by hand the way levelling with Auto-assign would.
+    spent.cultivator.stats.body += spent.cultivator.unspent;
+    spent.cultivator.unspent = 0;
+    loads(spent);
+    const reset = freeStatReset(spent);
+    expect(canResetStats(reset.cultivator)).toBe(false);
+    expect(reset.stones).toBe(spent.stones);
+    expect(reset.freeReset).toBe(false);
+    expect(freeStatReset(setFreeResetOffer(spent, true)).freeReset).toBe(true);
+    loads(reset);
+    expect(() => freeStatReset(reset)).toThrow(/no stat point/);
+    loads(setFreeResetOffer(s, true));
+  });
+
+  it('sets Tribulation losses up to the limit, setting it aside at the limit', () => {
+    for (let n = 0; n <= TRIAL_LOSS_LIMIT; n++) {
+      const s = setTrialLosses(game(), n);
+      expect(s.trial.losses).toBe(n);
+      expect(trialSetAside(s)).toBe(n === TRIAL_LOSS_LIMIT);
+      expect(s.enemies.some((e) => e.kind === 'tribulation')).toBe(n < TRIAL_LOSS_LIMIT);
+      loads(s);
+    }
+    // One already due keeps its level and stats.
+    const due = skipToTribulation(game());
+    expect(setTrialLosses(due, 1).cultivator).toEqual(restarted(due).cultivator);
+    expect(() => setTrialLosses(game(), TRIAL_LOSS_LIMIT + 1)).toThrow(RangeError);
+    expect(() => setTrialLosses(game(), -1)).toThrow(RangeError);
+  });
+
+  it('switches Auto-Tribulation through the game, and the result loads', () => {
+    const due = skipToTribulation(game());
+    const off = setAutoTribulation(due, false);
+    expect(off.enemies.some((e) => e.kind === 'tribulation')).toBe(false);
+    loads(off);
+    loads(setAutoTribulation(off, true));
+  });
+
+  it('makes Early Retirement pay, keeping a higher highest floor', () => {
+    const fresh = newGame(3, 'body');
+    expect(canRetire(fresh)).toBe(false);
+    const ready = retireReady(fresh);
+    expect(canRetire(ready)).toBe(true);
+    loads(ready);
+    expect(retireReady(game()).highestFloor).toBe(30);
+  });
+
+  it('sets passive ranks, Head Start moving unspent points as buying does', () => {
+    const ids = Object.keys(PASSIVES) as PassiveId[];
+    for (const id of ids) {
+      const s = setPassive(game(), id, PASSIVES[id].maxRank);
+      expect(s.passives[id]).toBe(PASSIVES[id].maxRank);
+      loads(s);
+      expect(() => setPassive(game(), id, PASSIVES[id].maxRank + 1)).toThrow(RangeError);
+    }
+    const up = setPassive(game(), 'points', 3);
+    expect(up.cultivator.unspent - game().cultivator.unspent).toBe(3 * POINTS_PER_RANK);
+    expect(setPassive(up, 'points', 0).cultivator.unspent).toBe(game().cultivator.unspent);
+    const spent = structuredClone(up);
+    spent.cultivator.stats.body += spent.cultivator.unspent;
+    spent.cultivator.unspent = 0;
+    expect(() => setPassive(spent, 'points', 0)).toThrow(/reset stats first/);
+    expect(() => setPassive(game(), 'constructor' as PassiveId, 1)).toThrow(/passive/);
+  });
+
+  it('restocks the store for free and turns boosts on and off', () => {
+    const stocked = syncStore(game());
+    const thrown = restockStore(stocked);
+    expect(storeStale(thrown)).toBe(true);
+    expect(syncStore(thrown).stones).toBe(stocked.stones);
+    loads(thrown);
+    const on = setBoost(stocked, 'xp', true);
+    expect(boostLeft(on, 'xp')).toBe(BOOST_CAP_SECONDS);
+    loads(on);
+    expect(boostLeft(setBoost(on, 'xp', false), 'xp')).toBe(0);
+    expect(() => setBoost(stocked, '__proto__' as 'xp', true)).toThrow(/boost/);
+  });
+
+  it('turns whole hours away into seconds, past the offline cap but bounded', () => {
+    expect(awaySeconds(1)).toBe(3600);
+    expect(awaySeconds(MAX_AWAY_HOURS)).toBe(MAX_AWAY_HOURS * 3600);
+    for (const bad of [0, -1, MAX_AWAY_HOURS + 1, 1.5, NaN]) {
+      expect(() => awaySeconds(bad)).toThrow(RangeError);
+    }
+  });
+
+  it('refuses hostile numbers and names on every new input', () => {
+    const s = game();
+    const numbers = [NaN, Infinity, -Infinity, 1.5, -1, Number.MAX_VALUE];
+    for (const n of numbers) {
+      expect(() => jumpToFight(s, 'boss', n)).toThrow(RangeError);
+      expect(() => setQi(s, n)).toThrow(RangeError);
+      expect(() => setTrialLosses(s, n)).toThrow(RangeError);
+      expect(() => setPassive(s, 'xp', n)).toThrow(RangeError);
+      expect(() => awaySeconds(n)).toThrow(RangeError);
+    }
+    for (const name of ['__proto__', 'constructor', 'toString', '', 'xp ']) {
+      expect(() => setPassive(s, name as PassiveId, 1)).toThrow(/passive/);
+      expect(() => setBoost(s, name as 'xp', true)).toThrow(/boost/);
+      expect(() => jumpToFight(s, name as FightKind, 1)).toThrow(/elite or boss/);
+      expect(() => scenarioFor(name)).toThrow(/unknown setup/);
+    }
+    for (const id of [{}, [], null, 1, Symbol('x')]) {
+      expect(() => scenarioFor(id)).toThrow(/unknown setup/);
+    }
+    // Nothing leaked onto shared prototypes.
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(s.passives)).toBe(Object.prototype);
+  });
+
+  it('names the new scenarios, offline8h saved eight hours back', () => {
+    expect(SCENARIO_IDS).toEqual(
+      expect.arrayContaining([
+        'eliteFight',
+        'bossFight',
+        'lowQi',
+        'tribulationLastTry',
+        'offline8h',
+        'retireReady',
+      ]),
+    );
+    expect(scenarioAway('offline8h')).toBe(8 * 3600);
+    expect(scenarioAway('bossFight')).toBe(0);
+    expect(SCENARIOS.bossFight(game()).enemies[0]?.kind).toBe('boss');
+    expect(SCENARIOS.eliteFight(game()).enemies[0]?.kind).toBe('elite');
+    expect(SCENARIOS.lowQi(game()).cultivator.qi).toBe(0);
+    expect(SCENARIOS.tribulationLastTry(game()).trial.losses).toBe(TRIAL_LOSS_LIMIT - 1);
+  });
+});
+
+/** `s` with its floor started again, as a setup that restarts it leaves it. */
+function restarted(s: GameState): GameState {
+  return setTrialLosses(s, 0);
+}
