@@ -12,6 +12,7 @@ Outputs: src/assets/art/*.png (shipped).
   python3 tools/art/build.py summary       # build only the summary chip icons
   python3 tools/art/build.py ranks         # build only the enemy rank badges
   python3 tools/art/build.py skills        # build only the skill bar icons
+  python3 tools/art/build.py slots figures plinth  # the paper doll's art
   python3 tools/art/build.py icons:<id>... # rebuild only these icon columns,
                                            # keeping every other column of the
                                            # shipped atlas as it is
@@ -59,6 +60,15 @@ Manifest knobs (every one optional unless marked; unknown keys stop the build):
               them (PATH_SKILL_NAMES), built the same way into skills.png;
               shadow (also drop a dark magenta drop shadow under the frame).
               Build them alone with `skills`.
+  slots       id*, source*, seed, prompt: the empty equipment slots' faint
+              icons, one per item type in the icon atlas's column order, built
+              the same way into slots.png. Build them alone with `slots`.
+  figures     id* (a Path), source*, seed, prompt: the paper doll's figure for
+              each Path, front facing, cleaned like the sprites into
+              figure_size frames: doll-<id>.png, a 4-frame breathing loop.
+              Build them alone with `figures`.
+  plinth      id*, source*, size* (w, h shown), seed, prompt: the jade plinth
+              under the figure, drawn smooth at 2x into plinth.png.
 """
 
 import json
@@ -305,11 +315,11 @@ def breathe(img: Image.Image, dip: int) -> Image.Image:
     """Idle: the upper body sinks `dip` px while the feet stay put."""
     if not dip:
         return img.copy()
-    n = img.height
+    w, n = img.size
     cut = n * 2 // 3
     out = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    out.paste(img.crop((0, cut, n, n)), (0, cut))
-    top = img.crop((0, 0, n, cut))
+    out.paste(img.crop((0, cut, w, n)), (0, cut))
+    top = img.crop((0, 0, w, cut))
     out.alpha_composite(top, (0, dip))
     return out
 
@@ -563,17 +573,38 @@ def row_atlas(key: str) -> Image.Image:
     return out
 
 
-def paperdoll() -> Image.Image:
-    """The figure behind the equipment slots: fitted to the doll box (w x h), feet on the floor."""
-    d = MANIFEST["doll"]
-    w, h = d["size"]
-    cut = cut_out(Image.open(SRC / f"{d['id']}.jpg"))
+def figure(e: dict) -> Image.Image:
+    """A Path's paper doll figure: cleaned like the sprites, fitted to
+    figure_size feet on the floor, as 4 frames of the sprites' breathing idle."""
+    w, h = MANIFEST["figure_size"]
+    cut = cut_out(Image.open(SRC / e["source"]))
     cut = cut.crop(cut.getbbox())
     k = min((w - 2) / cut.width, (h - 2) / cut.height)
     small = shrink(cut, max(1, round(cut.width * k)), max(1, round(cut.height * k)))
+    base = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    base.paste(small, ((w - small.width) // 2, h - 1 - small.height))
+    base = outline(base)
+    dip = max(1, h // 64)
+    out = Image.new("RGBA", (w * 4, h), (0, 0, 0, 0))
+    for c, d in enumerate((0, 1, 1, 0)):
+        out.paste(breathe(base, d * dip), (c * w, 0))
+    return out
+
+
+def plinth() -> Image.Image:
+    """The jade plinth under the figure, smooth at twice its shown size."""
+    e = MANIFEST["plinth"]
+    w, h = (2 * v for v in e["size"])
+    cut = cut_out(Image.open(SRC / e["source"]))
+    cut = cut.crop(cut.getbbox())
+    if cut.getbbox() is None:
+        sys.exit("plinth: came out empty")
+    # Fitted with its own proportions, centred, never squashed into the box.
+    k = min(w / cut.width, h / cut.height)
+    small = cut.resize((max(1, round(cut.width * k)), max(1, round(cut.height * k))), Image.LANCZOS)
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    canvas.paste(small, ((w - small.width) // 2, h - 1 - small.height))
-    return outline(canvas)
+    canvas.paste(small, ((w - small.width) // 2, h - small.height))
+    return canvas
 
 
 KNOBS = {
@@ -587,6 +618,9 @@ KNOBS = {
     "store": {"id", "source", "seed", "prompt"},
     "ranks": {"id", "source", "seed", "prompt"},
     "skills": {"id", "source", "seed", "prompt", "shadow"},
+    "slots": {"id", "source", "seed", "prompt"},
+    "figures": {"id", "source", "seed", "prompt"},
+    "plinth": {"id", "source", "seed", "prompt", "size"},
 }
 REQUIRED = {
     "sprite": {"id", "size", "face", "poses"},
@@ -597,10 +631,13 @@ REQUIRED = {
     "store": {"id", "source"},
     "ranks": {"id", "source"},
     "skills": {"id", "source"},
+    "slots": {"id", "source"},
+    "figures": {"id", "source"},
+    "plinth": {"id", "source", "size"},
 }
 # Manifest rows built as one-row atlases of the same name (summary.png, store.png,
-# ranks.png, skills.png).
-ROWS = ("summary", "store", "ranks", "skills")
+# ranks.png, skills.png, slots.png).
+ROWS = ("summary", "store", "ranks", "skills", "slots")
 
 
 def check_manifest(builds=lambda kind, name: True) -> None:
@@ -612,6 +649,7 @@ def check_manifest(builds=lambda kind, name: True) -> None:
     entries += [("background", b) for b in MANIFEST["backgrounds"]]
     entries += [("icon", i) for i in MANIFEST["icons"]]
     entries += [(row, s) for row in ROWS for s in MANIFEST[row]]
+    entries += [("figures", f) for f in MANIFEST["figures"]] + [("plinth", MANIFEST["plinth"])]
     for kind, e in entries:
         name = e.get("id", "?")
         for k in sorted(set(e) - KNOBS[kind]):
@@ -628,7 +666,7 @@ def check_manifest(builds=lambda kind, name: True) -> None:
             for f in [*e.get("sources", []), *e.get("renders", [])] if builds(kind, name) else []:
                 if not (SRC / f).exists():
                     errors.append(f"icon {name}: source {f} missing")
-        if kind in ROWS and "source" in e and builds(kind, name) and not (SRC / e["source"]).exists():
+        if kind in (*ROWS, "figures", "plinth") and "source" in e and builds(kind, name) and not (SRC / e["source"]).exists():
             errors.append(f"{kind} {name}: source {e['source']} missing")
         for f in [] if kind != "sprite" or not builds(kind, name) else [e["poses"]["idle"], *(p for r in ("attack", "hit", "death") for p in e["poses"][r])]:
             if not (SRC / f).exists():
@@ -651,14 +689,17 @@ def main() -> None:
     def builds(kind: str, name: str) -> bool:
         if kind == "icon":
             return not only or "icons" in only or name in columns
-        if kind in ROWS:
+        if kind in (*ROWS, "figures", "plinth"):
             return not only or kind in only
         return not only or name in wanted
 
     check_manifest(builds)
     OUT.mkdir(parents=True, exist_ok=True)
-    if not only or "paperdoll" in only:
-        save(paperdoll(), OUT / "paperdoll.png")
+    if not only or "figures" in only:
+        for f in MANIFEST["figures"]:
+            save(figure(f), OUT / f"doll-{f['id']}.png")
+    if not only or "plinth" in only:
+        save_smooth(plinth(), OUT / "plinth.png")
     if not only or "icons" in only:
         save_smooth(icon_atlas(), OUT / "icons.png")
     elif columns:

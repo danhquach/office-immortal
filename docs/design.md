@@ -1441,8 +1441,30 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   azure and silver, Body bronze and gold, Talisman jade and gold), shown at
   22 px on the strip. Built by `python3 tools/art/build.py skills` from the
   manifest's `skills` row.
-- **Paper doll:** a 64×80 pixel-art figure at 4×, the slots placed where they
-  are worn.
+- **Paper doll:** the Equipment tab, laid out like a classic equipment
+  panel. The player's own Path character stands in the middle, facing
+  forward: a 96×128 figure at 1× in the combat sprites' style (one front
+  generation per Path, edited from that Path's approved idle, cleaned like the
+  sprites into `doll-<path>.png`), breathing through 4 frames. A Path change
+  or Reincarnation swaps it at once. It stands on a small jade plinth in the
+  item icon style (`plinth.png`, drawn smooth at 2×), in a soft qi mist whose
+  colour follows the realm (`REALM_MIST` in view.ts, one per realm). The
+  panel is CSS only (the theme's border and background, no backdrop art).
+  Two even columns of five 44 px slots flank it, labels under each and
+  nothing drawn over the figure: left Head, Chest, Boots, Weapon, Hidden
+  Weapon; right Accessory 1, Accessory 2, Attachment, Charm 1, Charm 2 (one
+  grid row per pair, so they line up). Tab order follows the columns: the
+  left five top to bottom, then the right five. An empty slot is the bag's cell frame
+  with a faint grey icon of what goes there (`slots.png`, one per item type
+  in the icon atlas's column order; the two Accessory slots share one, as do
+  the two Charm slots; darkened on the light theme). A filled slot shows the
+  item icon with an inner glow in its grade colour, stronger with each grade,
+  and the grade initial as on every cell. Equipping (double-click, drop or
+  the Equip button) pulses the slot once; refining a worn item or loading a
+  save does not.
+  Reduced motion keeps the figure, mist and slots still. Under 720 px tall
+  the slots shrink to 38 px so the tab fits without scrolling. Built by
+  `python3 tools/art/build.py figures plinth slots`.
 - Damage numbers are drawn in code, not baked into sprites. An enemy that dies
   falls where it stood, and the next one steps up only once it is down (the
   pause between fights, §5).
@@ -1530,8 +1552,8 @@ Grade is also written as text, never shown by colour alone.
   Discreet view's seven rows (no sprites, background, damage numbers or
   flashing Tribulation alert: Status says Review due as plain text); the title
   bar hides the stamp and its file name becomes `Q3_Budget_Review`; the
-  summary chips lose their icons; item icons, store icons and the paper-doll
-  figure are hidden; every grade colour is the plain text colour, and grades are named in
+  summary chips lose their icons; item icons, store icons and the paper doll's
+  figure, plinth, mist and slot icons are hidden (plain slots, no grade glow); every grade colour is the plain text colour, and grades are named in
   office words (Standard to Enterprise; Std, Plus, Pro, Prem, Ent on a cell;
   a store chest is a Plus, Pro or Premium Bundle).
   An open Mini pop-out shows the Discreet view until it is switched off. Help
@@ -1555,3 +1577,9 @@ Grade is also written as text, never shown by colour alone.
   column, copying every other column from the shipped atlas (their sources
   are not always at hand; the atlas picks its 256 colours again on save, so
   their colours can move slightly).
+- The paper doll's art (§14 Paper doll) is generated too: the three Path
+  figures with flux.2-klein-4b, each an edit of its Path's approved combat
+  idle, cleaned to the shared palette like the sprites; the plinth and the
+  eight empty slot icons as plain generations in the item icon style (pale
+  grey, so they read faint), drawn smooth like the item icons. The old
+  64×80 mannequin (`paperdoll.png`) is gone.

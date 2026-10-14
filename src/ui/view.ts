@@ -1156,6 +1156,31 @@ export function bulkAsk(
   };
 }
 
+/** The paper doll's slot columns, top to bottom: worn gear left of the figure, trinkets right. */
+export const DOLL_COLUMNS: readonly [readonly EquipSlotId[], readonly EquipSlotId[]] = [
+  ['head', 'chest', 'boots', 'weapon', 'sideArm'],
+  ['accessory1', 'accessory2', 'attachment', 'charm1', 'charm2'],
+];
+
+/** The qi mist at the paper doll's feet, one colour per realm (REALMS order). */
+export const REALM_MIST: readonly string[] = [
+  '#9ad7c4', // Qi Condensation: pale jade
+  '#5fd08a', // Foundation Establishment: jade
+  '#f5c542', // Golden Core: gold
+  '#5aa0f0', // Nascent Soul: azure
+  '#b07ae0', // Spirit Transformation: violet
+  '#2a8a8f', // Void Refinement: deep teal
+  '#e88a2a', // Body Integration: ember
+  '#f05a5a', // Mahayana: crimson
+  '#a8d8ff', // Tribulation Transcendence: lightning blue
+  '#fff1a8', // Immortal Ascension: celestial white-gold
+];
+
+/** The mist colour for realm index `realm`; past the list, the last. */
+export function realmMist(realm: number): string {
+  return REALM_MIST[Math.min(Math.max(0, realm), REALM_MIST.length - 1)] as string;
+}
+
 /** Item types in the icon atlas's column order (tools/art/manifest.json "icons"). */
 export const ICON_COLUMNS: readonly SlotId[] = [
   'head',
