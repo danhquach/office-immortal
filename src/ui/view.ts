@@ -96,6 +96,7 @@ import {
   SEAL_QI_SHARE,
   SURGE_HP_SHARE,
   VAJRA_HP_SHARE,
+  pathSkillList,
 } from '../core/path-skills.ts';
 import {
   DEFENSIVE_HP_SHARE,
@@ -1012,6 +1013,11 @@ export function realmLabel(level: number): string {
     : name;
 }
 
+/** The realm alone, for the Realm chip: "Foundation Establishment"; its hover list has the title. */
+export function realmName(level: number): string {
+  return tn('realm', (REALMS[realmOf(level)] as (typeof REALMS)[number]).name);
+}
+
 /** One row of the realm list: the realm, its job title, its levels, and whether `level` is in it. */
 export interface RealmRow {
   readonly name: string;
@@ -1043,6 +1049,15 @@ export function realmRows(level: number, path: PathId): RealmRow[] {
       current: i === at,
     };
   });
+}
+
+/**
+ * The Realm chip's hover list: three rows of realmRows around the current
+ * realm (the one before, it, the one after), kept at three at either end.
+ */
+export function nearRealmRows(level: number, path: PathId): RealmRow[] {
+  const from = Math.min(Math.max(0, realmOf(level) - 1), REALMS.length - 3);
+  return realmRows(level, path).slice(from, from + 3);
 }
 
 /** Icons in the summary atlas, in its column order (tools/art/manifest.json "summary"). */
@@ -1377,6 +1392,12 @@ export function skillTier(level: number, maxLevel: number): SkillTier {
 /** The skill bar's cell for a skill name: PATH_SKILL_NAMES order, as skills.png is built. */
 export function skillCell(name: string): number {
   return PATH_SKILL_NAMES.indexOf(name);
+}
+
+/** The Path chip's icon: the cell of the Path's first skill as first learned. */
+export function pathCell(path: PathId): number {
+  const first = pathSkillList(path)[0];
+  return first ? skillCell(first.name) : 0;
 }
 
 /**

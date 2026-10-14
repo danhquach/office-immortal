@@ -178,6 +178,7 @@ const vi: Pack = {
     'kpi.realm': 'Cảnh giới',
     'kpi.stones': 'Linh Thạch',
     'kpi.essence': 'Tinh Hoa',
+    'kpi.tip': '{label}: {value}',
     'realm.withTitle': '{realm} · {title}',
     'realm.current': '(hiện tại)',
     'realm.levels': 'Cấp {from}–{to}',

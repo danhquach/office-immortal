@@ -278,9 +278,8 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
     learned), under its portrait. **Change Path** in Respec shows the skills
     the picked Path would have at the current realm.
   - **Realm chip list:** each realm names what it brings the current Path, in
-    the same words as the banner, wrapping so the list stays inside the
-    window. Under 560 px wide each realm takes three lines (name and title,
-    levels, what it brings).
+    the same words as the banner. Each realm takes three lines (name and
+    title, levels, what it brings) in a narrow box.
   - **Help:** a "Qi and skills" entry: qi gain, Qi per second, auto-cast and
     enemy wind-ups, with the sim's own numbers.
   - **Discreet** hides every skill icon on these surfaces; the text stays.
@@ -1368,14 +1367,22 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - **Generic, never a copy.** No real software names, logos, icons, ribbon
   layouts or colour schemes that identify a real product. It should read as
   "office software", not as any one product.
-- The summary is a band of one-line chips ("Label value"): Path, Realm with
-  its job title, Spirit Stones and Spirit Essence. Realm, Spirit Stones and
-  Spirit Essence open with a small icon (decorative, hidden from screen
-  readers); the Realm icon changes at each breakthrough. Hovering or focusing
-  the Realm chip lists every realm in order with its job title and levels ("Lv
-  11–20 · +1% main stat"; Immortal Ascension "Lv 211+ · +31.5% main stat"),
-  the current one highlighted; it closes when the pointer and focus leave, or
-  on Escape. A tap opens it on a touch screen; tapping elsewhere closes it.
+- The summary is a column of one-line chips ("Label value") beside Recent
+  drops: Path and Realm a row each, Spirit Stones and Spirit Essence side by
+  side, then the boosts. The Realm chip names the realm alone; its job title
+  is in its list. Every chip opens with a small icon (decorative, hidden from
+  screen readers): the Path's first skill, the realm's icon (it changes at
+  each breakthrough), Spirit Stones and Spirit Essence. Where the column is
+  narrow (under 22rem: the 960 × 640 itch.io frame, and phones) the icon stands in
+  for the label, which screen readers still hear, and hovering, focusing or
+  tapping Path, Spirit Stones or Spirit Essence opens the whole line ("Spirit
+  Stones: 340"). Discreet mode hides the icons, so it keeps the labels and
+  gives each chip its own row. Hovering or focusing the Realm chip lists the
+  realm before, the current one and the one after (three at either end), each
+  with its job title and levels ("Lv 11–20 · +1% main stat"; Immortal
+  Ascension "Lv 211+ · +31.5% main stat"), the current one highlighted; it
+  closes when the pointer and focus leave, or on Escape. A tap opens it on a
+  touch screen; tapping elsewhere closes it.
   Level and XP to the next level are a yellow progress bar along the foot of
   the combat strip ("Lv 14" at its left end, "37 / 60" inside; full with
   "Tribulation due" when one is due). The strip header shows floor, best
@@ -1549,7 +1556,7 @@ Grade is also written as text, never shown by colour alone.
 
 | View | When | Shows |
 |---|---|---|
-| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips over Recent drops; then Character and Inventory side by side, the bag ten cells wide, with an item's details in a card over them (under 940 px wide the strip spans the page, the bag is eight cells wide and the card is a sheet along the bottom). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
+| **Full** | Normal tab, 768 px wide or more | Title bar; combat strip with its XP bar, and beside it the summary chips and Recent drops side by side (stacked under 560 px wide); then Character and Inventory side by side, the bag ten cells wide, with an item's details in a card over them (under 940 px wide the strip spans the page, the bag is eight cells wide and the card is a sheet along the bottom). From 940 × 600 px the page is the window's height and the panels scroll inside (never shorter than 16rem, so a notice over the game scrolls the page until it is closed). Under 900 px tall it compacts further: no formula bar and the bag's tabs on its header bar; under 810 px the names and HP are drawn over the stage; under 720 px (such as the 960 × 640 itch.io frame) the stage is at 0.55 too. The Path choice and the link code panel under it share one centred column, as wide as the choice |
 | **Narrow** | Under 768 px (down to 375 px) | Same panels stacked: strip first, then the chips, Recent drops, then the panels |
 | **Mini** | Pop-out window (§10), or any window under 240 px tall | Title bar, combat strip with HP bars only (no names, HP numbers or "vs"), one status line (`F21 · Golden Core · Manager · 3 drops`; `Tribulation due` or `Tribulation paused` in place of the realm, §4; then `· +6 pts` while stat points wait) and the latest-drop toast |
 | **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, Review due while a Tribulation is due, or Review postponed while it is set aside, §4). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |

@@ -414,11 +414,55 @@ select {
   display: grid;
   gap: 0.5rem;
 }
-/* Summary chips: "Label value" on one line each. */
+/* Summary chips: "Label value" on one line each; Path and Realm a row each,
+   Spirit Stones and Essence side by side, then the boosts. */
 .kpis {
-  display: flex;
-  flex-wrap: wrap;
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
   gap: 0.35rem;
+}
+.kpis > .kpi {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.kpis > .wide,
+:root[data-discreet] .kpis > .kpi {
+  grid-column: 1 / -1;
+}
+/* The Path's first skill as its icon, sized like the other chips' icons. */
+.kpi > .kpi-skill {
+  width: 1.15em;
+  height: 1.15em;
+  margin-right: 0.35rem;
+  vertical-align: -0.25em;
+  border-radius: 3px;
+}
+/* A narrow column (the 960 px itch.io frame, and a phone, where Spirit Stones
+   and Essence get half its width): the icon stands for the label,
+   which stays for screen readers; a hover, focus or tap opens the whole line.
+   Discreet mode hides the icons, so the labels stay there, each chip a row. */
+@container (max-width: 22rem) {
+  :root:not([data-discreet]) .kpis > .kpi > .label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .kpis > .kpi[tabindex] {
+    cursor: help;
+  }
+  /* Room for a boost's bonus beside its icon in a third of the column. */
+  .kpi-boosts > .kpi {
+    padding-inline: 0.25rem;
+  }
+  .kpi-boosts .kpi-icon {
+    margin-right: 0.15rem;
+  }
 }
 .kpi {
   padding: 0.1rem 0.45rem;
@@ -441,7 +485,7 @@ select {
    holds the row's height. A chip shows its icon and bonus; hover, focus or a
    tap opens the whole line with the time left (hoverTip). */
 .kpi-boosts {
-  flex-basis: 100%;
+  grid-column: 1 / -1;
   container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -525,11 +569,11 @@ select {
   padding: 0.2rem 0;
   list-style: none;
   font-size: 0.85rem;
-  /* Columns line up across rows; what a realm brings wraps to keep the
-     list inside the window. */
-  max-width: calc(100vw - 8px);
+  /* Three realms, each its name and title on a line, then its levels, then
+     what it brings, wrapping inside a narrow box. */
+  max-width: min(20rem, calc(100vw - 8px));
   box-sizing: border-box;
-  grid-template-columns: repeat(3, max-content) minmax(8rem, max-content);
+  grid-template-columns: minmax(0, 1fr) max-content;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 3px;
@@ -543,20 +587,16 @@ select {
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   column-gap: 1rem;
-  padding: 0.2rem 0.8rem 0.2rem calc(0.8rem - 3px);
+  padding: 0.25rem 0.8rem 0.25rem calc(0.8rem - 3px);
   border-left: 3px solid transparent;
-  white-space: nowrap;
 }
 .realm-list .title,
 .realm-list .levels,
 .realm-list .unlock {
   color: var(--muted);
 }
-.realm-list .levels {
-  text-align: right;
-}
-.realm-list .unlock {
-  white-space: normal;
+.realm-list :is(.levels, .unlock) {
+  grid-column: 1 / -1;
 }
 .realm-list li.current {
   background: var(--head);
@@ -566,27 +606,14 @@ select {
 .realm-list li.current :is(.title, .levels, .unlock) {
   color: inherit;
 }
-/* A phone: each realm's name and title on a line, then its levels, then
-   what it brings, wrapping inside the window. */
-@media (max-width: 559px) {
-  .realm-list {
-    grid-template-columns: minmax(0, 1fr) max-content;
-  }
-  .realm-list li {
-    white-space: normal;
-  }
-  .realm-list :is(.levels, .unlock) {
-    grid-column: 1 / -1;
-    text-align: left;
-  }
-}
-/* The strip, and beside it the summary chips over Recent drops. */
+/* The strip, and beside it the summary chips and Recent drops. */
 .top {
   display: grid;
   gap: 0.5rem;
 }
 /* Full from 940 px wide, so the 960 px itch.io frame gets it too: the strip
-   takes the left half; the chips and Recent drops share the right half. */
+   takes the left half; the chips and Recent drops share the right half,
+   side by side. */
 @media (min-width: 940px) {
   .top {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -595,19 +622,25 @@ select {
   .top > .beside:only-child {
     grid-column: 1 / -1;
   }
-  /* Drops fill what the chips leave beside the strip (at least 6rem) and
-     scroll inside. */
+  /* Drops are as tall as the strip (or the chips, at least 6rem), never
+     taller, and scroll inside. */
   .beside > .log {
-    flex: 1 1 0;
+    contain: size;
     min-height: 6rem;
     overflow-y: auto;
   }
 }
+/* The chips on the left, Recent drops on the right; a phone stacks them. */
 .beside {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.5rem;
   min-width: 0;
+}
+@media (max-width: 559px) {
+  .beside {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .log p {
   margin: 0;

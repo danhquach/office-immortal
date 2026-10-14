@@ -12,7 +12,10 @@ import { DEFAULT_LANG, PACKS, setLang } from './i18n.ts';
 import {
   breakthroughSkill,
   helpQiLines,
+  nearRealmRows,
   nextRealmLine,
+  pathCell,
+  realmName,
   realmRows,
   realmUnlock,
   skillCell,
@@ -199,6 +202,40 @@ describe('realmRows', () => {
   });
 });
 
+describe('nearRealmRows', () => {
+  const names = (level: number): string[] => nearRealmRows(level, 'sword').map((r) => r.name);
+
+  it('shows the realm before, the current one and the one after', () => {
+    expect(names(levelIn(3))).toEqual(['Golden Core', 'Nascent Soul', 'Spirit Transformation']);
+    const rows = nearRealmRows(levelIn(3), 'sword');
+    expect(rows.map((r) => r.current)).toEqual([false, true, false]);
+    expect(rows[1]?.title).toBe('Manager');
+  });
+
+  it('keeps three rows at either end', () => {
+    expect(names(1)).toEqual(['Qi Condensation', 'Foundation Establishment', 'Golden Core']);
+    expect(nearRealmRows(1, 'sword')[0]?.current).toBe(true);
+    const last = nearRealmRows(levelIn(REALMS.length - 1), 'sword');
+    expect(last).toHaveLength(3);
+    expect(last[2]?.current).toBe(true);
+  });
+});
+
+describe('realmName', () => {
+  it('is the realm alone, without its job title', () => {
+    expect(realmName(1)).toBe('Qi Condensation');
+    expect(realmName(levelIn(8))).toBe('Tribulation Transcendence');
+  });
+});
+
+describe('pathCell', () => {
+  it("is the cell of the Path's first skill", () => {
+    for (const path of PATH_IDS)
+      expect(pathCell(path), path).toBe(skillCell(pathSkillList(path)[0]?.name ?? ''));
+    expect(new Set(PATH_IDS.map(pathCell)).size).toBe(PATH_IDS.length);
+  });
+});
+
 describe('pathSkillList', () => {
   it('lists each Path’s four skills by the names first learned, learned order', () => {
     expect(pathSkillList('body').map((k) => k.name)).toEqual([
@@ -239,6 +276,8 @@ describe('out-of-range levels and realms', () => {
       for (const level of levels) {
         expect(() => skillRows(path, level), `${path} ${level}`).not.toThrow();
         expect(realmRows(level, path), `${path} ${level}`).toHaveLength(REALMS.length);
+        expect(nearRealmRows(level, path), `${path} ${level}`).toHaveLength(3);
+        expect(realmName(level), `${path} ${level}`).not.toBe('');
         expect(nextRealmLine(path, level), `${path} ${level}`).not.toBe('');
       }
     }
