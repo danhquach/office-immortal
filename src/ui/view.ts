@@ -1739,6 +1739,52 @@ export function gridMove(index: number, key: string, size: number, cols: number)
   return moves[key] ?? null;
 }
 
+/**
+ * The item card's width when there is room (two columns, or one for a worn
+ * item), the least it takes, and its gap to the edges.
+ */
+export const CARD_WIDTH = 480;
+export const CARD_NARROW = 320;
+export const CARD_MIN = 272;
+export const CARD_EDGE = 8;
+/** Under this window width the card is a sheet along the bottom. */
+export const CARD_SHEET_BELOW = 940;
+
+/** Where the item card goes: beside its cell, or as a sheet along the bottom. */
+export type CardPlace =
+  { sheet: true } | { sheet: false; left: number; top: number; width: number; maxHeight: number };
+
+/**
+ * Places the item card of height `height` beside `cell` in a window of
+ * `viewW` × `viewH` (all in CSS px): on the side with room for its full width
+ * `want` (right first, else the roomier side, narrowed), never over the cell, top
+ * level with the cell but kept inside the window. Too little room on both
+ * sides, or a narrow window: a sheet.
+ */
+export function cardPlace(
+  cell: { left: number; top: number; width: number },
+  viewW: number,
+  viewH: number,
+  height: number,
+  want = CARD_WIDTH,
+): CardPlace {
+  if (viewW < CARD_SHEET_BELOW) return { sheet: true };
+  const right = viewW - (cell.left + cell.width) - 2 * CARD_EDGE;
+  const left = cell.left - 2 * CARD_EDGE;
+  const onRight = right >= want || (left < want && right >= left);
+  const width = Math.min(want, onRight ? right : left);
+  if (width < CARD_MIN) return { sheet: true };
+  const maxHeight = viewH - 2 * CARD_EDGE;
+  const tall = Math.min(height, maxHeight);
+  return {
+    sheet: false,
+    left: onRight ? cell.left + cell.width + CARD_EDGE : cell.left - CARD_EDGE - width,
+    top: Math.max(CARD_EDGE, Math.min(cell.top, viewH - CARD_EDGE - tall)),
+    width,
+    maxHeight,
+  };
+}
+
 /** Bag cells per inventory page: the starting bag, so buying slots never grows the grid. */
 export const BAG_PAGE = INVENTORY_SIZE;
 

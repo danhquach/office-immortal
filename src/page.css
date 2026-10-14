@@ -612,28 +612,25 @@ select {
 .log p {
   margin: 0;
 }
-/* Column widths follow the window only, so switching a tab never resizes a
-   panel: the character fits the paper doll, the bag fits eight cells (46 px,
-   down to about 40 px in a 960 px window), details take the rest. Panels in a
-   row share one height. */
+/* Two panels; column widths follow the window only, so switching a tab never
+   resizes a panel: the bag fits ten cells (46 px, about 45 px in a 940 px
+   window), the character takes the rest (at least the paper doll's width).
+   Item details open in a card over them. Panels in a row share one height. */
 .columns {
   display: grid;
-  grid-template-columns: 18.5rem minmax(0, 26.5rem) minmax(15rem, 1fr);
-  grid-template-areas: 'char bag side';
+  grid-template-columns: minmax(18.5rem, 1fr) minmax(0, 33rem);
+  grid-template-areas: 'char bag';
   gap: 0.5rem;
 }
-/* Full: the row is as tall as the bag, whatever tab is open; the character,
-   details and drops fill it and scroll inside instead of stretching it. */
+/* Full: the row is as tall as the bag, whatever tab is open; the character
+   fills it and scrolls inside instead of stretching it. */
 @media (min-width: 940px) {
-  .columns > .character,
-  .columns > .side {
-    contain: size;
-  }
   .columns > .character {
+    contain: size;
     overflow-y: auto;
   }
-  .columns > .side {
-    grid-template-rows: minmax(0, 1fr);
+  .inventory .bag {
+    grid-template-columns: repeat(10, minmax(0, 46px));
   }
   /* The bag's tabs share one cell, so the panel is as tall as the tallest
      tab and the row never changes height with the open tab. */
@@ -648,23 +645,6 @@ select {
     display: block;
     visibility: hidden;
   }
-  /* The action row stays put over the item; only the item's own lines scroll. */
-  .side > .details {
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .side > .details > .detail-body {
-    flex: 1 1 0;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .side .detail-info {
-    flex: 1 1 0;
-    min-height: 0;
-    overflow-y: auto;
-  }
 }
 /* Full but under 1100 px wide: narrower page margins, so the bag keeps
    40 px cells. */
@@ -677,8 +657,7 @@ select {
    does not scroll. The panels take the height the strip leaves and scroll
    inside, but never get shorter than 16rem: a tall notice over the game (away
    summary, cloud save) makes the page scroll instead, until it is closed.
-   (`.game` here is the page's game; the details column is `.game.side`, which
-   only picks up the harmless `flex: none`.) */
+   (The item card is a fixed child of `.game`; its `flex: none` is harmless.) */
 @media (min-width: 940px) and (min-height: 600px) {
   main {
     box-sizing: border-box;
@@ -761,7 +740,6 @@ select {
   }
   /* Thin scrollbars, so the paper doll and the tabs keep their width. */
   .columns > :is(.character, .inventory),
-  .side .detail-info,
   .inventory > .tabpanel,
   .character > .tabpanel,
   .statstab > .tabpanel,
@@ -1060,22 +1038,16 @@ select {
 .columns > .inventory {
   grid-area: bag;
 }
-.columns > .side {
-  grid-area: side;
-}
-/* Too narrow for three columns: details move under the grid. */
+/* Under 940 px: the character at the doll's width, the bag eight cells wide. */
 @media (max-width: 939px) {
   .columns {
     grid-template-columns: 18.5rem minmax(15rem, 1fr);
-    grid-template-areas:
-      'char bag'
-      'char side';
   }
 }
 @media (max-width: 767px) {
   .columns {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'bag' 'side' 'char';
+    grid-template-areas: 'bag' 'char';
     align-items: start;
   }
   /* Fewer, bigger cells: easy to tap and the labels never overlap. */
@@ -2233,9 +2205,76 @@ body.dragging * {
   user-select: none;
 }
 
-/* Item details: compact, so one item fits the panel without scrolling. */
+/* Item details: a card beside the selected cell (app.ts sets its place and
+   size from cardPlace), over the panels and under a dragged item. The action
+   row stays put over the item; only the item's own lines scroll. */
 .details {
   font-size: 0.85rem;
+}
+.game > .details {
+  position: fixed;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  overflow: hidden;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.45);
+  container-type: inline-size;
+}
+.game > .details[hidden] {
+  display: none;
+}
+.details > .detail-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.details .detail-info {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+/* Close, on the header bar's right end. */
+.details > .close {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.3rem;
+  padding: 0 0.4rem;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.details > .close:hover {
+  color: inherit;
+}
+/* A bag item and what is worn where it fits: side by side when the card is
+   wide enough, else one over the other. */
+.details .detail-info.two {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: start;
+}
+@container (min-width: 26rem) {
+  .details .detail-info.two {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.details .detail-block-label.change {
+  margin-top: 0.35rem;
+}
+/* A narrow window: a sheet along the bottom, at most 60% of its height. */
+.game > .details.sheet {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 60vh;
+  max-height: 60dvh;
+  border-radius: 8px 8px 0 0;
 }
 .details .title {
   font-weight: 600;
@@ -2346,7 +2385,7 @@ body.dragging * {
   border-bottom: 1px solid var(--line);
 }
 .details .row.actions button {
-  overflow-wrap: anywhere;
+  overflow-wrap: normal;
 }
 .details .row.actions button[data-action='craft'] {
   grid-column: 3;

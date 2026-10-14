@@ -221,6 +221,10 @@ import {
   unequipBlock,
   freshDrops,
   gridMove,
+  cardPlace,
+  CARD_EDGE,
+  CARD_NARROW,
+  CARD_WIDTH,
   itemLineGroups,
   itemName,
   itemTag,
@@ -2159,7 +2163,10 @@ function play(
       const box = el('div', 'slot');
       const b = cell();
       b.dataset.slot = slot;
-      b.addEventListener('click', () => select(state.cultivator.equipment[slot] ? { slot } : null));
+      b.addEventListener('click', (e) => {
+        select(state.cultivator.equipment[slot] ? { slot } : null);
+        if (selected && e.detail === 0) focusCard();
+      });
       slotCells[slot] = b;
       const slotName = el('span', 'slot-name');
       say(() => (slotName.textContent = tn('equipSlot', EQUIP_SLOTS[slot].name)));
@@ -2584,11 +2591,17 @@ function play(
   const retireBody = el('div', 'retire');
   retireBody.append(insightTotal, passiveList, retireSection);
 
-  const charTabs = tabs([
-    { id: 'gear', label: 'tab.gear', body: slots },
-    { id: 'stats', label: 'tab.stats', body: statsBody },
-    { id: 'retire', label: 'tab.retire', body: retireBody },
-  ]);
+  // A worn item's card closes with the tab that shows its slot.
+  const charTabs = tabs(
+    [
+      { id: 'gear', label: 'tab.gear', body: slots },
+      { id: 'stats', label: 'tab.stats', body: statsBody },
+      { id: 'retire', label: 'tab.retire', body: retireBody },
+    ],
+    (id) => {
+      if (id !== 'gear' && selected && 'slot' in selected) select(null);
+    },
+  );
   character.box.append(charTabs.bar, ...charTabs.panels);
   // A dot on the Stats tab and its Stats sub-tab while points wait to be
   // placed; its words for screen readers.
@@ -2615,11 +2628,12 @@ function play(
     for (let i = bagCells.length; i < state.bagSize; i++) {
       const b = cell();
       b.tabIndex = i === 0 ? 0 : -1;
-      b.addEventListener('click', () => {
+      b.addEventListener('click', (e) => {
         setCursor(i);
         const index = order[i];
         select(index === undefined ? null : { bag: index });
-        if (selected) revealDetails();
+        // Enter or Space (a click with no pointer) takes focus into the card.
+        if (selected && e.detail === 0) focusCard();
       });
       b.addEventListener('dblclick', () => {
         const index = order[i];
@@ -2899,17 +2913,88 @@ function play(
   const storeBody = el('div', 'store');
   storeBody.append(storeHead, chestGroup.box, boostGroup.box);
 
-  const bagTabs = tabs([
-    { id: 'bag', label: 'tab.bag', body: bagBody },
-    { id: 'filter', label: 'tab.filter', body: filterBody },
-    { id: 'store', label: 'tab.store', body: storeBody },
-  ]);
+  // A bag item's card closes with the Bag tab.
+  const bagTabs = tabs(
+    [
+      { id: 'bag', label: 'tab.bag', body: bagBody },
+      { id: 'filter', label: 'tab.filter', body: filterBody },
+      { id: 'store', label: 'tab.store', body: storeBody },
+    ],
+    (id) => {
+      if (id !== 'bag' && selected && 'bag' in selected) select(null);
+    },
+  );
   inventory.box.append(bagTabs.bar, ...bagTabs.panels);
 
-  // Item details
+  // Item details: a card beside the selected cell (a sheet along the bottom of
+  // a narrow window), open while an item is selected.
   const details = panel('details', 'details.title');
+  details.box.setAttribute('role', 'dialog');
+  // Focus lands on the card itself, not on its Sell button, so a repeated
+  // Enter never sells.
+  details.box.tabIndex = -1;
+  details.box.hidden = true;
   const detailBody = el('div', 'detail-body');
-  details.box.append(detailBody);
+  const closeCardBtn = button('✕', 'close', () => closeCard());
+  attr(closeCardBtn, 'aria-label', 'details.close');
+  details.box.append(closeCardBtn, detailBody);
+  details.box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    closeCard();
+  });
+  // A press anywhere else closes it: not on a cell (that selects its own item)
+  // or inside an open dialog (the Crafting panel works on the card's item). A
+  // touch closes it only as a tap, so the page still scrolls under the sheet.
+  const outside = (target: EventTarget | null): boolean =>
+    !details.box.hidden &&
+    target instanceof Element &&
+    !details.box.contains(target) &&
+    !target.closest('.cell, dialog[open]');
+  let touchAt: { x: number; y: number } | null = null;
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      touchAt = null;
+      if (!outside(e.target)) return;
+      if (e.pointerType === 'touch') touchAt = { x: e.clientX, y: e.clientY };
+      else select(null);
+    },
+    { signal },
+  );
+  document.addEventListener(
+    'pointerup',
+    (e) => {
+      const from = touchAt;
+      touchAt = null;
+      if (!from || !outside(e.target)) return;
+      if (Math.hypot(e.clientX - from.x, e.clientY - from.y) < DRAG_START_PX) select(null);
+    },
+    { signal },
+  );
+  // A scroll gesture ends in pointercancel, not pointerup: not a tap.
+  document.addEventListener('pointercancel', () => (touchAt = null), { signal });
+  // Esc on the selected cell closes it too.
+  document.addEventListener(
+    'keydown',
+    (e) => {
+      if (e.key !== 'Escape' || details.box.hidden) return;
+      if (document.activeElement !== anchorCell()) return;
+      e.preventDefault();
+      select(null);
+    },
+    { signal },
+  );
+  // The card follows its cell when the window or a panel moves it.
+  window.addEventListener('resize', () => placeCard(), { signal });
+  document.addEventListener(
+    'scroll',
+    (e) => {
+      if (e.target instanceof Node && details.box.contains(e.target)) return;
+      placeCard();
+    },
+    { signal, capture: true, passive: true },
+  );
   /** The item's lines under the action row: kept across redraws, so a level-up keeps its scroll. */
   const detailInfo = el('div', 'detail-info');
   /** The selection detailInfo shows; another one starts at the top. */
@@ -3047,9 +3132,7 @@ function play(
   log.box.append(noDrops, drops, handledText);
 
   const columns = el('div', 'columns');
-  const mainCol = el('div', 'game side');
-  mainCol.append(details.box);
-  columns.append(character.box, inventory.box, mainCol);
+  columns.append(character.box, inventory.box);
   const game = el('div', 'game');
   const away = summary && summary.seconds >= SUMMARY_MIN_SECONDS ? overtimePanel(summary) : null;
   if (away) game.append(away);
@@ -3065,6 +3148,8 @@ function play(
   const rebalanceRow = el('div', 'overtime-row');
   const answerRebalance = (take: boolean): void => {
     if (!state.freeReset) return;
+    // The Stats tab hides the slots: a worn item's card closes with them.
+    if (selected && 'slot' in selected) selected = null;
     act(answerFreeReset(state, take));
     // The notice is gone: focus goes where the points are placed.
     charTabs.show('stats');
@@ -3093,7 +3178,7 @@ function play(
     else if (!top.contains(pageSheet.box)) top.prepend(pageSheet.box);
   };
   placeSheet();
-  game.append(top, columns);
+  game.append(top, columns, details.box);
   // Tab HUD and pop-out controls, then the main menu (Settings and Help).
   const tools = el('div', 'tools');
   const notices = notifier(window);
@@ -3989,9 +4074,12 @@ function play(
     // redraws only when a drop fills the bag, which turns its Unequip off.
     const full = !!selected && 'slot' in selected && !!unequipBlock(state);
     const detailsKey = `${gearVersion}|${c.level}|${JSON.stringify(selected)}|${full}`;
-    if (detailsKey !== drawnDetails) {
+    // A new selection (or its item changing) also moves the card, once the cells are drawn.
+    const moved = detailsKey !== drawnDetails;
+    if (moved) {
       drawnDetails = detailsKey;
       drawDetails();
+      details.box.hidden = !selectedItem();
     }
     const item = selectedItem();
     if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
@@ -4031,6 +4119,8 @@ function play(
         String(!!selected && 'slot' in selected && selected.slot === slot),
       );
     }
+    // The cells may have moved (a drop re-sorting the bag): the card follows.
+    if (moved || selected) placeCard(moved);
   }
 
   function drawDetails(): void {
@@ -4077,7 +4167,11 @@ function play(
     }
     const about = block('details.item');
     about.append(head, facts);
-    const parts: HTMLElement[] = [about, attrs];
+    // The item on the left; for a bag item, what is worn in each position it
+    // fits on the right, side by side.
+    const itemCol = el('div', 'card-item');
+    itemCol.append(about, attrs);
+    const parts: HTMLElement[] = [itemCol];
     // Crafting works on bag and worn items alike.
     const craftBtn = button(t('details.craft'), '', () => openCraft());
     craftBtn.dataset.action = 'craft';
@@ -4103,6 +4197,8 @@ function play(
       // position's comparison below in a block of its own.
       const fits = slotsFor(item.slot);
       const first = defaultSlot(state.cultivator.equipment, item);
+      const compareCol = el('div', 'card-compare');
+      parts.push(compareCol);
       for (const to of [first, ...fits.filter((p) => p !== first)]) {
         const name = tn('equipSlot', EQUIP_SLOTS[to].name);
         const current = state.cultivator.equipment[to];
@@ -4135,9 +4231,18 @@ function play(
               ? t('details.vs', { slot: name, item: itemName(current) })
               : t('details.empty', { slot: name }),
           ),
-          ...compare,
         );
-        parts.push(vs);
+        // The worn item's own attributes, then what equipping this one changes.
+        if (current)
+          for (const group of itemLineGroups(current))
+            vs.append(
+              kindRow(
+                group.kind,
+                group.lines.map((line) => el('li', '', line)),
+              ),
+            );
+        vs.append(el('div', 'detail-block-label change', t('details.change')), ...compare);
+        compareCol.append(vs);
       }
       if (blocked) {
         const why = t('details.blocked', { why: blocked });
@@ -4164,6 +4269,8 @@ function play(
     // The group is named for the item, so a screen reader hears whose buttons they are.
     actions.setAttribute('role', 'group');
     actions.setAttribute('aria-label', itemName(item));
+    details.box.setAttribute('aria-label', itemName(item));
+    detailInfo.classList.toggle('two', parts.length > 1);
     const scroll = detailInfo.scrollTop;
     detailInfo.replaceChildren(...parts);
     detailBody.replaceChildren(actions, detailInfo);
@@ -4176,14 +4283,62 @@ function play(
     }
   }
 
-  /** On a stacked layout the details sit below the grid; bring their top on screen. */
-  function revealDetails(): void {
-    const r = details.box.getBoundingClientRect();
-    if (r.top >= 0 && r.top <= innerHeight * 0.75) return;
-    details.box.scrollIntoView({
-      block: 'nearest',
-      behavior: reducedMotion.matches ? 'auto' : 'smooth',
-    });
+  /** The cell the selected item shows in: its bag cell or its slot. */
+  function anchorCell(): HTMLButtonElement | undefined {
+    if (!selected) return undefined;
+    return 'bag' in selected ? bagCells[order.indexOf(selected.bag)] : slotCells[selected.slot];
+  }
+
+  /**
+   * Sets the open card beside its cell, kept inside the window, or along the
+   * bottom as a sheet (cardPlace). A cell out of sight (its tab or page not
+   * shown) hides the card. `reveal` (a new selection) scrolls the page so the
+   * sheet does not cover the cell.
+   */
+  function placeCard(reveal = false): void {
+    const box = details.box;
+    if (!selectedItem()) {
+      columns.style.marginBottom = '';
+      return;
+    }
+    const r = anchorCell()?.getBoundingClientRect();
+    const shown = !!r && r.width > 0;
+    box.hidden = !shown;
+    if (!r || !shown) {
+      columns.style.marginBottom = '';
+      return;
+    }
+    const want = detailInfo.classList.contains('two') ? CARD_WIDTH : CARD_NARROW;
+    const first = cardPlace(r, innerWidth, innerHeight, 0, want);
+    box.classList.toggle('sheet', first.sheet);
+    if (first.sheet) {
+      for (const p of ['left', 'top', 'width', 'max-height']) box.style.removeProperty(p);
+      // Room under the panels for the sheet, so even the last row can scroll above it.
+      columns.style.marginBottom = `${box.offsetHeight}px`;
+      const under = r.bottom + CARD_EDGE - box.getBoundingClientRect().top;
+      if (reveal && under > 0) window.scrollBy(0, under);
+      return;
+    }
+    columns.style.marginBottom = '';
+    // The width first, then the top from the height that width gives.
+    box.style.width = `${first.width}px`;
+    box.style.maxHeight = `${first.maxHeight}px`;
+    const at = cardPlace(r, innerWidth, innerHeight, box.offsetHeight, want);
+    if (at.sheet) return;
+    box.style.left = `${at.left}px`;
+    box.style.top = `${at.top}px`;
+  }
+
+  /** Moves focus into the open card (the card itself; Tab reaches its buttons). */
+  function focusCard(): void {
+    if (!details.box.hidden) details.box.focus();
+  }
+
+  /** Closes the card; focus goes back to its cell if it was in the card. */
+  function closeCard(): void {
+    const back = details.box.contains(document.activeElement) ? anchorCell() : undefined;
+    select(null);
+    back?.focus();
   }
 
   function setCursor(i: number): void {
@@ -4204,7 +4359,8 @@ function play(
     // The Equip button is about to be replaced; keep keyboard focus nearby.
     const fromDetails = details.box.contains(document.activeElement);
     const at = to ?? defaultSlot(state.cultivator.equipment, item);
-    selected = { slot: at };
+    // The item has left the bag, and its card closes with it.
+    selected = null;
     act(equip(state, index, at));
     // The slot pulses once when the item lands (restarted for an equip right
     // after the last). The class goes when it ends, or showing the tab again
@@ -4223,8 +4379,8 @@ function play(
   }
 
   /**
-   * Takes off the item worn in `from` into the bag and keeps it selected there,
-   * so its Equip button sits where Unequip was and takes the focus.
+   * Takes off the item worn in `from` into the bag and closes its card; from the
+   * card, focus goes to the item's new cell.
    */
   function unequipFromSlot(from: EquipSlotId): void {
     // A full bag does nothing; Details says why.
@@ -4232,13 +4388,16 @@ function play(
     const fromDetails = details.box.contains(document.activeElement);
     const next = unequip(state, from);
     const index = next.inventory.length - 1;
-    // Turn to the page its cell sorts onto, so the selection is in view.
+    // Turn to the page its cell sorts onto, so the cell is in view.
     const at = bagOrder(next.inventory, sort, reverse).indexOf(index);
     page = pageOf(at);
     setCursor(at);
-    selected = { bag: index };
+    selected = null;
     act(next);
-    if (fromDetails) detailBody.querySelector<HTMLButtonElement>('[data-action="equip"]')?.focus();
+    if (fromDetails) {
+      bagTabs.show('bag');
+      bagCells[at]?.focus();
+    }
   }
 
   /** Applies a player action that changes the bag or the cultivator, then redraws. */
@@ -4267,22 +4426,17 @@ function play(
   }
 
   /**
-   * Sells or salvages the bag item at `index`. The selection stays on its
-   * cell, so the next item can be handled straight away; focus stays on the
-   * same button, or goes to the cell when the bag has nothing left there.
+   * Sells or salvages the bag item at `index` and closes its card; from the
+   * card, focus goes to its cell, which now holds the next item.
    */
   function dispose(index: number, action: BulkAction): void {
     const at = order.indexOf(index);
+    const fromDetails = details.box.contains(document.activeElement);
     const next = disposeItem(state, index, action);
-    const now = bagOrder(next.inventory, sort, reverse)[at];
-    selected = now === undefined ? null : { bag: now };
+    selected = null;
     act(next);
-    const again = detailBody.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
-    if (again) again.focus();
-    else {
-      setCursor(at);
-      bagCells[at]?.focus();
-    }
+    setCursor(at);
+    if (fromDetails) bagCells[at]?.focus();
   }
 
   /** The item at `at` in `s`, if any. */
@@ -4465,9 +4619,11 @@ function play(
         ghost.setAttribute('aria-hidden', 'true');
         document.body.append(ghost);
         document.body.classList.add('dragging');
+        drag.ghost = ghost;
+        // An open card would hide the slots and catch the drop (the redraw keeps the targets).
+        if (selected) select(null);
         for (const p of slotsFor(item.slot))
           slotCells[p].classList.toggle('target', canDrop(item, p));
-        drag.ghost = ghost;
       }
       drag.ghost.style.left = `${e.clientX}px`;
       drag.ghost.style.top = `${e.clientY}px`;

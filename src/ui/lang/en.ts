@@ -441,6 +441,8 @@ const messages = {
   'details.sell': 'Sell: {n} Stones',
   'details.salvage': 'Salvage: {n} Essence',
   'details.craft': 'Craft',
+  'details.close': 'Close details',
+  'details.change': 'If equipped',
   'item.tag': '{grade} · {slot} · Lv {level}',
   'item.quality': 'Quality {quality}%',
   'item.cell': '{name}, {tag}',
