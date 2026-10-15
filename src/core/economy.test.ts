@@ -46,6 +46,8 @@ import {
   killStones,
   MAX_BAG_SIZE,
   pathChangeCost,
+  pickedConfirm,
+  pickedPreview,
   pickUp,
   resetStats,
   sellPrice,
@@ -487,6 +489,107 @@ describe('bulk confirmation', () => {
     const { slot, ...rest } = item('mortal');
     const reordered = game([{ ...rest, slot } as Item]);
     expect(bulkConfirm(reordered, 'salvage', 'earth', seen)?.inventory).toEqual([]);
+  });
+});
+
+describe('bulk select', () => {
+  const bag = (): Item[] => [
+    item('mortal', 3),
+    item('heaven', 2),
+    { ...item('spirit', 4), refines: 2 },
+    item('earth', 5),
+  ];
+
+  it('previews the picked items: count, highest grade, payout and refined ones', () => {
+    const s = game(bag());
+    const picks = [0, 2];
+    const sold = sellPrice(item('mortal', 3)) + sellPrice(item('spirit', 4));
+    expect(pickedPreview(s, 'sell', picks)).toEqual({
+      count: 2,
+      highest: 'spirit',
+      total: sold,
+      refined: 1,
+    });
+    const essence = essenceValue(item('mortal', 3)) + essenceValue(item('spirit', 4));
+    expect(pickedPreview(s, 'salvage', picks).total).toBe(essence);
+    expect(pickedPreview(s, 'sell', [])).toEqual({
+      count: 0,
+      highest: null,
+      total: 0,
+      refined: 0,
+    });
+  });
+
+  it('takes only the picked items, whatever their grade, and pays what it showed', () => {
+    const s = game(bag(), 10);
+    const preview = pickedPreview(s, 'sell', [3, 1]);
+    const next = pickedConfirm(s, 'sell', [3, 1], s.inventory);
+    expect(next?.inventory).toEqual([item('mortal', 3), { ...item('spirit', 4), refines: 2 }]);
+    expect(next?.stones).toBe(10 + preview.total);
+    // The state it was given is left alone.
+    expect(s.inventory).toHaveLength(4);
+  });
+
+  it('salvages a refined item when it is picked', () => {
+    const s = game(bag());
+    const next = pickedConfirm(s, 'salvage', [2], s.inventory);
+    expect(next?.inventory).toHaveLength(3);
+    expect(next?.essence).toBe(essenceValue(item('spirit', 4)));
+  });
+
+  it('leaves drops that landed since alone', () => {
+    const start = game(bag());
+    const seen = start.inventory;
+    const later = { ...start, inventory: [...start.inventory, item('mortal', 9)] };
+    const next = pickedConfirm(structuredClone(later), 'sell', [0], seen);
+    expect(next?.inventory.at(-1)).toEqual(item('mortal', 9));
+    expect(next?.inventory).toHaveLength(4);
+  });
+
+  it('takes nothing when the part it showed changed or nothing is picked', () => {
+    const seen = bag();
+    // The Mortal was sold on its own: every index after it now names another item.
+    const shifted = game(seen.slice(1));
+    expect(pickedConfirm(shifted, 'sell', [1], seen)).toBeNull();
+    const s = game(bag());
+    expect(pickedConfirm(s, 'sell', [], s.inventory)).toBeNull();
+  });
+
+  it('clamps the payout near a currency cap and still goes through', () => {
+    const near = { ...game([item('heaven', 50)]), stones: Number.MAX_SAFE_INTEGER - 3 };
+    expect(pickedPreview(near, 'sell', [0]).total).toBe(3);
+    expect(pickedConfirm(near, 'sell', [0], near.inventory)).toMatchObject({
+      inventory: [],
+      stones: Number.MAX_SAFE_INTEGER,
+    });
+  });
+
+  it('refuses hostile picks and actions without echoing them', () => {
+    const s = game(bag());
+    const bad: unknown[][] = [
+      [4],
+      [-1],
+      [0.5],
+      [Number.NaN],
+      [Number.POSITIVE_INFINITY],
+      ['0'],
+      [0, 0],
+      [0, 1, 2, 3, 3],
+      Array.from({ length: 1e5 }, (_, i) => i),
+    ];
+    for (const picks of bad) {
+      expect(() => pickedPreview(s, 'sell', picks as number[])).toThrow(RangeError);
+      expect(() => pickedConfirm(s, 'sell', picks as number[], s.inventory)).toThrow(
+        /^picked sell: (bad pick|too many picks)$/,
+      );
+    }
+    for (const a of ['__proto__', 'constructor', 'toString', 'burn']) {
+      expect(() => pickedPreview(s, a as BulkAction, [0])).toThrow(/^picked: unknown action$/);
+      expect(() => pickedConfirm(s, a as BulkAction, [0], s.inventory)).toThrow(RangeError);
+    }
+    // A pick past what the confirmation showed is refused, even if a drop now sits there.
+    const later = { ...s, inventory: [...s.inventory, item('mortal')] };
+    expect(() => pickedConfirm(later, 'sell', [4], s.inventory)).toThrow(/bad pick/);
   });
 });
 

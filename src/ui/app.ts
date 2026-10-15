@@ -36,7 +36,10 @@ import {
   bulkPreview,
   bagStillShows,
   bulkConfirm,
+  pickedConfirm,
+  pickedPreview,
   type BulkPreview,
+  type PickedPreview,
   sellPrice,
   setFilter,
   // Item types, not the equipment positions this file calls SLOT_IDS.
@@ -2682,13 +2685,18 @@ function play(
       b.addEventListener('click', (e) => {
         setCursor(i);
         const index = order[i];
+        // Selecting ticks the cell instead of opening its card.
+        if (picking) {
+          if (index !== undefined) togglePick(index);
+          return;
+        }
         select(index === undefined ? null : { bag: index });
         // Enter or Space (a click with no pointer) takes focus into the card.
         if (selected && e.detail === 0) focusCard();
       });
       b.addEventListener('dblclick', () => {
         const index = order[i];
-        if (index !== undefined) equipFromBag(index);
+        if (index !== undefined && !picking) equipFromBag(index);
       });
       b.addEventListener('pointerdown', (e) => startPress(e, i));
       bagCells.push(b);
@@ -2755,36 +2763,51 @@ function play(
     GRADE_IDS.slice(1).map((g) => [g, () => gradeName(g)] as const),
   );
   /**
-   * The confirmation open now: its action and grade, the bag the player saw
-   * and what it named; null when closed.
+   * The confirmation open now: its action, the grade it takes below or the
+   * bag indices the player ticked, the bag the player saw and what it named;
+   * null when closed.
    */
-  let pending: {
-    action: BulkAction;
-    grade: GradeId;
-    /** The bag it looked at; drops landing later are not taken. */
-    seen: readonly Item[];
-    preview: BulkPreview;
-  } | null = null;
+  let pending:
+    | ({
+        action: BulkAction;
+        /** The bag it looked at; drops landing later are not taken. */
+        seen: readonly Item[];
+      } & (
+        | { grade: GradeId; picks?: undefined; preview: BulkPreview }
+        | { picks: readonly number[]; grade?: undefined; preview: PickedPreview }
+      ))
+    | null = null;
+  /** Bulk select (§7): while on, a click on a cell ticks it instead of opening its card. */
+  let picking = false;
+  /** The bag indices ticked, which point into `pickedSeen`; drops only append, so they hold. */
+  let picked = new Set<number>();
+  let pickedSeen: readonly Item[] = [];
   const confirmBox = el('div', 'confirm');
   confirmBox.setAttribute('role', 'alert');
   const confirmText = el('p');
   const confirmYes = button('', 'primary', () => {
     if (!pending) return;
-    const { action, grade, seen } = pending;
+    const { action, seen } = pending;
     // Null when the bag the player saw changed: show the new numbers first.
-    const next = bulkConfirm(state, action, grade, seen);
-    if (!next) return askBelow(action, grade);
+    const next = pending.picks
+      ? pickedConfirm(state, action, pending.picks, seen)
+      : bulkConfirm(state, action, pending.grade, seen);
+    if (!next) return reask(true);
+    const fromPicks = !!pending.picks;
     closeConfirm();
     // Bag positions shift; an equipped selection stays.
     if (selected && 'bag' in selected) selected = null;
+    if (fromPicks) picked = new Set();
     act(next);
-    bulkBtn[action].focus();
+    // Sell selected… is off with nothing ticked: focus goes back to the grid.
+    (fromPicks ? bagCells[cursor] : bulkBtn[action])?.focus();
   });
   const confirmNo = button('', '', () => {
     if (!pending) return;
     const { action } = pending;
+    const from = pending.picks ? pickBtn : bulkBtn;
     closeConfirm();
-    bulkBtn[action].focus();
+    from[action].focus();
   });
   confirmBox.append(confirmText, confirmYes, confirmNo);
   confirmBox.hidden = true;
@@ -2820,7 +2843,16 @@ function play(
   function fillConfirm(): void {
     if (!pending) return;
     const { action, preview } = pending;
-    const ask = bulkAsk(action, preview);
+    // Ticks dropped by a bag change: say so, and offer only OK.
+    const ask =
+      pending.picks && preview.count === 0
+        ? {
+            parts: [{ text: t('bulk.pickedGone') }],
+            text: t('bulk.pickedGone'),
+            yes: null,
+            no: t('confirm.ok'),
+          }
+        : bulkAsk(action, preview);
     // Rebuilt only when the words change; the highest grade's name is its own
     // span, so it wears its grade colour (text only, never markup).
     if (confirmText.textContent !== ask.text) {
@@ -2847,11 +2879,112 @@ function play(
     delete confirmBox.dataset.action;
     confirmYes.className = 'primary';
   }
-  const bulkRow = el('div', 'row');
+  /** Opens the confirmation for `action` on the ticked items; with none ticked, closes it. */
+  function askPicked(action: BulkAction, focus = true, gone = false): void {
+    const picks = [...picked];
+    // Nothing ticked: a refill after the bag changed says the ticks went
+    // (OK only); unticking the last one just closes it.
+    if (picks.length === 0 && !gone) return closeConfirm();
+    const onYes = document.activeElement === confirmYes;
+    pending = {
+      action,
+      picks,
+      seen: state.inventory,
+      preview: pickedPreview(state, action, picks),
+    };
+    fillConfirm();
+    if (focus || (onYes && confirmYes.hidden)) (confirmYes.hidden ? confirmNo : confirmYes).focus();
+  }
+  /** Asks the open confirmation again with the bag as it is now. */
+  function reask(focus = false): void {
+    if (!pending) return;
+    if (pending.picks) askPicked(pending.action, focus, true);
+    else askBelow(pending.action, pending.grade, focus);
+  }
+  /**
+   * Drops the ticks when the part of the bag they point into changed (an item
+   * sold, salvaged or equipped from it); drops landing at the end keep them.
+   */
+  function syncPicks(): void {
+    if (picked.size > 0 && !bagStillShows(state, pickedSeen)) picked = new Set();
+    pickedSeen = state.inventory;
+  }
+  /** Turns select mode on or off; either way nothing starts ticked. */
+  function setPicking(on: boolean): void {
+    if (picking === on) return;
+    picking = on;
+    picked = new Set();
+    pickedSeen = state.inventory;
+    closeConfirm();
+    // A card would hide the cells being ticked.
+    select(null);
+  }
+  function togglePick(index: number): void {
+    syncPicks();
+    if (!state.inventory[index]) return;
+    if (!picked.delete(index)) picked.add(index);
+    if (pending?.picks) askPicked(pending.action, false);
+    draw(null);
+  }
+  /** Ticks every item on the page shown. */
+  function pickPage(): void {
+    syncPicks();
+    const { start, cells } = bagPage(state.bagSize, page);
+    for (let i = start; i < start + cells; i++) {
+      const index = order[i];
+      if (index !== undefined && state.inventory[index]) picked.add(index);
+    }
+    if (pending?.picks) askPicked(pending.action, false);
+    draw(null);
+  }
+  const bulkRow = el('div', 'row bulk');
   bulkRow.append(below.box, bulkBtn.sell, bulkBtn.salvage);
+  // The selection bar replaces the grade row while selecting.
+  const pickCount = el('span', 'count');
+  const pickPay = el('span', 'muted');
+  const pickBtn: Record<BulkAction, HTMLButtonElement> = {
+    sell: buttonT('inventory.sellPicked', 'sell', () => askPicked('sell')),
+    salvage: buttonT('inventory.salvagePicked', 'salvage', () => askPicked('salvage')),
+  };
+  const pickAll = buttonT('inventory.pickPage', '', pickPage);
+  const pickNone = buttonT('inventory.pickClear', '', () => {
+    picked = new Set();
+    closeConfirm();
+    draw(null);
+  });
+  const pickSum = el('p', 'pick-sum');
+  // The space keeps the two apart for screen readers; the flex gap shows it.
+  pickSum.append(pickCount, ' ', pickPay);
+  const pickBar = el('div', 'picks');
+  pickBar.setAttribute('role', 'group');
+  attr(pickBar, 'aria-label', 'inventory.select');
+  const pickActs = el('div', 'row');
+  pickActs.append(pickBtn.sell, pickBtn.salvage, pickAll, pickNone);
+  pickBar.append(pickSum, pickActs);
+  pickBar.hidden = true;
+  /** The selection bar: shown while selecting, with the ticked count and what it would pay. */
+  function drawPicks(): void {
+    bulkRow.hidden = picking;
+    pickBar.hidden = !picking;
+    pickToggle.setAttribute('aria-pressed', String(picking));
+    const gridName = t(picking ? 'inventory.gridPick' : 'inventory.grid');
+    if (grid.getAttribute('aria-label') !== gridName) grid.setAttribute('aria-label', gridName);
+    if (!picking) return;
+    const picks = [...picked];
+    setText(pickCount, t('inventory.picked', { n: picks.length }));
+    setText(
+      pickPay,
+      t('inventory.pickedPay', {
+        stones: pickedPreview(state, 'sell', picks).total,
+        essence: pickedPreview(state, 'salvage', picks).total,
+      }),
+    );
+    for (const b of [pickBtn.sell, pickBtn.salvage, pickNone])
+      b.setAttribute('aria-disabled', String(picks.length === 0));
+  }
   const bagBtn = button('', '', () => act(buyBagSpace(state)));
   const bagTools = el('div', 'tools');
-  bagTools.append(bulkRow, confirmBox, bagBtn);
+  bagTools.append(bulkRow, pickBar, confirmBox, bagBtn);
   // Sorting reorders the cells only: the bag itself stays in drop order.
   const sortPick = choice(
     'sort.by',
@@ -2875,10 +3008,28 @@ function play(
   sortArrow.setAttribute('aria-hidden', 'true');
   const sortDirText = el('span');
   sortDir.append(sortArrow, sortDirText);
+  // Bulk select's on / off switch, at the end of the row above the grid.
+  const pickToggle = buttonT('inventory.select', 'pick-toggle', () => setPicking(!picking));
+  pickToggle.setAttribute('aria-pressed', 'false');
   const sortRow = el('div', 'sort-row');
-  sortRow.append(sortPick.box, sortDir);
+  sortRow.append(sortPick.box, sortDir, pickToggle);
   const bagBody = el('div');
   bagBody.append(sortRow, grid, pager, bagTools);
+  // Esc anywhere in the Bag while selecting: closes an open confirmation
+  // first, then ends select mode. Focus lands on what stays on screen.
+  bagBody.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !picking) return;
+    e.preventDefault();
+    if (pending?.picks) {
+      const { action } = pending;
+      closeConfirm();
+      pickBtn[action].focus();
+      return;
+    }
+    const onGrid = grid.contains(document.activeElement);
+    setPicking(false);
+    if (!onGrid) pickToggle.focus();
+  });
 
   // Auto filter: a minimum grade, the item types kept, and what happens to the rest.
   const minGrade = choice(
@@ -2972,6 +3123,7 @@ function play(
       { id: 'store', label: 'tab.store', body: storeBody },
     ],
     (id) => {
+      if (id !== 'bag' && picking) setPicking(false);
       if (id !== 'bag' && selected && 'bag' in selected) select(null);
     },
   );
@@ -4136,7 +4288,11 @@ function play(
     }
     const item = selectedItem();
     if (soulsText && item) setText(soulsText, soulsLine(item, state) ?? '');
-    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}|${sort}|${reverse}`;
+    syncPicks();
+    // Before the early return: what the ticks pay moves with a currency's cap.
+    drawPicks();
+    const picks = picking ? [...picked].join(',') : '-';
+    const key = `${detailsKey}|${state.inventory.length}|${state.bagSize}|${page}|${sort}|${reverse}|${picks}`;
     if (key === drawnGear) return;
     drawnGear = key;
     order = bagOrder(state.inventory, sort, reverse);
@@ -4154,10 +4310,12 @@ function play(
       const index = order[i];
       const item = index === undefined ? undefined : state.inventory[index];
       fillCell(b, item, t('inventory.emptyCell', { n: i + 1 }), item ? verdict(item) : null);
-      b.setAttribute(
-        'aria-pressed',
-        String(index !== undefined && !!selected && 'bag' in selected && selected.bag === index),
-      );
+      // While selecting, pressed means ticked; otherwise, the card's item.
+      const on =
+        index !== undefined &&
+        (picking ? picked.has(index) : !!selected && 'bag' in selected && selected.bag === index);
+      b.setAttribute('aria-pressed', String(on));
+      if (picking && on) b.classList.add('picked');
     });
     for (const slot of SLOT_IDS) {
       const b = slotCells[slot];
@@ -4458,9 +4616,10 @@ function play(
     state = next;
     gearVersion += 1;
     // The player changed the bag an open bulk confirmation shows (sold or
-    // equipped from it): show its new numbers rather than stale ones.
-    if (pending && !bagStillShows(state, pending.seen))
-      askBelow(pending.action, pending.grade, false);
+    // equipped from it): show its new numbers rather than stale ones. Ticks
+    // pointing into the changed part go first, so a refill never reads them.
+    syncPicks();
+    if (pending && !bagStillShows(state, pending.seen)) reask();
     draw(null);
   }
 
@@ -4646,7 +4805,8 @@ function play(
 
   function startPress(e: PointerEvent, cell: number): void {
     const index = order[cell];
-    if (e.pointerType === 'touch' || e.button !== 0 || index === undefined) return;
+    // Selecting drags nothing: a click there only ticks the cell.
+    if (e.pointerType === 'touch' || e.button !== 0 || index === undefined || picking) return;
     drag = { index, x: e.clientX, y: e.clientY, ghost: null };
   }
 
@@ -5097,8 +5257,7 @@ function play(
     drops.replaceChildren(...recent.map(dropLine));
     // A language switch rewords the open confirmation. One that offered only OK,
     // or whose bag changed, is asked again with the new numbers (focus stays).
-    if (pending && (pending.preview.count === 0 || !bagStillShows(state, pending.seen)))
-      askBelow(pending.action, pending.grade, false);
+    if (pending && (pending.preview.count === 0 || !bagStillShows(state, pending.seen))) reask();
     else fillConfirm();
     drawRetire();
     drawTools();

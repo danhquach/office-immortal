@@ -832,9 +832,26 @@ Every drop is generated from a seeded roll.
   or equipped from it) the open confirmation updates to the new numbers before
   anything is taken. Near a currency's cap the payout is clamped like every
   earning.
-- **Colours:** every sell control (the details panel's Sell, bulk Sell… and
+- **Bulk select:** a **Select** switch above the bag grid turns select mode
+  on. While it is on, clicking, tapping or pressing Enter / Space on a cell
+  ticks or unticks it instead of opening its card (no drag or double-click
+  equip). A ticked cell shows a check mark as well as the selection ring, and
+  reads as pressed to screen readers. The grade row gives way to a bar that
+  names how many are ticked and what selling them would pay in Spirit Stones
+  or salvaging them in Spirit Essence, with **Sell selected…**, **Salvage
+  selected…**, **Select all on page** and **Clear**. Any item in the bag can be
+  ticked, whatever its grade; refined ones too, and the confirmation names
+  how many refined items it includes (worn items are not in the bag, so they
+  can never be ticked). The confirmation names the count, the highest grade and
+  the payout, and takes only the ticked items from the bag it showed, like the
+  grade-based actions: drops landing meanwhile are never ticked or taken, and
+  if the shown part of the bag changes the ticks are dropped, nothing is
+  taken and an open confirmation says so (OK only). Turning Select off, Esc
+  anywhere in the Bag (it closes an open confirmation first) or switching away
+  from the Bag tab ends select mode and clears the ticks.
+- **Colours:** every sell control (the details panel's Sell, bulk Sell…, Sell selected… and
   its confirm) wears the Spirit Stones colour (`--sell`, cyan like the stone
-  icon); every salvage control (Salvage, bulk Salvage… and its confirm) wears
+  icon); every salvage control (Salvage, bulk Salvage…, Salvage selected… and its confirm) wears
   the Spirit Essence colour (`--salvage`, orange like the essence drop); the
   details panel's Craft button wears violet (`--craft`, a hue no grade uses).
   All three are theme tokens with light and dark values that pass 4.5:1 on every

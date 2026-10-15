@@ -33,7 +33,6 @@ import {
   rerollCost,
   rollPoints,
   type BulkAction,
-  type BulkPreview,
 } from '../core/economy.ts';
 import { DEMONS_PER_WAVE, TRIBULATIONS, WAVES_PER_FLOOR, type EnemyKind } from '../core/floors.ts';
 import { LIGHTNING_NAME } from '../core/enemy-skills.ts';
@@ -1120,17 +1119,28 @@ export function gradeRuns(message: string, name: string, grade: GradeId): TextPa
   ];
 }
 
+/** What a bulk confirmation names: below a grade (`kept`) or the ticked items (`refined`). */
+export interface BulkAskPreview {
+  count: number;
+  highest: GradeId | null;
+  total: number;
+  kept?: number;
+  refined?: number;
+}
+
 /**
  * A bulk sell or salvage confirmation (§7), e.g. "Sell 12 items (highest grade:
  * Spirit) for 340 Spirit Stones?", as text runs: the highest grade's name is
  * its own run, wherever the language puts it, so it can wear its grade colour.
- * A note follows when refined items below the grade are kept.
+ * A note follows when refined items below the grade are kept, or when refined
+ * items are among those the player ticked (bulk select).
  */
-export function bulkParts(
-  action: BulkAction,
-  p: { count: number; highest: GradeId | null; total: number; kept?: number },
-): TextPart[] {
-  const note: TextPart[] = p.kept ? [{ text: ` ${t('bulk.keptRefined')}` }] : [];
+export function bulkParts(action: BulkAction, p: BulkAskPreview): TextPart[] {
+  const note: TextPart[] = p.kept
+    ? [{ text: ` ${t('bulk.keptRefined')}` }]
+    : p.refined
+      ? [{ text: ` ${t('bulk.refinedPicked', { n: p.refined })}` }]
+      : [];
   if (p.count === 0 || p.highest === null) return [{ text: t(`${action}.nothing`) }, ...note];
   const grade = p.highest;
   const name = gradeName(grade);
@@ -1143,10 +1153,7 @@ export function bulkParts(
 }
 
 /** The bulk confirmation as one string (see bulkParts). */
-export function bulkLabel(
-  action: BulkAction,
-  p: { count: number; highest: GradeId | null; total: number; kept?: number },
-): string {
+export function bulkLabel(action: BulkAction, p: BulkAskPreview): string {
   return bulkParts(action, p)
     .map((part) => part.text)
     .join('');
@@ -1159,7 +1166,7 @@ export function bulkLabel(
  */
 export function bulkAsk(
   action: BulkAction,
-  preview: BulkPreview,
+  preview: BulkAskPreview,
 ): { parts: TextPart[]; text: string; yes: string | null; no: string } {
   const can = preview.count > 0;
   const parts = bulkParts(action, preview);
