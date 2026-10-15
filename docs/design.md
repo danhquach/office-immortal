@@ -244,8 +244,8 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   but empty, so the strip never changes height. The Mini view shows HP bars
   only. The Stats tab shows Max qi and Qi per second.
 - **Skill bar:** the cultivator's skills (up to 4, learned order) as icons
-  on its side of the strip, beside the qi bar, spanning the qi and HP rows so
-  the strip keeps its height. Each icon fills as qi builds toward its cost
+  on its side of the strip, beside the qi bar, under the full-width HP bar
+  (whose HP text needs the room). Each icon fills as qi builds toward its cost
   and glows once the qi is there and nothing blocks it (the sim may still
   hold a ready skill for its "uses it when" rules: a defensive one waits for
   low HP or a wind-up, a buff isn't cast again while it runs); it flashes
@@ -1012,7 +1012,9 @@ treasure find, a higher offline cap, more starting stat points.
 - **Overtime Cultivation:** on return, the game replays the time away (capped
   at 8 hours, more with Flexible Hours, §9) and shows a summary: floors
   cleared, levels, drops kept, sold and salvaged, the currencies earned and
-  any store boosts that ran out while away (§8).
+  any store boosts that ran out while away (§8), as one wrapping row of
+  labelled chips over the game. While it shows, the strip stays under it
+  (it rises into the title bar only with nothing above it).
   Offline means the browser or the game's tab was closed. The replay plays
   the same as an open tab, except items drop at half the online rate (§6), so
   playing is the better way to find loot and catch-up is mostly for floors and
@@ -1485,8 +1487,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
 - **Elites and Tribulations are variants:** an elite reuses its demon's poses
   and a Tribulation a boss's, rebuilt at its own size with a colour swap and a
   glow drawn around it. No art of their own.
-- **Names under the stage:** each fighter's name has its own row (name, HP
-  bar, then HP) at every width, with 2 lines always reserved, so the strip
+- **Names under the stage:** each fighter's name has its own row (name, then
+  the HP bar with the HP written inside it, then the qi bar) at every width,
+  with 2 lines always reserved, so the strip
   never changes height between enemies. A ranked enemy's tier, in brackets,
   bold and in its tier colour, sits on line 1 by itself and the name on line 2,
   in every language: "(Elite)" over "Inbox Hydra", "(Boss)" over "The
