@@ -1596,6 +1596,20 @@ describe('bulkLabel: sell', () => {
     );
     setLang(DEFAULT_LANG);
   });
+
+  it('names how many refined items a bulk select takes, only when some are ticked', () => {
+    expect(bulkLabel('sell', { count: 3, highest: 'earth', total: 90, refined: 2 })).toBe(
+      'Sell 3 items (highest grade: Earth) for 90 Spirit Stones? Refined items (+1 or higher) included: 2.',
+    );
+    expect(bulkLabel('sell', { count: 3, highest: 'earth', total: 90, refined: 0 })).not.toMatch(
+      /Refined/,
+    );
+    setLang('vi');
+    expect(bulkLabel('sell', { count: 1, highest: 'earth', total: 9, refined: 1 })).toMatch(
+      / Gồm vật phẩm đã tinh luyện \(\+1 trở lên\): 1\.$/,
+    );
+    setLang(DEFAULT_LANG);
+  });
 });
 
 describe('bulkLabel: salvage', () => {

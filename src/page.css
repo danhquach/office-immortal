@@ -841,14 +841,19 @@ select {
     margin-top: 0;
   }
   /* The bulk label runs on over the buttons, so the grade, Sell and Salvage
-     share one line. */
-  .inventory .tools .row {
+     share one line. The gap under it clears the buttons, which stand a
+     pixel taller than the picker and would otherwise cover its descenders. */
+  .inventory .tools .bulk {
     flex-wrap: nowrap;
     margin: 0 0 0.1rem;
   }
-  .inventory .tools .row .field {
+  .inventory .tools .bulk .field {
     grid-template-columns: 7.5rem;
+    row-gap: 0.4rem;
     white-space: nowrap;
+  }
+  .inventory .tools .picks .row {
+    margin: 0 0 0.1rem;
   }
 }
 /* Under 810 px tall: names and HP drawn over the stage, not under it. */
@@ -1916,6 +1921,22 @@ select {
   outline: 2px solid var(--ink);
   outline-offset: 1px;
 }
+/* A ticked cell in bulk select: the ring plus a check mark in the free
+   bottom-left corner, so colour is never the only cue. --bg on --ink is the
+   refine digits' pair turned over, so it passes 4.5:1 in both themes. */
+.cell.picked::after {
+  content: '✓';
+  position: absolute;
+  left: 1px;
+  bottom: 1px;
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
 /* Keyboard focus wins over the selection ring, so the cursor is always visible. */
 .cell:focus-visible {
   outline: 2px solid var(--accent);
@@ -2585,6 +2606,24 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 .tools {
   margin-top: 0.5rem;
   max-width: 24rem;
+}
+/* Bulk select's switch reads as on while selecting. */
+.pick-toggle[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/* The grade row and the selection bar take turns; .row's flex would show a hidden one. */
+.tools .bulk[hidden],
+.picks[hidden] {
+  display: none;
+}
+/* Bulk select's bar: the ticked count and what it pays, then its buttons. */
+.pick-sum {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 0.5rem;
+  margin: 0;
+  font-size: 0.85rem;
 }
 .confirm {
   border: 1px solid var(--accent);

@@ -299,6 +299,82 @@ export function bulkConfirm(
   return next.inventory.length === state.inventory.length ? null : next;
 }
 
+/** What selling or salvaging the bag items the player ticked would do, for its confirmation. */
+export interface PickedPreview {
+  /** Items it takes: every one ticked. */
+  count: number;
+  /** The highest grade among them; null when none are ticked. */
+  highest: GradeId | null;
+  /** What it pays, capped like every earning at what the currency can still hold. */
+  total: number;
+  /** Refined items (+1 or higher) among them, which the confirmation names. */
+  refined: number;
+}
+
+/**
+ * Refuses picks the bag could never hold: each a whole bag index below
+ * `within`, none twice. The bad value is not echoed.
+ */
+function checkPicks(action: BulkAction, picks: readonly number[], within: number): void {
+  if (!Object.hasOwn(BULK, action)) throw new RangeError('picked: unknown action');
+  if (picks.length > within) throw new RangeError(`picked ${action}: too many picks`);
+  const seen = new Set<number>();
+  for (const at of picks) {
+    if (!Number.isInteger(at) || at < 0 || at >= within || seen.has(at))
+      throw new RangeError(`picked ${action}: bad pick`);
+    seen.add(at);
+  }
+}
+
+/** What selling or salvaging the bag items at `picks` would do (§7 Bulk select). */
+export function pickedPreview(
+  state: GameState,
+  action: BulkAction,
+  picks: readonly number[],
+): PickedPreview {
+  checkPicks(action, picks, state.inventory.length);
+  const { currency, value } = BULK[action];
+  let total = 0;
+  let refined = 0;
+  let highest: GradeId | null = null;
+  for (const at of picks) {
+    const item = state.inventory[at] as Item;
+    total += value(item);
+    if (item.refines) refined += 1;
+    if (highest === null || gradeRank(item.grade) > gradeRank(highest)) highest = item.grade;
+  }
+  total = Math.min(total, Number.MAX_SAFE_INTEGER - state[currency]);
+  return { count: picks.length, highest, total, refined };
+}
+
+/**
+ * Carries out a bulk select confirmation: sells or salvages the bag items at
+ * `picks`, where `seen` is the bag it showed. Returns null, taking nothing,
+ * when that part of the bag changed or nothing is picked: the caller asks
+ * again. Drops that landed after `seen` are left alone. `state` is left untouched.
+ */
+export function pickedConfirm(
+  state: GameState,
+  action: BulkAction,
+  picks: readonly number[],
+  seen: readonly Item[],
+): GameState | null {
+  if (!bagStillShows(state, seen)) return null;
+  checkPicks(action, picks, seen.length);
+  if (picks.length === 0) return null;
+  const { currency, value } = BULK[action];
+  const taken = new Set(picks);
+  const s = structuredClone(state);
+  let total = 0;
+  s.inventory = s.inventory.filter((item, at) => {
+    if (!taken.has(at)) return true;
+    total += value(item);
+    return false;
+  });
+  earn(s, currency, total);
+  return s;
+}
+
 const FILTER_ACTIONS: readonly FilterAction[] = ['sell', 'salvage'];
 
 /**
