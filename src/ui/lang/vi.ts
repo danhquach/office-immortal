@@ -180,10 +180,11 @@ const vi: Pack = {
     'kpi.essence': 'Tinh Hoa',
     'kpi.tip': '{label}: {value}',
     'realm.withTitle': '{realm} · {title}',
-    'realm.current': '(hiện tại)',
+    'realm.current': 'Bạn ở đây',
+    'realm.upgrade': 'Nâng cấp: {name} → {up}',
     'realm.levels': 'Cấp {from}–{to}',
     'realm.levelsFrom': 'Cấp {from}+',
-    'realm.withBonus': '{levels} · +{pct}% chỉ số chính',
+    'realm.withBonus': '{levels} · Chỉ số chính +{pct}%',
 
     'character.title': 'Nhân vật',
     'character.equipped': 'Đang trang bị',

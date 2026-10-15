@@ -177,10 +177,11 @@ const messages = {
   'kpi.essence': 'Spirit Essence',
   'kpi.tip': '{label}: {value}',
   'realm.withTitle': '{realm} · {title}',
-  'realm.current': '(current)',
+  'realm.current': 'You are here',
+  'realm.upgrade': 'Upgrade: {name} → {up}',
   'realm.levels': 'Lv {from}–{to}',
   'realm.levelsFrom': 'Lv {from}+',
-  'realm.withBonus': '{levels} · +{pct}% main stat',
+  'realm.withBonus': '{levels} · Main stat +{pct}%',
 
   'character.title': 'Character',
   'character.equipped': 'Equipped',

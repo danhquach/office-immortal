@@ -186,19 +186,32 @@ describe('breakthrough banner', () => {
 describe('realmRows', () => {
   it("names each realm's unlock for the Path asked for", () => {
     expect(realmRows(1, 'sword').map((r) => r.unlock)).toEqual([
-      'Flying Sword',
-      'Sword Intent',
-      'Flying Sword ↑ Two swords',
-      'Lightning Step',
-      'Sword Intent ↑ +15% crit chance',
-      'Ten Thousand Swords',
-      'Lightning Step ↑ Each dodge answers with a crit',
-      'Flying Sword ↑ A kill gives back half its qi',
-      'Ten Thousand Swords ↑ 8 hits',
-      'Sword Intent ↑ Lasts 10 s, costs 35 qi',
+      'New skill: Flying Sword',
+      'New skill: Sword Intent',
+      'Upgrade: Flying Sword → Two swords',
+      'New skill: Lightning Step',
+      'Upgrade: Sword Intent → +15% crit chance',
+      'New skill: Ten Thousand Swords',
+      'Upgrade: Lightning Step → Each dodge answers with a crit',
+      'Upgrade: Flying Sword → A kill gives back half its qi',
+      'Upgrade: Ten Thousand Swords → 8 hits',
+      'Upgrade: Sword Intent → Lasts 10 s, costs 35 qi',
     ]);
     // A Path change names the new Path's unlocks at once.
-    expect(realmRows(1, 'talisman')[1]?.unlock).toBe('Thunder Talisman');
+    expect(realmRows(1, 'talisman')[1]?.unlock).toBe('New skill: Thunder Talisman');
+  });
+
+  it("gives each realm's unlock its skill's icon, tinted by the rank reached there", () => {
+    const rows = realmRows(1, 'sword');
+    expect(rows[0]?.icon).toEqual({ cell: skillCell('Flying Sword'), tier: 'base' });
+    expect(rows[1]?.icon).toEqual({ cell: skillCell('Sword Intent'), tier: 'base' });
+    expect(rows[2]?.icon?.tier).toBe('mid');
+    for (const path of PATH_IDS) {
+      for (const row of realmRows(1, path)) {
+        expect(row.icon, `${path} ${row.name}`).not.toBeNull();
+        expect(row.icon?.cell, `${path} ${row.name}`).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 });
 
@@ -218,6 +231,24 @@ describe('nearRealmRows', () => {
     const last = nearRealmRows(levelIn(REALMS.length - 1), 'sword');
     expect(last).toHaveLength(3);
     expect(last[2]?.current).toBe(true);
+  });
+
+  it('marks only the realm just before the current one as past, at either end too', () => {
+    const past = (level: number): boolean[] => nearRealmRows(level, 'sword').map((r) => r.past);
+    expect(past(1)).toEqual([false, false, false]);
+    expect(past(levelIn(3))).toEqual([true, false, false]);
+    expect(past(levelIn(REALMS.length - 1))).toEqual([false, true, false]);
+    for (let realm = 0; realm < REALMS.length; realm++) {
+      const rows = nearRealmRows(levelIn(realm), 'sword');
+      expect(
+        rows.filter((r) => r.current),
+        `realm ${realm}`,
+      ).toHaveLength(1);
+      expect(
+        rows.filter((r) => r.past && r.current),
+        `realm ${realm}`,
+      ).toHaveLength(0);
+    }
   });
 });
 

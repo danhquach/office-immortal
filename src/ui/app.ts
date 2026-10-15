@@ -1554,20 +1554,22 @@ function realmList(
     shown = key();
     list.replaceChildren(
       ...nearRealmRows(level(), path()).map((row) => {
-        const li = el('li', row.current ? 'current' : '');
+        const li = el('li', row.current ? 'current' : row.past ? 'past' : '');
         if (row.current) li.setAttribute('aria-current', 'true');
-        // The spaces keep a screen reader's words apart; the grid drops them.
-        li.append(
-          el('span', 'name', row.name),
-          ' ',
-          el('span', 'title', row.title),
-          ' ',
-          el('span', 'levels', row.levels),
-          ' ',
-          el('span', 'unlock', row.unlock),
-        );
-        // A tooltip's text is read flat, so say which row is current in words too.
-        if (row.current) li.append(el('span', 'sr-only', ` ${t('realm.current')}`));
+        // The spaces keep a screen reader's words apart; the flex rows drop them.
+        const head = el('span', 'head');
+        head.append(el('span', 'name', row.name), ' ', el('span', 'title', row.title));
+        const levels = el('span', 'levels');
+        levels.append(el('span', '', row.levels));
+        // Said in words as well as the highlight, which a screen reader cannot see.
+        if (row.current) levels.append(' ', el('span', 'here', t('realm.current')));
+        li.append(head, ' ', levels);
+        if (row.unlock) {
+          const unlock = el('span', 'unlock');
+          if (row.icon) unlock.append(skillIcon(row.icon.cell, row.icon.tier));
+          unlock.append(el('span', '', row.unlock));
+          li.append(' ', unlock);
+        }
         return li;
       }),
     );

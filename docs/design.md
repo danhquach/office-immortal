@@ -149,7 +149,7 @@ The realm name is primary; the job title is shown beside it.
   stat points a cultivator holds and spends are unchanged, and the boosted
   stat (not rounded, so a small step still counts) is what combat and Soul
   Banner souls read. The Realm chip's list names each realm's total, to one
-  decimal ("+2.6% main stat"). The Stats tab shows it in green beside the base
+  decimal ("Main stat +2.6%"). The Stats tab shows it in green beside the base
   value ("146 +7.1"); hovering, focusing or tapping it explains it and gives
   the sum ("Bonus from your realm: Nascent Soul (146 + 7.1 = 153.1)").
 - **Losing** to a Tribulation costs nothing: the floor is played again, with
@@ -277,9 +277,11 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   - **Path choice:** each Path lists its four skills, icon and name (as first
     learned), under its portrait. **Change Path** in Respec shows the skills
     the picked Path would have at the current realm.
-  - **Realm chip list:** each realm names what it brings the current Path, in
-    the same words as the banner. Each realm takes three lines (name and
-    title, levels, what it brings) in a narrow box.
+  - **Realm chip list:** each realm names what it brings the current Path,
+    with the skill's icon: "New skill: Sword Intent" or "Upgrade: Flying
+    Sword → Two swords". Each realm is its own block, a rule between them:
+    the name in bold with the job title as a small tag beside it, then its
+    levels, then what it brings.
   - **Help:** a "Qi and skills" entry: qi gain, Qi per second, auto-cast and
     enemy wind-ups, with the sim's own numbers.
   - **Discreet** hides every skill icon on these surfaces; the text stays.
@@ -1398,8 +1400,9 @@ the contrast: a dull spreadsheet with a vivid cultivation fight in the middle.
   Stones: 340"). Discreet mode hides the icons, so it keeps the labels and
   gives each chip its own row. Hovering or focusing the Realm chip lists the
   realm before, the current one and the one after (three at either end), each
-  with its job title and levels ("Lv 11–20 · +1% main stat"; Immortal
-  Ascension "Lv 211+ · +31.5% main stat"), the current one highlighted; it
+  with its job title and levels ("Lv 11–20 · Main stat +1%"; Immortal
+  Ascension "Lv 211+ · Main stat +31.5%"), the current one highlighted and
+  marked "You are here", the one before it dimmed; it
   closes when the pointer and focus leave, or on Escape. A tap opens it on a
   touch screen; tapping elsewhere closes it.
   Level and XP to the next level are a yellow progress bar along the foot of

@@ -706,24 +706,24 @@ describe('realmRows', () => {
   it('lists every realm in order with its job title and levels', () => {
     expect(realmRows(1, 'sword').map((r) => [r.name, r.title, r.levels])).toEqual([
       ['Qi Condensation', 'Intern', 'Lv 1–10'],
-      ['Foundation Establishment', 'Associate', 'Lv 11–20 · +1% main stat'],
-      ['Golden Core', 'Team Lead', 'Lv 21–40 · +2.6% main stat'],
-      ['Nascent Soul', 'Manager', 'Lv 41–60 · +4.9% main stat'],
-      ['Spirit Transformation', 'Senior Manager', 'Lv 61–80 · +7.8% main stat'],
-      ['Void Refinement', 'Director', 'Lv 81–110 · +11.2% main stat'],
-      ['Body Integration', 'VP', 'Lv 111–140 · +15.4% main stat'],
-      ['Mahayana', 'CEO', 'Lv 141–170 · +20.1% main stat'],
-      ['Tribulation Transcendence', 'Chairman', 'Lv 171–210 · +25.5% main stat'],
-      ['Immortal Ascension', '', 'Lv 211+ · +31.5% main stat'],
+      ['Foundation Establishment', 'Associate', 'Lv 11–20 · Main stat +1%'],
+      ['Golden Core', 'Team Lead', 'Lv 21–40 · Main stat +2.6%'],
+      ['Nascent Soul', 'Manager', 'Lv 41–60 · Main stat +4.9%'],
+      ['Spirit Transformation', 'Senior Manager', 'Lv 61–80 · Main stat +7.8%'],
+      ['Void Refinement', 'Director', 'Lv 81–110 · Main stat +11.2%'],
+      ['Body Integration', 'VP', 'Lv 111–140 · Main stat +15.4%'],
+      ['Mahayana', 'CEO', 'Lv 141–170 · Main stat +20.1%'],
+      ['Tribulation Transcendence', 'Chairman', 'Lv 171–210 · Main stat +25.5%'],
+      ['Immortal Ascension', '', 'Lv 211+ · Main stat +31.5%'],
     ]);
   });
 
   it('names the main-stat boost on every realm but the first', () => {
     const rows = realmRows(1, 'sword');
     expect(rows[0]?.levels).toBe('Lv 1–10');
-    expect(rows[0]?.levels).not.toContain('main stat');
-    expect(rows[1]?.levels).toContain('+1% main stat');
-    expect(rows[9]?.levels).toBe('Lv 211+ · +31.5% main stat');
+    expect(rows[0]?.levels).not.toContain('Main stat');
+    expect(rows[1]?.levels).toContain('Main stat +1%');
+    expect(rows[9]?.levels).toBe('Lv 211+ · Main stat +31.5%');
   });
 });
 
