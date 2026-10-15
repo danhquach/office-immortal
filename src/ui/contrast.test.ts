@@ -329,7 +329,7 @@ describe('fight strip names', () => {
 
   it('gives the name its own row at every width, the foe mirrored', () => {
     const fighter = rules('.fighter');
-    expect(fighter.join('\n')).toMatch(/grid-template-areas:\s*'name'\s*'bar'\s*'qi'\s*'hp'/);
+    expect(fighter.join('\n')).toMatch(/grid-template-areas:\s*'name'\s*'bar'\s*'qi'\s*;/);
     expect(fighter.join('\n')).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/);
     // No rule (in any other media query) puts the name beside the HP.
     expect(roomy).not.toMatch(/'name hp'|'hp name'/);
@@ -340,6 +340,35 @@ describe('fight strip names', () => {
     for (const m of code.matchAll(/([^{}]+){([^{}]*)}/g)) {
       if (/\.enemy-tier(?!\))/.test(m[1] as string)) expect(m[2]).not.toMatch(/text-align/);
     }
+  });
+
+  it('writes the HP inside the HP bar at every size, outlined over the fills', () => {
+    const hp = all('.fighter .hp');
+    expect(hp).toMatch(/grid-area:\s*bar/);
+    expect(hp).toMatch(/text-shadow:[^;]*var\(--strip-bg\)/);
+    expect(hp).toMatch(/white-space:\s*nowrap/);
+    // The text's line is the bar's height, so it sits centred in it.
+    const bar = /(?:^|\s)height:\s*(\d+)px/.exec(all('.fighter .bar'))?.[1];
+    expect(hp).toMatch(new RegExp(`line-height:\\s*${bar}px`));
+    expect(Number(bar)).toBeGreaterThanOrEqual(12);
+    // The cultivator's HP bar keeps the whole width (its skills sit beside the
+    // qi bar), so a long HP fits.
+    expect(all('.fighter.you')).toMatch(
+      /grid-template-areas:\s*'name name'\s*'bar bar'\s*'qi skills'/,
+    );
+    // A step smaller on a phone, so an 8-digit HP still fits at 375 px.
+    const phone = /\.fighter \.hp\s*{([^}]*)}/.exec(media('(max-width: 479px)'))?.[1] ?? '';
+    expect(phone).toMatch(/font-size:\s*0\.65rem/);
+    // No HP row of its own anywhere: no grid area named hp, no template using it.
+    expect(code).not.toMatch(/grid-area:\s*hp\b/);
+    for (const m of code.matchAll(/grid-template-areas:([^;]*);/g)) {
+      expect(m[1]).not.toMatch(/\bhp\b/);
+    }
+  });
+
+  it('keeps the pop-out’s HP bars thin, with no HP text', () => {
+    expect(all('.mini .fighter .hp')).toMatch(/display:\s*none/);
+    expect(all('.mini .fighter .bar:not(.qi)')).toMatch(/height:\s*8px/);
   });
 
   it('puts the tier on line 1 by itself and the name on line 2', () => {
@@ -500,10 +529,8 @@ describe('Full view layout', () => {
     expect(short).not.toMatch(/zoom|\.fighter|\.strip/);
     const shorter = media(SHORTER);
     expect(rule(shorter, '.game .strip > .fighters')).toMatch(/grid-row:\s*3/);
-    expect(rule(shorter, '.game .fighter')).toMatch(
-      /grid-template-areas:\s*'name name'\s*'bar hp'/,
-    );
-    expect(rule(shorter, '.game .foe')).toMatch(/grid-template-areas:\s*'name name'\s*'hp bar'/);
+    // The name keeps its own row over the HP bar (the base layout, HP inside).
+    expect(shorter).not.toMatch(/grid-template-areas/);
     // Damage numbers rise over the names.
     expect(rule(shorter, '.game .strip .dmg')).toMatch(/z-index:\s*2/);
     expect(shorter).not.toMatch(/zoom/);
@@ -511,6 +538,11 @@ describe('Full view layout', () => {
     // name and draws the stage at 0.7, with a slimmer header bar and fewer drop lines.
     const shortest = media(SHORTEST);
     expect(rule(shortest, '.game .top > .strip')).toMatch(/margin-top:\s*-2\.5rem/);
+    // A notice shown above the strip (Overtime Cultivation and the like) keeps
+    // the strip under it instead of the strip rising over it.
+    expect(rule(shortest, '.game > .panel:not([hidden]) ~ .top > .strip')).toMatch(
+      /margin-top:\s*0;/,
+    );
     expect(rule(shortest, '.game .strip > .stage')).toMatch(/zoom:\s*0\.7;/);
     expect(rule(shortest, '.game .strip > .stage')).toMatch(/--z:\s*0\.7;/);
     expect(rule(shortest, '.beside > .log')).toMatch(/min-height:\s*2\.5rem/);
@@ -525,10 +557,8 @@ describe('Full view layout', () => {
     expect(rule(shortest, '.game .fighter')).toMatch(
       /grid-template-areas:\s*'bar'\s*'qi'\s*'name'/,
     );
-    const hp = rule(shortest, '.game .fighter .hp');
-    expect(hp).toMatch(/grid-area:\s*bar/);
-    // The light HP text over the green and red fills keeps a dark outline.
-    expect(hp).toMatch(/text-shadow:[^;]*var\(--strip-bg\)/);
+    // A slimmer bar here, the HP text's line matching it.
+    expect(rule(shortest, '.game .fighter .hp')).toMatch(/line-height:\s*12px/);
     expect(rule(shortest, '.game .fighter .bar')).toMatch(/height:\s*12px/);
     expect(rule(shortest, '.game .fighter .bar.qi')).toMatch(/height:\s*2px/);
     expect(rule(shortest, '.game .skills')).toMatch(/--skill-size:\s*16px/);
@@ -589,6 +619,26 @@ describe('Full view layout', () => {
     expect(rule(media('(min-width: 940px)'), '.top > .beside:only-child')).toMatch(
       /grid-column:\s*1 \/ -1/,
     );
+  });
+
+  it('keeps the Overtime chips a wrapping row, the grid only beside the strip', () => {
+    expect(rule(code, '.kpis')).toMatch(/display:\s*flex/);
+    expect(rule(code, '.kpis')).toMatch(/flex-wrap:\s*wrap/);
+    // An inline-size container in a flex row (Overtime) shrinks to nothing:
+    // the summary chips beside the strip are the only chip row that is one.
+    expect(rule(code, '.kpis')).not.toMatch(/container-type/);
+    const beside = rule(code, '.beside > .kpis');
+    expect(beside).toMatch(/container-type:\s*inline-size/);
+    expect(beside).toMatch(/grid-template-columns:\s*repeat\(2,/);
+    // The icon-for-label rule is scoped the same way, so Overtime keeps its labels.
+    for (const m of code.matchAll(/([^{}]+){[^{}]*}/g)) {
+      for (const sel of (m[1] as string).split(',')) {
+        // Only the base row is unscoped; every other chip-row rule is beside the strip.
+        if (/\.kpis\b/.test(sel) && sel.trim() !== '.kpis') {
+          expect(sel).toMatch(/\.beside > \.kpis/);
+        }
+      }
+    }
   });
 
   it('leaves the status bar’s live line at its left', () => {
