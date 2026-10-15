@@ -7,34 +7,45 @@ at your desk: your cultivator fights up the floors of the office tower on
 their own while you work, and you check in to equip better treasures and
 break through to the next realm, from Intern to Immortal.
 
-**[Play it](https://danhquach.github.io/office-immortal/)**: the latest build
-from `main`, redeployed to GitHub Pages on every push to `main`.
+Play it:
+
+- **[On itch.io](https://bluezinger.itch.io/office-immortal)**: the released
+  version, uploaded for each version tag.
+- **[On GitHub Pages](https://danhquach.github.io/office-immortal/)**: the
+  latest build from `main`, redeployed on every push to `main`.
 
 ## Status
 
-The v1 build order in [`docs/design.md`](docs/design.md) (§13) is complete and
-playable: the simulation core ([#2]), loot ([#3]), the combat strip, character
-panel and inventory ([#4]), save and offline catch-up ([#5]), sell and salvage
-([#6]), realms and Tribulation ([#7]), Reincarnation ([#8]), the tab HUD,
-pop-out and notifications ([#9]), and the game art ([#15]).
+**Version 1.0.0** ([#188]) is the first public release. The v1 build order in
+[`docs/design.md`](docs/design.md) (§13) is complete: the simulation core
+([#2]), loot ([#3]), the combat strip, character panel and inventory ([#4]),
+save and offline catch-up ([#5]), sell and salvage ([#6]), realms and
+Tribulation ([#7]), Reincarnation ([#8]), the tab HUD, pop-out and
+notifications ([#9]), and the game art ([#15]). Skills, the Store, cloud save,
+Discreet mode and a Vietnamese translation shipped on top of it.
 
 No further features are planned yet. New work is tracked in
 [GitHub issues](https://github.com/danhquach/office-immortal/issues).
 
 ## Core loop
 
-All shipped on `main`:
+All shipped in 1.0.0:
 
 - **Solo cultivator** ([#2]). Pick a Path: Sword Cultivator, Body Refiner or
   Talisman Master.
 - **Auto-battle** ([#2], [#4]). Fight waves of office demons, an elite and a
   boss on each floor. Lose, and you drop back a floor to farm.
+- **Skills** ([#143]–[#148]). Each Path has four skills, learned and
+  upgraded at realm breakthroughs and auto-cast with Qi. Elites, bosses and
+  Tribulations have skills of their own.
 - **Rolled loot** ([#3]). Every treasure rolls its base stat, affixes and
   quality, in five grades from Mortal to Immortal.
 - **Sell and salvage** ([#6]). Sell what you don't want for Spirit Stones or
   melt it into Spirit Essence, by hand or with an auto filter.
 - **Crafting** ([#95]). Spend Spirit Essence to refine an item's base roll
   (its refine level shows as "+N") or reroll one of its affixes.
+- **Store** ([#123]). Spend Spirit Stones on gear chests and timed boosts from
+  a stock that rotates every 30 minutes.
 - **Realms** ([#7]). Climb ten realms from Qi Condensation (Intern) through
   Tribulation Transcendence (Chairman) to Immortal Ascension, with a
   Tribulation boss at each cap. Hover the Realm chip to see them all.
@@ -44,6 +55,11 @@ All shipped on `main`:
 - **Tab HUD** ([#9]). Status in the tab title and favicon, a pop-out mini
   window where the browser supports it, and an optional notification for
   Immortal drops and due Tribulations.
+- **Discreet mode** ([#124]). One click makes the page, tab and pop-out look
+  like a plain spreadsheet.
+- **English and Vietnamese** ([#67]). Pick the language in the title bar.
+- **Save backup** ([#84], [#63]). A save code to export and import, and an
+  optional cloud save shared between browsers (see below).
 
 ## Project layout
 
@@ -139,7 +155,7 @@ tool. Pushes to `main` still deploy only to GitHub
 Pages.
 
 ```bash
-git tag v0.2.0 && git push origin v0.2.0
+git tag v1.0.0 && git push origin v1.0.0
 ```
 
 The tag must name the version on that commit (`package.json`, shown in the
@@ -229,4 +245,12 @@ repo). itch.io embeds only YouTube or Vimeo, so after making it:
 [#8]: https://github.com/danhquach/office-immortal/issues/8
 [#9]: https://github.com/danhquach/office-immortal/issues/9
 [#15]: https://github.com/danhquach/office-immortal/issues/15
+[#63]: https://github.com/danhquach/office-immortal/issues/63
+[#67]: https://github.com/danhquach/office-immortal/issues/67
+[#84]: https://github.com/danhquach/office-immortal/issues/84
 [#95]: https://github.com/danhquach/office-immortal/issues/95
+[#123]: https://github.com/danhquach/office-immortal/issues/123
+[#124]: https://github.com/danhquach/office-immortal/issues/124
+[#143]: https://github.com/danhquach/office-immortal/issues/143
+[#148]: https://github.com/danhquach/office-immortal/issues/148
+[#188]: https://github.com/danhquach/office-immortal/issues/188
