@@ -192,6 +192,7 @@ const messages = {
   'tab.filter': 'Auto filter',
   'tab.store': 'Store',
   'tab.settings': 'Settings',
+  'tab.save': 'Save',
   'tab.help': 'Help',
 
   'stat.body': 'Body',
@@ -252,17 +253,11 @@ const messages = {
     'Every stat now helps every Path (its own Path fully, the others by half), and level-up points wait for you to place them. Your points stay where they were; you can reset them once for free.',
   'rebalance.take': 'Reset stats free',
   'rebalance.keep': 'Keep my stats',
-  'help.stats': 'Stats',
-  'help.qi': 'Qi and skills',
   'help.qi.1':
-    'Qi builds up in combat: +{attack} per attack, +{hit} per hit taken. It starts at 0 on each new floor and is full when a Tribulation starts.',
+    'Qi: +{attack} per attack, +{hit} per hit taken and +{base} a second (more with Spirit). It empties on each new floor and is full for a Tribulation.',
   'help.qi.2':
-    'Qi per second: {base} to start, raised by Spirit and by gear that adds a share of max qi each second. It keeps coming between fights.',
-  'help.qi.3':
-    'Your cultivator casts their skills on their own: the costliest one that is ready, following its "Uses it when" rule (Stats tab, Skills). Each breakthrough brings a new skill or an upgrade.',
-  'help.qi.4':
-    'Elites and bosses wind up a skill before it lands, yelling its name over a filling cast bar: a stun cancels the wind-up, and defensive skills answer it.',
-  'help.statsHint': 'What one more point does for you now:',
+    'Skills cast on their own by their "Uses it when" rule. Stun an elite or boss while it winds up a skill to cancel it.',
+  'help.qi': 'Qi and skills',
   'bonus.damage': 'Damage',
   'bonus.maxHp': 'Max HP',
   'bonus.defence': 'Defence',
@@ -588,21 +583,15 @@ const messages = {
   'update.sync': 'A new version is out. Reload the page to keep syncing.',
   'update.play': 'A new version is out. Reload the page to keep playing.',
   'help.1':
-    'Your cultivator fights on their own, floor after floor. A floor is waves of demons, an elite and a boss.',
-  'help.2': 'Losing a fight sends you back one floor to grow stronger.',
+    'Your cultivator fights on their own: waves of demons, an elite, then a boss on each floor. A loss sends you back one floor.',
+  'help.2':
+    'Drops land in the Inventory. Select one to compare, then equip it with its button, a double-click or a drag.',
   'help.3':
-    'Drops land in the Inventory. Select one to compare it with what you wear, then equip it with its Equip button, a double-click or by dragging it onto your character.',
+    'Sell drops for Spirit Stones or salvage them for Spirit Essence; the Auto filter can do it as they land.',
   'help.4':
-    'Sell drops for Spirit Stones or salvage them into Spirit Essence. The Auto filter does it for you as drops land.',
+    'At each realm cap, beat a Tribulation to break through. Reincarnation restarts at floor 1 for Dao Insight passives that last every run.',
   'help.5':
-    'Spirit Stones buy bag space, stat resets and Path changes (Character, Stats tab), and gear chests and timed boosts (Inventory, Store tab).',
-  'help.6':
-    'At each realm cap a Tribulation falls due: face it at once with the flashing alert above the fight, or it joins the end of the floor. Beat it to break through to the next realm.',
-  'help.7':
-    'Reincarnation (Character, Reincarnation tab) starts again at floor 1 and pays Dao Insight, spent on passives that last every run.',
-  'help.8': 'Progress saves on its own and keeps going while you are away (Overtime Cultivation).',
-  'help.9':
-    'Discreet (in the title bar, or the ` key left of 1) shows the game as a plain sheet; press it again for the normal look. The game keeps running either way.',
+    'Progress saves itself and keeps going while you are away. Discreet (or the ` key) shows the game as a plain sheet.',
 
   'hud.floor': 'F{n}',
   'hud.due': 'Tribulation due',

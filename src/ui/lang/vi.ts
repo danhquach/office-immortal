@@ -195,6 +195,7 @@ const vi: Pack = {
     'tab.filter': 'Lọc tự động',
     'tab.store': 'Cửa hàng',
     'tab.settings': 'Cài đặt',
+    'tab.save': 'Lưu',
     'tab.help': 'Hướng dẫn',
 
     'stat.body': 'Thể Chất',
@@ -255,17 +256,11 @@ const vi: Pack = {
       'Mọi chỉ số nay đều giúp mọi Con Đường (đầy đủ cho Con Đường của nó, một nửa cho các Con Đường khác), và điểm lên cấp chờ bạn tự phân bổ. Điểm của bạn vẫn giữ nguyên; bạn được đặt lại miễn phí một lần.',
     'rebalance.take': 'Đặt lại miễn phí',
     'rebalance.keep': 'Giữ chỉ số',
-    'help.stats': 'Chỉ số',
-    'help.qi': 'Khí và kỹ năng',
     'help.qi.1':
-      'Khí tích dần khi chiến đấu: +{attack} mỗi đòn đánh, +{hit} mỗi đòn phải chịu. Khí về 0 ở mỗi tầng mới và đầy khi Độ Thiên Kiếp bắt đầu.',
+      'Khí: +{attack} mỗi đòn đánh, +{hit} mỗi đòn phải chịu và +{base} mỗi giây (thêm nhờ Thần Thức). Khí về 0 ở mỗi tầng mới và đầy khi Độ Thiên Kiếp.',
     'help.qi.2':
-      'Khí mỗi giây: ban đầu là {base}, tăng nhờ Thần Thức và trang bị cộng một phần khí tối đa mỗi giây. Khí vẫn hồi giữa các trận.',
-    'help.qi.3':
-      'Tu sĩ tự dùng kỹ năng: kỹ năng tốn nhiều khí nhất đang sẵn sàng, theo điều kiện "Dùng khi" của nó (tab Chỉ số, Kỹ năng). Mỗi lần đột phá học thêm kỹ năng hoặc nâng cấp.',
-    'help.qi.4':
-      'Tinh anh và trùm vận chiêu trước khi tung kỹ năng, hô tên chiêu và có thanh vận chiêu: gây choáng sẽ cắt ngang, còn kỹ năng phòng thủ sẽ đỡ lại.',
-    'help.statsHint': 'Thêm một điểm sẽ làm gì cho bạn lúc này:',
+      'Kỹ năng tự dùng theo điều kiện "Dùng khi". Gây choáng tinh anh hoặc trùm lúc vận chiêu để cắt ngang kỹ năng.',
+    'help.qi': 'Khí và kỹ năng',
     'bonus.damage': 'Sát thương',
     'bonus.maxHp': 'HP tối đa',
     'bonus.defence': 'Phòng thủ',
@@ -594,21 +589,15 @@ const vi: Pack = {
     'update.sync': 'Đã có phiên bản mới. Hãy tải lại trang để tiếp tục đồng bộ.',
     'update.play': 'Đã có phiên bản mới. Hãy tải lại trang để chơi tiếp.',
     'help.1':
-      'Tu sĩ của bạn tự chiến đấu, hết tầng này đến tầng khác. Mỗi tầng gồm các đợt yêu ma, một tinh anh và một trùm.',
-    'help.2': 'Thua một trận sẽ lùi một tầng để mạnh lên.',
+      'Tu sĩ tự chiến đấu: mỗi tầng gồm các đợt yêu ma, một tinh anh rồi một trùm. Thua sẽ lùi một tầng.',
+    'help.2':
+      'Đồ rơi vào Túi trữ vật. Chọn một món để so sánh, rồi trang bị bằng nút, nhấp đúp hoặc kéo thả.',
     'help.3':
-      'Đồ rơi vào Túi trữ vật. Chọn một món để so với đồ đang mặc, rồi trang bị bằng nút Trang bị, nhấp đúp hoặc kéo thả lên nhân vật.',
+      'Bán đồ lấy Linh Thạch hoặc phân giải thành Tinh Hoa; Bộ lọc tự động có thể làm ngay khi đồ rơi.',
     'help.4':
-      'Bán đồ lấy Linh Thạch hoặc phân giải thành Tinh Hoa. Bộ lọc tự động làm việc này ngay khi đồ rơi.',
+      'Ở mỗi đỉnh cảnh giới, vượt Độ Thiên Kiếp để đột phá. Chuyển Sinh bắt đầu lại từ tầng 1, thưởng Đạo Ngộ để mua nội tại giữ mãi qua mọi lượt.',
     'help.5':
-      'Linh Thạch dùng để mua thêm ô túi, đặt lại chỉ số và đổi Con Đường (Nhân vật, tab Chỉ số), cùng rương trang bị và trợ lực có thời hạn (Túi trữ vật, tab Cửa hàng).',
-    'help.6':
-      'Ở mỗi đỉnh cảnh giới, Độ Thiên Kiếp sẽ đến: đối mặt ngay bằng thông báo nhấp nháy phía trên trận đấu, hoặc nó sẽ chờ cuối tầng. Vượt qua để đột phá lên cảnh giới mới.',
-    'help.7':
-      'Chuyển Sinh (Nhân vật, tab Chuyển sinh) bắt đầu lại từ tầng 1 và thưởng Đạo Ngộ, dùng mua nội tại giữ mãi qua mọi lượt.',
-    'help.8': 'Tiến trình tự lưu và vẫn tiếp tục khi bạn vắng mặt (Tu Luyện Tăng Ca).',
-    'help.9':
-      'Kín đáo (trên thanh tiêu đề, hoặc phím ` bên trái phím 1) hiện trò chơi như một bảng tính bình thường; nhấn lại để trở về giao diện cũ. Trò chơi vẫn chạy trong cả hai chế độ.',
+      'Tiến trình tự lưu và vẫn tiếp tục khi bạn vắng mặt. Kín đáo (hoặc phím `) hiện trò chơi như một bảng tính.',
 
     'hud.floor': 'T{n}',
     'hud.due': 'Đến lúc Độ Thiên Kiếp',

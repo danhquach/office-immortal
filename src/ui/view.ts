@@ -1729,7 +1729,7 @@ export function breakthroughSkill(path: PathId, realm: number): string | null {
 /** Help's "Qi and skills" entry, with the sim's own numbers. */
 export function helpQiLines(): string[] {
   const n = { attack: QI_PER_ATTACK, hit: QI_PER_HIT_TAKEN, base: QI_BASE_REGEN };
-  return (['help.qi.1', 'help.qi.2', 'help.qi.3', 'help.qi.4'] as const).map((k) => t(k, n));
+  return (['help.qi.1', 'help.qi.2'] as const).map((k) => t(k, n));
 }
 
 /** Heavenly Lightning strikes landed between two states, for the stage's flash. */
