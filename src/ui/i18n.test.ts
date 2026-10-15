@@ -21,7 +21,7 @@ import {
 } from './i18n.ts';
 import { BOSSES, DEMONS, TRIBULATIONS } from '../core/floors.ts';
 import { NAME_KINDS, type NameKind } from './names.ts';
-import { realmLabel, realmRows, waveLabel } from './view.ts';
+import { realmLabel, realmRows, skillCell, waveLabel } from './view.ts';
 
 const english = PACKS[0]!;
 /** An enemy's name as the tooltip shows it, tier first. */
@@ -317,11 +317,13 @@ describe('t and tn', () => {
     expect(rows[1]).toEqual({
       name: 'Trúc Cơ',
       title: 'Nhân Viên',
-      levels: 'Cấp 11–20 · +1% chỉ số chính',
-      unlock: 'Kiếm Ý',
+      levels: 'Cấp 11–20 · Chỉ số chính +1%',
+      unlock: 'Kỹ năng mới: Kiếm Ý',
+      icon: { cell: skillCell('Sword Intent'), tier: 'base' },
       current: true,
+      past: false,
     });
-    expect(rows[9]?.levels).toBe('Cấp 211+ · +31.5% chỉ số chính');
+    expect(rows[9]?.levels).toBe('Cấp 211+ · Chỉ số chính +31.5%');
   });
 
   it('keeps numbers in the same format in both languages', () => {

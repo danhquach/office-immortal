@@ -645,3 +645,48 @@ describe('Full view layout', () => {
     expect(code).not.toMatch(/\.statusbar \.muted\s*{[^}]*margin-left:\s*auto/);
   });
 });
+
+describe('Realm list', () => {
+  /** page.css without its comments. */
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  /** Every declaration of `selector`'s rules, wherever it stands alone in a selector list. */
+  const all = (selector: string): string =>
+    [...code.matchAll(/([^{}]+){([^{}]*)}/g)]
+      .filter((m) => (m[1] as string).split(',').some((s) => s.trim() === selector))
+      .map((m) => m[2] as string)
+      .join('\n');
+
+  it('stays inside the window at every width', () => {
+    expect(all('.realm-list')).toMatch(/max-width:\s*min\(22rem,\s*calc\(100vw - 8px\)\)/);
+  });
+
+  it('sets each realm apart with a rule between it and the one above', () => {
+    expect(all('.realm-list li + li')).toMatch(/border-top:\s*1px solid var\(--line\)/);
+  });
+
+  it('puts the title beside the name and the "You are here" tag beside the levels', () => {
+    expect(all('.realm-list .head')).toMatch(/justify-content:\s*space-between/);
+    expect(all('.realm-list .levels')).toMatch(/justify-content:\s*space-between/);
+    expect(all('.realm-list .here')).toMatch(/color:\s*var\(--accent\)/);
+  });
+
+  it('highlights the current realm and dims the one before it by colour, not opacity', () => {
+    expect(all('.realm-list li.current')).toMatch(/border-left-color:\s*var\(--accent\)/);
+    expect(all('.realm-list li.past .name')).toMatch(/color:\s*var\(--muted\)/);
+    expect(code).not.toMatch(/\.realm-list[^{]*{[^}]*opacity/);
+  });
+
+  it('keeps the "You are here" tag at 4.5:1 on the current row and the list', () => {
+    const t = themes();
+    for (const theme of [t.light, t.dark]) {
+      for (const surface of ['--head', '--panel']) {
+        const ratio = contrast(theme.get('--accent') as string, theme.get(surface) as string);
+        expect(ratio, surface).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('hides the title tag for the realm with no job title', () => {
+    expect(all('.realm-list .title:empty')).toMatch(/display:\s*none/);
+  });
+});
