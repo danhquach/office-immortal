@@ -48,7 +48,8 @@ const SCENES: Scene[] = [
     save: 'inventory',
     seconds: 7,
     act: async (page) => {
-      for (const n of [0, 1, 9]) {
+      // The bag's first column (10 cells a row): the item card covers the rest.
+      for (const n of [0, 10, 20]) {
         await wait(1500);
         await page.locator('.bag .cell').nth(n).click();
       }
@@ -79,10 +80,15 @@ async function film(stage: Stage, scene: Scene, dir: string, n: number): Promise
     maxHeight: 1080,
   });
   const start = Date.now();
-  await scene.act?.(page);
-  await wait(scene.seconds * 1000 - (Date.now() - start));
-  await cdp.send('Page.stopScreencast');
-  await page.context().close();
+  // Stop filming even if the scene fails, so no late frame lands after the
+  // frame folder is removed and hides the scene's own error.
+  try {
+    await scene.act?.(page);
+    await wait(scene.seconds * 1000 - (Date.now() - start));
+  } finally {
+    await cdp.send('Page.stopScreencast').catch(() => {});
+    await page.context().close();
+  }
   if (frames.length < 2) throw new Error(`scene ${n}: no frames`);
 
   // Each frame shows until the next one arrived; the last for one frame time.
