@@ -99,7 +99,7 @@ fight floor ─► drops + XP ─► equip / sell / salvage ─► stronger ─�
   damage"; "Your Path's stat: full effect" or "Other Path: half effect"; and
   "Gains slow above N" once its curve has slowed to half its first gains.
   Hovering or focusing +1 or All shows the derived rows as they would be,
-  gains green and losses red. Help has a Stats entry with the same parts.
+  gains green and losses red.
 
 ## 4. Realms and levels
 
@@ -280,8 +280,8 @@ the pure simulation tracks it, so offline play gives the same qi as live play.
   - **Realm chip list:** each realm names what it brings the current Path, in
     the same words as the banner. Each realm takes three lines (name and
     title, levels, what it brings) in a narrow box.
-  - **Help:** a "Qi and skills" entry: qi gain, Qi per second, auto-cast and
-    enemy wind-ups, with the sim's own numbers.
+  - **Help:** a "Qi and skills" entry of two lines: qi gain and Qi per
+    second with the sim's own numbers, then auto-cast and stunning a wind-up.
   - **Discreet** hides every skill icon on these surfaces; the text stays.
 
 ### Skills
@@ -1582,14 +1582,18 @@ Grade is also written as text, never shown by colour alone.
 | **Discreet** | Pop-out window, picked from Pop out's list | A plain sheet for looking busy: a header row (A, B), row numbers and seven label / value rows in office words: Floor (`12 · Step 2 / 3`; Escalation, Final review or Audit for an elite, boss or Tribulation), Level (`14 · 37 / 60`), Health and Target (HP as %), Closed (kills), Latest (`Plus · Jade Ring`: the grade in office words, Standard, Plus, Pro, Premium or Enterprise) and Status (On track, Review due while a Tribulation is due, or Review postponed while it is set aside, §4). Theme colours only: no art, stamp, grade or tier colour, flashing, realm, Path or game name; the window's title is `Q3_Budget_Review` |
 
 - The title bar's language button (globe and code) sits beside **Menu**.
-- The title bar's **Menu** holds Settings and Help (how to play). Settings is
-  one section per setting, set off by a rule: a bold name with a one-line
-  hint, and its control. Theme, Notifications, Auto-Tribulation and Reset
-  progress sit on one row each, the control at one fixed width at the right
-  (toggles read On / Off); Cloud save and Save code stack their controls
-  under the hint, every button that same width. Reset progress asks first
-  and then deletes the save. Help ends with a Stats entry: each stat's tip
-  for the cultivator now (§3).
+- The title bar's **Menu** has three tabs: Settings, Save and Help (how to
+  play). It keeps one size on every tab and in every language (34 × 37rem,
+  room for the Save tab with the cloud save on; the window's height less a
+  margin on a phone or a short window); a tab that ever runs longer scrolls
+  inside it. Sync now, Get link code and Turn off share one line. Each tab is one section per
+  setting, set off by a rule: a bold name with a one-line hint, and its
+  control. Settings: Theme, Notifications, Auto-Tribulation and Reset
+  progress, one row each, the control at one fixed width at the right
+  (toggles read On / Off); Reset progress asks first and then deletes the
+  save. Save: Cloud save (when the build has one), then Save code, their
+  controls under the hint; a save code from a later release opens the Menu on
+  this tab. Help: five short lines on how the game plays, then Qi and skills.
 - The Character panel's **Stats** tab has two sub-tabs (tabs pattern: arrow
   keys move between them), whose bar stays in view while the sub-tab under it
   scrolls; from 940 × 600 px only that sub-tab scrolls, never the page.

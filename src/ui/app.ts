@@ -340,17 +340,7 @@ const ARRAY_SETUP_MS = 1200;
 const DRAG_START_PX = 5;
 const SLOT_IDS = Object.keys(EQUIP_SLOTS) as EquipSlotId[];
 /** The Help tab of the main menu: how the game plays, in short. */
-const HELP_LINES: readonly MessageKey[] = [
-  'help.1',
-  'help.2',
-  'help.3',
-  'help.4',
-  'help.5',
-  'help.6',
-  'help.7',
-  'help.8',
-  'help.9',
-];
+const HELP_LINES: readonly MessageKey[] = ['help.1', 'help.2', 'help.3', 'help.4', 'help.5'];
 const STAT_IDS: readonly StatId[] = ['body', 'agility', 'spirit'];
 
 type Tag = keyof HTMLElementTagNameMap;
@@ -1892,16 +1882,17 @@ function cloudPanels(
   if (frameUrl) linkRow.append(elt('p', '', 'cloud.linkField'), linkSlot);
   else linkRow.append(linkBox, link);
 
+  // Sync now, Get link code and Turn off share one line, so the Menu's Save
+  // tab fits its fixed size with the cloud save on.
   const menu = [
     elt('h3', '', 'cloud.title'),
     elt('p', 'muted hint', 'cloud.hint'),
     statusLine,
     turnOn,
     syncNow,
-    ...(frameUrl ? [codeSlot] : [getCode, codeLine]),
+    ...(frameUrl ? [turnOff, codeSlot] : [getCode, turnOff, codeLine]),
     linkRow,
     linkHint,
-    turnOff,
   ];
 
   function draw(status: SyncStatus): void {
@@ -3417,7 +3408,7 @@ function play(
   if (canPopOut(window)) tools.append(popBox);
   const menuBtn = buttonT('tools.menu', '', () => {
     resetBox.hidden = true;
-    menu.showModal();
+    menu.dialog.showModal();
   });
   menuBtn.setAttribute('aria-haspopup', 'dialog');
   tools.append(menuBtn);
@@ -3467,7 +3458,7 @@ function play(
       refuse(() => t('menu.resetRefused'));
       return;
     }
-    menu.close();
+    menu.dialog.close();
     // start() stops this run (timers, autosave, pop-out) before anything is saved again.
     start(root, storage);
   }
@@ -3541,7 +3532,7 @@ function play(
     if (!imported) return;
     const save = imported;
     imported = null;
-    menu.close();
+    menu.dialog.close();
     // start() stops this run first; play() then writes the imported save to both copies.
     start(root, storage, save);
   });
@@ -3599,14 +3590,10 @@ function play(
   /** Shows `theme` on the page and, while it is open, the pop-out. */
   const applyTheme = (): void =>
     showTheme([document.documentElement, pip?.document.documentElement], theme, osDark.matches);
-  /** Help's Stats entry, one line per stat: its name, then the tip's parts. */
-  const helpStatParts = Object.fromEntries(
-    STAT_IDS.map((id) => [id, { name: el('b'), lines: [0, 1, 2, 3].map(() => el('span')) }]),
-  ) as Record<StatId, { name: HTMLElement; lines: HTMLElement[] }>;
   const menu = mainMenu();
 
-  function mainMenu(): HTMLDialogElement {
-    const dialog = el('dialog', 'menu');
+  function mainMenu(): { dialog: HTMLDialogElement; show: (id: string) => void } {
+    const dialog = el('dialog', 'menu main-menu');
     dialog.setAttribute('aria-labelledby', 'menu-title');
     const head = el('div', 'menu-head');
     const h = elt('h2', '', 'menu.title');
@@ -3615,8 +3602,7 @@ function play(
       h,
       buttonT('menu.close', '', () => dialog.close()),
     );
-    const settings = el('div', 'settings');
-    /** One section of Settings, set off from the next by a rule. */
+    /** One section of a tab, set off from the next by a rule. */
     const section = (...nodes: HTMLElement[]): HTMLElement => {
       const box = el('section');
       box.append(...nodes);
@@ -3653,18 +3639,23 @@ function play(
       writeTheme(storage, theme);
       applyTheme();
     });
+    // Settings: one control each, then Reset progress.
+    const settings = el('div', 'settings');
     settings.append(row('menu-theme', 'menu.theme', null, themePick.select));
     if (notices.state() !== 'unsupported') {
       settings.append(row('menu-notify', 'menu.notifications', 'menu.notify', noticeBtn));
     }
     settings.append(row('menu-trial', 'menu.autoTrial', 'menu.autoTrialHint', autoTrialBtn));
-    if (cloudUi) settings.append(section(...cloudUi.menu));
+    const reset = row('menu-reset', 'menu.reset', 'menu.resetHint', resetAsk);
+    reset.append(resetBox);
+    settings.append(reset);
+    // Save: the cloud save (when the build has one), then the save code.
+    const saves = el('div', 'settings');
+    if (cloudUi) saves.append(section(...cloudUi.menu));
     // Paste, then Import; Export beside it shows the code to copy under the row.
     const codeRow = el('div', 'cloud-row');
     codeRow.append(importBtn, exportBtn);
-    const reset = row('menu-reset', 'menu.reset', 'menu.resetHint', resetAsk);
-    reset.append(resetBox);
-    settings.append(
+    saves.append(
       section(
         elt('h3', '', 'menu.backup'),
         elt('p', 'muted hint', 'menu.backupHint'),
@@ -3674,38 +3665,23 @@ function play(
         importConfirm,
         codeMsg,
       ),
-      reset,
     );
     const help = el('div', 'help');
     const helpLines = el('ul', 'lines');
     for (const line of HELP_LINES) helpLines.append(elt('li', '', line));
-    // Stats: each stat's tip, filled in for this cultivator while the menu is open.
-    const statList = el('ul', 'lines help-stats');
-    for (const id of STAT_IDS) {
-      const li = el('li');
-      const parts = helpStatParts[id];
-      li.append(parts.name, ...parts.lines);
-      statList.append(li);
-    }
     // Qi and skills, with the sim's own numbers.
     const qiList = el('ul', 'lines');
-    const qiLines = [0, 1, 2, 3].map(() => el('li'));
+    const qiLines = helpQiLines().map(() => el('li'));
     qiList.append(...qiLines);
     say(() => helpQiLines().forEach((line, i) => qiLines[i] && setText(qiLines[i], line)));
-    help.append(
-      helpLines,
-      elt('h3', '', 'help.qi'),
-      qiList,
-      elt('h3', '', 'help.stats'),
-      elt('p', 'muted hint', 'help.statsHint'),
-      statList,
-    );
+    help.append(helpLines, elt('h3', '', 'help.qi'), qiList);
     const menuTabs = tabs([
       { id: 'settings', label: 'tab.settings', body: settings },
+      { id: 'save', label: 'tab.save', body: saves },
       { id: 'help', label: 'tab.help', body: help },
     ]);
     dialog.append(head, menuTabs.bar, ...menuTabs.panels);
-    return dialog;
+    return { dialog, show: menuTabs.show };
   }
 
   // Mini view, shown in the pop-out: the strip moves in, plus one status line and the latest drop.
@@ -3733,7 +3709,7 @@ function play(
   let blinkAt = 0;
 
   const footer = statusBar();
-  root.replaceChildren(bar, formulaBar(), game, footer.bar, menu, craft);
+  root.replaceChildren(bar, formulaBar(), game, footer.bar, menu.dialog, craft);
   away?.querySelector('button')?.focus();
 
   /**
@@ -4141,7 +4117,6 @@ function play(
     drawSkillsTab();
     drawDerived();
     drawPlan();
-    if (menu.open) drawHelpStats();
   }
 
   /**
@@ -4220,20 +4195,6 @@ function play(
       }
     }
     setButton(applyBtn, t('plan.apply'), c.unspent === 0);
-  }
-
-  /** Help's Stats entry: each stat's tip, for this cultivator now. */
-  function drawHelpStats(): void {
-    for (const id of STAT_IDS) {
-      const tip = statTip(state.cultivator, id);
-      const parts = helpStatParts[id];
-      setText(parts.name, t(`stat.${id}`));
-      [tip.gain, tip.mastery, tip.share, tip.slows].forEach((text, i) => {
-        const part = parts.lines[i] as HTMLElement;
-        setText(part, text);
-        part.hidden = text === '';
-      });
-    }
   }
 
   function selectedItem(): Item | undefined {
@@ -5332,7 +5293,8 @@ function play(
   const stashed = stashedImport;
   stashedImport = null;
   if (stashed !== null) {
-    menu.showModal();
+    menu.show('save');
+    menu.dialog.showModal();
     importBox.value = stashed;
     importBtn.click();
   }

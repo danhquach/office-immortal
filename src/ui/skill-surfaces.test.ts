@@ -253,11 +253,10 @@ describe('pathSkillList', () => {
 
 describe('helpQiLines', () => {
   it("puts the sim's qi numbers in Help's Qi and skills entry", () => {
-    const [gain, regen, cast, windUp] = helpQiLines();
-    expect(gain).toContain('+8 per attack, +4 per hit taken');
-    expect(regen).toContain('Qi per second: 1 to start');
-    expect(cast).toContain('Uses it when');
-    expect(windUp).toContain('a stun cancels the wind-up');
+    const [qi, skills] = helpQiLines();
+    expect(qi).toContain('+8 per attack, +4 per hit taken and +1 a second');
+    expect(skills).toContain('Uses it when');
+    expect(skills).toContain('winds up a skill to cancel it');
   });
 
   it('has the entry in every language, with no placeholder left', () => {

@@ -3383,13 +3383,38 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 
 /* Main menu: Settings and Help, a modal dialog over the game. */
 .menu {
-  width: min(32rem, calc(100vw - 2rem));
+  width: min(34rem, calc(100vw - 2rem));
   box-sizing: border-box;
   background: var(--panel);
   color: var(--ink);
   border: 1px solid var(--line);
   border-radius: 4px;
   padding: 0.75rem;
+}
+/* The main menu keeps one size on every tab: the tallest tab's height, or
+   the whole window on a phone. A tab longer than that scrolls inside it. */
+.main-menu {
+  height: min(37rem, calc(100vh - 2rem));
+  height: min(37rem, calc(100dvh - 2rem));
+}
+.main-menu[open] {
+  display: flex;
+  flex-direction: column;
+}
+/* The padding (taken back by the margin) leaves room for a focus ring, which
+   the scroll box would otherwise clip. */
+.main-menu > .tabpanel {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -4px;
+  padding: 4px;
+}
+@media (max-width: 479px) {
+  .main-menu {
+    height: calc(100vh - 2rem);
+    height: calc(100dvh - 2rem);
+  }
 }
 .menu::backdrop {
   background: #0008;
@@ -3496,10 +3521,10 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 /* Settings: one section per setting, set off by a rule; a name and hint over
    or beside its controls, every control one width so nothing is sized by its text. */
 .settings {
-  --control: 10rem;
+  --control: 9.5rem;
 }
 .settings > section {
-  padding: 0.65rem 0;
+  padding: 0.5rem 0;
   border-top: 1px solid var(--line);
 }
 .settings > section:first-child {
@@ -3566,6 +3591,14 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   align-items: end;
   margin-top: 0.4rem;
 }
+/* The link-code field takes what the row leaves, so Link sits beside it. */
+.settings .cloud-row > .field {
+  flex: 1 1 8rem;
+}
+.settings .cloud-row > .field input {
+  width: 100%;
+  box-sizing: border-box;
+}
 /* A link code to copy by hand: monospace with a slashed zero (never read as D
    or O), its two groups kept on one line. Menu and code frame alike. */
 .link-code {
@@ -3602,13 +3635,6 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
 }
 .help > .hint {
   margin: 0 0 0.3rem;
-}
-/* Help's Stats entry: each stat's name, then its tip's parts on their own lines. */
-.help-stats span {
-  display: block;
-}
-.help-stats span[hidden] {
-  display: none;
 }
 /* Save code: the export code to copy by hand, and the paste field. */
 .settings textarea.code {
