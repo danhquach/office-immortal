@@ -1022,9 +1022,13 @@ export interface RealmRow {
   readonly name: string;
   readonly title: string;
   readonly levels: string;
-  /** What the realm brings the Path: "Sword Intent" or "Flying Sword ↑ Two swords". */
+  /** What the realm brings the Path: "New skill: Sword Intent" or "Upgrade: Flying Sword → Two swords". */
   readonly unlock: string;
+  /** The unlocked skill's icon at that rank; null when the realm brings nothing. */
+  readonly icon: { readonly cell: number; readonly tier: SkillTier } | null;
   readonly current: boolean;
+  /** The realm just before the current one: the list dims it, so the current and next stand out. */
+  readonly past: boolean;
 }
 
 /**
@@ -1036,6 +1040,7 @@ export function realmRows(level: number, path: PathId): RealmRow[] {
   const at = realmOf(level);
   return REALMS.map((realm, i) => {
     const { from, to } = realmLevels(i);
+    const parts = unlockParts(path, i);
     const levels = to === null ? t('realm.levelsFrom', { from }) : t('realm.levels', { from, to });
     return {
       name: tn('realm', realm.name),
@@ -1044,8 +1049,14 @@ export function realmRows(level: number, path: PathId): RealmRow[] {
         i === 0
           ? levels
           : t('realm.withBonus', { levels, pct: num(realmPrimaryShare(i) * 100, 1) }),
-      unlock: realmUnlock(path, i)?.text ?? '',
+      unlock: !parts
+        ? ''
+        : parts.up === null
+          ? t('skill.new', { name: parts.name })
+          : t('realm.upgrade', { name: parts.name, up: parts.up }),
+      icon: parts && { cell: parts.cell, tier: parts.tier },
       current: i === at,
+      past: i === at - 1,
     };
   });
 }
@@ -1672,14 +1683,34 @@ export function realmUnlock(
   path: PathId,
   realm: number,
 ): { text: string; learned: boolean } | null {
+  const parts = unlockParts(path, realm);
+  if (!parts) return null;
+  if (parts.up === null) return { text: parts.name, learned: true };
+  return { text: t('skill.up', { name: parts.name, up: parts.up }), learned: false };
+}
+
+/**
+ * The parts of what realm `realm` brings `path`: the skill's name (as it was
+ * before an upgrade) and the upgrade's words (null for a new skill), and its
+ * icon at that rank.
+ */
+function unlockParts(
+  path: PathId,
+  realm: number,
+): { name: string; up: string | null; cell: number; tier: SkillTier } | null {
   const step = pathStep(path, realm);
   if (!step) return null;
-  if (step.rank === 1) return { text: tn('skill', step.name), learned: true };
+  const now = rankedPathSkills(path, realm).find((k) => k.def.id === step.id);
+  const icon = {
+    cell: skillCell(step.name),
+    tier: skillTier(step.rank, now?.maxRank ?? step.rank),
+  };
+  if (step.rank === 1) return { name: tn('skill', step.name), up: null, ...icon };
   const before = rankedPathSkills(path, realm - 1).find((k) => k.def.id === step.id);
   const was = before?.def.name ?? step.name;
   const up =
     was === step.name ? t(`skillUp.${step.id}.${step.rank}` as MessageKey) : tn('skill', step.name);
-  return { text: t('skill.up', { name: tn('skill', was), up }), learned: false };
+  return { name: tn('skill', was), up, ...icon };
 }
 
 /** The Skills list's last line: what the next realm brings, or that none is left. */
