@@ -414,23 +414,31 @@ select {
   display: grid;
   gap: 0.5rem;
 }
-/* Summary chips: "Label value" on one line each; Path and Realm a row each,
-   Spirit Stones and Essence side by side, then the boosts. */
+/* Chips: "Label value" on one line each, wrapping (the Overtime Cultivation
+   summary's row). */
 .kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+/* The summary chips beside the strip: Path and Realm a row each, Spirit
+   Stones and Essence side by side, then the boosts. Scoped to `.beside`: the
+   inline-size container would shrink a chip row in a flex row (Overtime) to
+   nothing. */
+.beside > .kpis {
   container-type: inline-size;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-content: start;
-  gap: 0.35rem;
 }
-.kpis > .kpi {
+.beside > .kpis > .kpi {
   position: relative;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.kpis > .wide,
-:root[data-discreet] .kpis > .kpi {
+.beside > .kpis > .wide,
+:root[data-discreet] .beside > .kpis > .kpi {
   grid-column: 1 / -1;
 }
 /* The Path's first skill as its icon, sized like the other chips' icons. */
@@ -446,14 +454,14 @@ select {
    which stays for screen readers; a hover, focus or tap opens the whole line.
    Discreet mode hides the icons, so the labels stay there, each chip a row. */
 @container (max-width: 22rem) {
-  :root:not([data-discreet]) .kpis > .kpi > .label {
+  :root:not([data-discreet]) .beside > .kpis > .kpi > .label {
     position: absolute;
     width: 1px;
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
   }
-  .kpis > .kpi[tabindex] {
+  .beside > .kpis > .kpi[tabindex] {
     cursor: help;
   }
   /* Room for a boost's bonus beside its icon in a third of the column. */
@@ -886,28 +894,10 @@ select {
   .game .strip .dmg {
     z-index: 2;
   }
-  /* The name keeps its own row (two lines kept); HP sits beside the bar.
-     Under 720 px tall the block below redraws both. */
-  .game .fighter {
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas: 'name name' 'bar hp' 'qi .';
-    align-items: center;
-    column-gap: 0.5rem;
-  }
-  .game .foe {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas: 'name name' 'hp bar' '. qi';
-  }
-  /* The cultivator's skills beside its qi bar. */
-  .game .fighter.you {
-    grid-template-areas: 'name name' 'bar hp' 'qi skills';
-  }
+  /* The name keeps its own row (two lines kept) over the HP bar, the HP
+     inside it. Under 720 px tall the block below redraws both. */
   .game .skills {
     justify-self: end;
-    margin-top: 0.15rem;
-  }
-  .game .fighter .hp {
-    white-space: nowrap;
   }
 }
 /* Under 720 px tall (such as the 960 x 640 itch.io frame): a slimmer header
@@ -921,6 +911,12 @@ select {
      above; recheck at 940 px wide with the Vietnamese labels if either changes. */
   .game .top > .strip {
     margin-top: -2.5rem;
+  }
+  /* Only right under the title bar: a notice shown above (Overtime
+     Cultivation, a cloud note, the update note, the rebalance offer) keeps
+     the strip in its place, under the notice. */
+  .game > .panel:not([hidden]) ~ .top > .strip {
+    margin-top: 0;
   }
   .game .strip > .stage {
     zoom: 0.7;
@@ -978,19 +974,9 @@ select {
   .game .fighter .bar {
     height: 12px;
   }
-  /* Over the bright green and red fills the light text needs a firm dark
-     outline (the strip's colour, dark in both themes) to stay readable. */
   .game .fighter .hp {
-    grid-area: bar;
-    z-index: 1;
-    justify-self: center;
     font-size: 0.7rem;
     line-height: 12px;
-    text-shadow:
-      0 0 2px var(--strip-bg),
-      0 0 2px var(--strip-bg),
-      0 0 2px var(--strip-bg),
-      0 1px 1px var(--strip-bg);
   }
   .game .fighter .bar.qi {
     height: 2px;
@@ -1546,20 +1532,38 @@ select {
 .vs {
   align-self: center;
 }
-/* The name on its own row at every width, then the bar, then HP; the foe's
-   side is the same, mirrored. The name keeps the fighter's full column. */
+/* The name on its own row at every width, then the HP bar with the HP written
+   inside it, then the qi bar; the foe's side is the same, mirrored. The name
+   keeps the fighter's full column. */
 .fighter {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'name' 'bar' 'qi' 'hp';
+  grid-template-areas: 'name' 'bar' 'qi';
   gap: 0.15rem;
-}
-.fighter .hp {
-  grid-area: hp;
 }
 .fighter .bar {
   grid-area: bar;
+  height: 13px;
+}
+/* Over the bright green and red fills the light text needs a firm dark
+   outline (the strip's colour, dark in both themes) to stay readable. */
+.fighter .hp {
+  grid-area: bar;
+  z-index: 1;
+  justify-self: center;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  line-height: 13px;
+  text-shadow:
+    0 0 2px var(--strip-bg),
+    0 0 2px var(--strip-bg),
+    0 0 2px var(--strip-bg),
+    0 1px 1px var(--strip-bg);
 }
 /* Qi: a thin cyan bar under the HP bar (docs/design.md §5). */
 .fighter .bar.qi {
@@ -1625,6 +1629,10 @@ select {
   .fighter .name > :not(.enemy-tier) {
     font-size: 0.8rem;
   }
+  /* An 8-digit HP ("HP 12345678 / 12345678") still fits its bar at 375 px. */
+  .fighter .hp {
+    font-size: 0.65rem;
+  }
   .strip {
     padding: 0.5rem;
   }
@@ -1654,13 +1662,13 @@ select {
 }
 /* The cultivator's skill bar (docs/design.md §5 Skills): up to four icons
    from skills.png (--skill-art; each icon's --cell picks its column) beside
-   the qi bar, spanning the qi and HP rows so the strip keeps its height. A
-   dark veil over each icon draws back as qi builds toward its cost; it glows
-   when ready. Its border is its level's colour; a ring inside it runs down
+   the qi bar, under the full-width HP bar, so the HP text has its whole
+   width. A dark veil over each icon draws back as qi builds toward its cost;
+   it glows when ready. Its border is its level's colour; a ring inside it runs down
    while its buff or shield lasts; blocked, it greys out under a padlock. */
 .fighter.you {
   grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas: 'name name' 'bar bar' 'qi skills' 'hp skills';
+  grid-template-areas: 'name name' 'bar bar' 'qi skills';
   column-gap: 0.5rem;
 }
 .skills {
@@ -1861,11 +1869,11 @@ select {
 .skill-tip > .cost {
   color: var(--muted);
 }
-/* Under 480 px the qi and HP rows have no room beside them: the row takes
+/* Under 480 px the HP and qi bars have no room beside them: the row takes
    the name's second line (the Path name keeps the first), a step smaller. */
 @media (max-width: 479px) {
   .fighter.you {
-    grid-template-areas: 'name name' 'bar bar' 'qi qi' 'hp hp';
+    grid-template-areas: 'name name' 'bar bar' 'qi qi';
   }
   .skills {
     grid-area: name;
@@ -3217,8 +3225,12 @@ button:is(.sell, .salvage, [data-action='craft']):not([aria-disabled='true']):ho
   display: none;
 }
 .mini .fighter.you {
-  grid-template-areas: 'name' 'bar' 'qi' 'hp';
+  grid-template-areas: 'name' 'bar' 'qi';
   grid-template-columns: minmax(0, 1fr);
+}
+/* No HP text to hold: the thin HP bar. */
+.mini .fighter .bar:not(.qi) {
+  height: 8px;
 }
 /* The whole stage at 3/8 (208 px tall becomes 78), sprites and background
    together, so it fits the 160 px window. The pop-out is Chromium-only, which
