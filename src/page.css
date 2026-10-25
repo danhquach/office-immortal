@@ -2099,10 +2099,29 @@ select {
 }
 /* The Inventory's tabs each wear a colour, so the three read apart at a
    glance: Bag the accent, Auto filter the Salvage colour, Store the Spirit
-   Stones colour. The label still names each tab, so colour is never the only cue. */
+   Stones colour. The label still names each tab, so colour is never the only cue.
+   One width for all three, wide enough for the longest label in bold in either
+   language (Vietnamese "Lọc tự động"), so Bag is not the small one and the open
+   tab never grows when its label turns bold. Content-box, so the width holds
+   whatever padding the layout gives the tabs. */
+.inventory > .tabs {
+  container-type: inline-size;
+}
 .inventory > .tabs .tab {
+  box-sizing: content-box;
+  min-width: 5.75em;
   border-color: color-mix(in srgb, var(--tab-tone) 45%, transparent);
   border-top: 3px solid var(--tab-tone);
+}
+/* A bar too narrow for three of those (a phone under about 380 px): the tabs
+   share the bar evenly instead, each label on one line, so none runs past the
+   panel. */
+@container (max-width: 20.5rem) {
+  .inventory > .tabs .tab {
+    flex: 1 1 0;
+    min-width: auto;
+    white-space: nowrap;
+  }
 }
 .inventory > .tabs .tab:hover {
   background: color-mix(in srgb, var(--tab-tone) 10%, transparent);
