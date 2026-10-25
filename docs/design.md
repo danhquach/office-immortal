@@ -1619,7 +1619,11 @@ Grade is also written as text, never shown by colour alone.
   - A Skills sub-tab (a follow-up, §5 Qi and skills) goes between them.
 - The Inventory panel has three tabs: Bag, Auto filter and Store (§8). Each
   tab wears a colour on its border (Bag the accent, Auto filter the Salvage
-  colour, Store the Spirit Stones colour), tinted while open. The Store groups
+  colour, Store the Spirit Stones colour), tinted while open. The three tabs
+  are one width, wide enough for the longest label in bold in either
+  language, so switching tabs never changes their widths; on a phone too
+  narrow for that (under about 380 px) they share the bar instead, each label
+  on one line, never running past the panel. The Store groups
   its cards under **Gear chests** and **Boosts** headings; chests run best
   grade first (Heaven, Earth, Spirit), boosts in stock order; a group with
   nothing in stock is hidden. Store cards stack in one column in every view.
